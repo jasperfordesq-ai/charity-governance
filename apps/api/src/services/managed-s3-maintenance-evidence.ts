@@ -168,6 +168,7 @@ export class ManagedS3MaintenanceEvidence {
           coverage,
           artifact: observed.artifact,
           observationDigest: observed.artifact.sha256,
+          observedAt: observed.value.observedAt,
           recordedS3CoverageObserved: true as const,
           freshS3CoverageObserved: false as const,
           ...limits,

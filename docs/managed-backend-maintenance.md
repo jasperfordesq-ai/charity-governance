@@ -1,5 +1,12 @@
 # Guarded managed-backend shutdown
 
+> **17 October protocol9 S3 integration:** The default coordinator now requires
+> explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
+> shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection
+> never repeats S3 probes or backfills ACKs. Both modes pass native PostgreSQL
+> integration with synthetic providers. See [required S3 maintenance](durable-s3-maintenance.md).
+
+
 > **Current protocol5:** [Durable standard-write maintenance](durable-standard-write-maintenance.md)
 > adds exact-version write baseline/report pins and a WRITE_BASELINED barrier
 > before shutdown. The protocol4 sequence below is the earlier checkpoint;

@@ -1,3 +1,4 @@
+import {s3CapabilityCohortPinSchema} from './s3-capability-cohort-contract.js';
 import {signedResumableEvidencePinSchema} from './signed-resumable-upload-evidence.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
@@ -13,9 +14,9 @@ const configuration=z.object({installationId:identity,bucket:z.string().regex(/^
  accountId:z.string().regex(/^\d{12}$/),
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/)}).strict()
  .refine(c=>c.kmsKeyArn.split(':')[4]===c.accountId);
-const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),writeProofDigest:digest.optional(),signedProofDigest:digest.optional(),signingDigest:digest.optional(),resumableProofDigest:digest.optional(),signedResumableProofDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
+const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),writeProofDigest:digest.optional(),signedProofDigest:digest.optional(),signingDigest:digest.optional(),resumableProofDigest:digest.optional(),signedResumableProofDigest:digest.optional(),s3ProofDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
 const control=z.object({format:z.literal(1),installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
- planDigest:digest,phase:z.enum(['READY','ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
+ planDigest:digest,phase:z.enum(['READY','ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
  observations:observations.nullable(),readBaseline:z.unknown().transform(parseCredentialReadBaselineArtifact).optional(),
  readObservation:z.unknown().transform(parseCredentialReadObservationArtifact).optional(),
  writeBaselinePin:managedWriteEvidencePinSchema.refine(v=>v.kind==='BASELINE').optional(),
@@ -26,6 +27,8 @@ const control=z.object({format:z.literal(1),installationId:identity,maintenanceE
  resumableObservationPin:resumableCohortPinSchema.refine(v=>v.kind==='OBSERVATION').optional(),
  signedResumableBaselinePin:signedResumableEvidencePinSchema.refine(v=>v.kind==='BASELINE').optional(),
  signedResumableObservationPin:signedResumableEvidencePinSchema.refine(v=>v.kind==='OBSERVATION').optional(),
+ s3BaselinePin:s3CapabilityCohortPinSchema.refine(v=>v.kind==='BASELINE').optional(),
+ s3ObservationPin:s3CapabilityCohortPinSchema.refine(v=>v.kind==='OBSERVATION').optional(),
  publicationId:z.string().uuid()}).strict().superRefine((v,ctx)=>{
  if((v.phase==='READY')!==(v.attemptId===null)||(v.phase==='OBSERVED_CLOSED')!==(v.observations!==null))
   ctx.addIssue({code:'custom',message:'Invalid maintenance transition state'});
@@ -39,25 +42,30 @@ const control=z.object({format:z.literal(1),installationId:identity,maintenanceE
   ||v.phase!=='OBSERVED_CLOSED'&&v.readObservation)
   ctx.addIssue({code:'custom',message:'Invalid credential baseline phase'});
  if(['READY','ATTEMPTED','BASELINED'].includes(v.phase)&&(v.writeBaselinePin||v.writeObservationPin)
-  ||['WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(v.phase)&&(!v.readBaseline||!v.writeBaselinePin||v.readObservation||v.writeObservationPin)
+  ||['WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(v.phase)&&(!v.readBaseline||!v.writeBaselinePin||v.readObservation||v.writeObservationPin)
   ||v.phase!=='OBSERVED_CLOSED'&&v.writeObservationPin
   ||v.phase==='OBSERVED_CLOSED'&&(v.writeBaselinePin||v.writeObservationPin)&&(!v.writeBaselinePin||!v.writeObservationPin||!v.observations?.writeProofDigest))
   ctx.addIssue({code:'custom',message:'Invalid standard-write evidence phase'});
- if(!['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.signedBaselinePin||v.signedObservationPin)
-  ||['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(v.phase)&&(!v.signedBaselinePin||v.signedObservationPin)
+ if(!['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.signedBaselinePin||v.signedObservationPin)
+  ||['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(v.phase)&&(!v.signedBaselinePin||v.signedObservationPin)
   ||v.phase==='OBSERVED_CLOSED'&&(v.signedBaselinePin||v.signedObservationPin||v.observations?.signedProofDigest)
    &&(!v.signedBaselinePin||!v.signedObservationPin||!v.readBaseline||!v.readObservation||!v.writeBaselinePin||!v.writeObservationPin||!v.observations?.signedProofDigest||!v.observations?.signingDigest))
   ctx.addIssue({code:'custom',message:'Invalid signed-upload evidence phase'});
- if(!['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.resumableBaselinePin||v.resumableObservationPin)
-  ||['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(v.phase)&&(!v.resumableBaselinePin||!v.signedBaselinePin||v.resumableObservationPin)
+ if(!['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.resumableBaselinePin||v.resumableObservationPin)
+  ||['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(v.phase)&&(!v.resumableBaselinePin||!v.signedBaselinePin||v.resumableObservationPin)
   ||v.phase==='OBSERVED_CLOSED'&&(v.resumableBaselinePin||v.resumableObservationPin||v.observations?.resumableProofDigest)
    &&(!v.resumableBaselinePin||!v.resumableObservationPin||!v.readBaseline||!v.readObservation||!v.writeBaselinePin||!v.writeObservationPin||!v.signedBaselinePin||!v.signedObservationPin||!v.observations?.resumableProofDigest))
   ctx.addIssue({code:'custom',message:'Invalid resumable credential-cohort evidence phase'});
- if(!['SIGNED_RESUMABLE_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.signedResumableBaselinePin||v.signedResumableObservationPin)
-  ||v.phase==='SIGNED_RESUMABLE_BASELINED'&&(!v.signedResumableBaselinePin||!v.resumableBaselinePin||v.signedResumableObservationPin)
+ if(!['SIGNED_RESUMABLE_BASELINED','S3_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.signedResumableBaselinePin||v.signedResumableObservationPin)
+  ||['SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(v.phase)&&(!v.signedResumableBaselinePin||!v.resumableBaselinePin||v.signedResumableObservationPin)
   ||v.phase==='OBSERVED_CLOSED'&&(v.signedResumableBaselinePin||v.signedResumableObservationPin||v.observations?.signedResumableProofDigest)
    &&(!v.signedResumableBaselinePin||!v.signedResumableObservationPin||!v.resumableBaselinePin||!v.resumableObservationPin||!v.observations?.signedResumableProofDigest||!v.observations?.resumableProofDigest))
   ctx.addIssue({code:'custom',message:'Invalid signed resumable evidence phase'});
+ if(!['S3_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.s3BaselinePin||v.s3ObservationPin)
+  ||v.phase==='S3_BASELINED'&&(!v.s3BaselinePin||!v.signedResumableBaselinePin||v.s3ObservationPin)
+  ||v.phase==='OBSERVED_CLOSED'&&(v.s3BaselinePin||v.s3ObservationPin||v.observations?.s3ProofDigest)
+   &&(!v.s3BaselinePin||!v.s3ObservationPin||!v.signedResumableBaselinePin||!v.signedResumableObservationPin||!v.observations?.s3ProofDigest||v.observations.s3ProofDigest!==v.s3ObservationPin.sha256))
+  ctx.addIssue({code:'custom',message:'Invalid S3 evidence phase'});
  if(v.phase==='OBSERVED_CLOSED'&&(v.readBaseline||v.readObservation)){
   try{
    if(!v.readBaseline||!v.readObservation||!v.observations?.storageDigest)throw new Error();
@@ -162,23 +170,31 @@ export class S3ManagedMaintenanceControl {
   if(pin.kind!=='BASELINE'||current.value.phase!=='RESUMABLE_BASELINED'||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
   return this.replace(current,{...current.value,phase:'SIGNED_RESUMABLE_BASELINED',signedResumableBaselinePin:pin,publicationId:randomUUID()});
  }
- async recordObservedClosed(attemptId:string,revision:string,raw:unknown,rawReadObservation?:unknown,rawWriteObservationPin?:unknown,rawSignedObservationPin?:unknown,rawResumableObservationPin?:unknown,rawSignedResumableObservationPin?:unknown){
+ async recordS3BaselinePin(attemptId:string,revision:string,raw:unknown){
+  z.string().uuid().parse(attemptId);digest.parse(revision);const pin=s3CapabilityCohortPinSchema.parse(raw),current=await this.read();
+  if(pin.kind!=='BASELINE'||current.value.phase!=='SIGNED_RESUMABLE_BASELINED'||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
+  return this.replace(current,{...current.value,phase:'S3_BASELINED',s3BaselinePin:pin,publicationId:randomUUID()});
+ }
+ async recordObservedClosed(attemptId:string,revision:string,raw:unknown,rawReadObservation?:unknown,rawWriteObservationPin?:unknown,rawSignedObservationPin?:unknown,rawResumableObservationPin?:unknown,rawSignedResumableObservationPin?:unknown,rawS3ObservationPin?:unknown){
   z.string().uuid().parse(attemptId);digest.parse(revision);const facts=observations.parse(raw),current=await this.read();
-  if(!['ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
+  if(!['ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)||current.value.attemptId!==attemptId||current.revision!==revision)throw new Error(failure);
   const readObservation=rawReadObservation===undefined?undefined:credentialReadObservationArtifact(rawReadObservation);
-  if(['BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&!readObservation)throw new Error(failure);
+  if(['BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&!readObservation)throw new Error(failure);
   const writeObservationPin=rawWriteObservationPin===undefined?undefined:managedWriteEvidencePinSchema.parse(rawWriteObservationPin);
-  if(['WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&(!writeObservationPin||!facts.writeProofDigest))throw new Error(failure);
+  if(['WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(!writeObservationPin||!facts.writeProofDigest))throw new Error(failure);
   const signedObservationPin=rawSignedObservationPin===undefined?undefined:signedUploadEvidencePinSchema.parse(rawSignedObservationPin);
-  if(['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&(!signedObservationPin||!facts.signedProofDigest))throw new Error(failure);
-  if(!['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&(signedObservationPin||facts.signedProofDigest))throw new Error(failure);
+  if(['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(!signedObservationPin||!facts.signedProofDigest))throw new Error(failure);
+  if(!['SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(signedObservationPin||facts.signedProofDigest))throw new Error(failure);
   const resumableObservationPin=rawResumableObservationPin===undefined?undefined:resumableCohortPinSchema.parse(rawResumableObservationPin);
-  if(['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&(!resumableObservationPin||!facts.resumableProofDigest))throw new Error(failure);
-  if(!['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED'].includes(current.value.phase)&&(resumableObservationPin||facts.resumableProofDigest))throw new Error(failure);
+  if(['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(!resumableObservationPin||!facts.resumableProofDigest))throw new Error(failure);
+  if(!['RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(resumableObservationPin||facts.resumableProofDigest))throw new Error(failure);
   const signedResumableObservationPin=rawSignedResumableObservationPin===undefined?undefined:signedResumableEvidencePinSchema.parse(rawSignedResumableObservationPin);
-  if(current.value.phase==='SIGNED_RESUMABLE_BASELINED'&&(!signedResumableObservationPin||!facts.signedResumableProofDigest))throw new Error(failure);
-  if(current.value.phase!=='SIGNED_RESUMABLE_BASELINED'&&(signedResumableObservationPin||facts.signedResumableProofDigest))throw new Error(failure);
+  if(['SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(!signedResumableObservationPin||!facts.signedResumableProofDigest))throw new Error(failure);
+  if(!['SIGNED_RESUMABLE_BASELINED','S3_BASELINED'].includes(current.value.phase)&&(signedResumableObservationPin||facts.signedResumableProofDigest))throw new Error(failure);
+  const s3ObservationPin=rawS3ObservationPin===undefined?undefined:s3CapabilityCohortPinSchema.parse(rawS3ObservationPin);
+  if(current.value.phase==='S3_BASELINED'&&(!s3ObservationPin||!facts.s3ProofDigest||facts.s3ProofDigest!==s3ObservationPin.sha256))throw new Error(failure);
+  if(current.value.phase!=='S3_BASELINED'&&(s3ObservationPin||facts.s3ProofDigest))throw new Error(failure);
   return this.replace(current,{...current.value,phase:'OBSERVED_CLOSED',observations:facts,
-   ...(readObservation?{readObservation}:{}),...(writeObservationPin?{writeObservationPin}:{}),...(signedObservationPin?{signedObservationPin}:{}),...(resumableObservationPin?{resumableObservationPin}:{}),...(signedResumableObservationPin?{signedResumableObservationPin}:{}),publicationId:randomUUID()});
+   ...(readObservation?{readObservation}:{}),...(writeObservationPin?{writeObservationPin}:{}),...(signedObservationPin?{signedObservationPin}:{}),...(resumableObservationPin?{resumableObservationPin}:{}),...(signedResumableObservationPin?{signedResumableObservationPin}:{}),...(s3ObservationPin?{s3ObservationPin}:{}),publicationId:randomUUID()});
  }
 }

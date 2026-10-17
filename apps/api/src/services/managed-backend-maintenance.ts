@@ -1,3 +1,4 @@
+import type {ManagedS3MaintenanceEvidence} from './managed-s3-maintenance-evidence.js';
 import type {ManagedSignedResumableUploadEvidence} from './managed-signed-resumable-upload-evidence.js';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
@@ -24,8 +25,9 @@ export class ManagedBackendMaintenance {
  private readonly config:z.infer<typeof configuration>;
  constructor(raw:unknown,private readonly provider:RenderMaintenanceControl,
   private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl,
-  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence){
+  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence,private readonly s3:ManagedS3MaintenanceEvidence){
   this.config=configuration.parse(raw);
+  this.s3.assertStorageScope(this.storage.s3FeatureProofScope(),this.storage.configurationDigest(this.config.installationId));
   this.proof.assertStorageScope(this.storage.readProofScope());
   this.write.assertStorageScope(this.storage.readProofScope());
   this.signed.assertStorageScope(this.storage.readProofScope());
@@ -33,18 +35,18 @@ export class ManagedBackendMaintenance {
   this.signedResumable.assertStorageScope(this.storage.readProofScope());
   this.signedResumable.assertSignedScope(this.signed.configurationDigest(this.config.installationId));
  }
- planDigest(){return createHash('sha256').update(JSON.stringify({format:8,...this.config,
+ planDigest(){return createHash('sha256').update(JSON.stringify({format:9,...this.config,
   databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
   storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',
   readProofPolicy:'INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1',
-  writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',signedProofPolicy:'ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1',resumableProofPolicy:'ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1',signedResumableProofPolicy:'ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1',
+  writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',signedProofPolicy:'ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1',resumableProofPolicy:'ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1',signedResumableProofPolicy:'ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1',s3ProofPolicy:'EXPLICIT_MODE_ORIGINAL_S3_BASELINE_BEFORE_CLOSURE_V1',
   provider:this.provider.configurationDigest(),database:this.database.configurationDigest(),storage:this.storage.configurationDigest(this.config.installationId),
-  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId)})).digest('hex');}
- private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string){
+  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)})).digest('hex');}
+ private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string){
   const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated(),storage=await this.storage.observeClosed(),signing=await this.signed.observeRevoked();
   if(storage.configuredAccessPathsObservedClosed!==true)throw new Error(failure);
   return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,storageDigest:storage.observationDigest,signingDigest:signing.observationDigest,
-   ...(readProofDigest?{readProofDigest}:{}),...(writeProofDigest?{writeProofDigest}:{}),...(signedProofDigest?{signedProofDigest}:{}),...(resumableProofDigest?{resumableProofDigest}:{}),...(signedResumableProofDigest?{signedResumableProofDigest}:{}),observedAt:new Date().toISOString()};
+   ...(readProofDigest?{readProofDigest}:{}),...(writeProofDigest?{writeProofDigest}:{}),...(signedProofDigest?{signedProofDigest}:{}),...(resumableProofDigest?{resumableProofDigest}:{}),...(signedResumableProofDigest?{signedResumableProofDigest}:{}),...(s3ProofDigest?{s3ProofDigest}:{}),observedAt:new Date().toISOString()};
  }
  async close(){
   try{
@@ -73,10 +75,15 @@ export class ManagedBackendMaintenance {
    const savedResumable=await resumable.observeBaseline(resumableReady.value.resumableBaselinePin);
    if(savedResumable.artifact.sha256!==resumableBaselinePin.sha256)throw new Error();
    const signedTus=this.signedResumable.forAttempt(binding),signedResumableBaselinePin=await signedTus.baseline();
-   const ready=await this.control.recordSignedResumableBaselinePin(attempt.value.attemptId,resumableReady.revision,signedResumableBaselinePin);
-   if(ready.value.phase!=='SIGNED_RESUMABLE_BASELINED'||!ready.value.signedResumableBaselinePin)throw new Error();
-   const savedSignedTus=await signedTus.observeBaseline(ready.value.signedResumableBaselinePin);
+   const signedTusReady=await this.control.recordSignedResumableBaselinePin(attempt.value.attemptId,resumableReady.revision,signedResumableBaselinePin);
+   if(signedTusReady.value.phase!=='SIGNED_RESUMABLE_BASELINED'||!signedTusReady.value.signedResumableBaselinePin)throw new Error();
+   const savedSignedTus=await signedTus.observeBaseline(signedTusReady.value.signedResumableBaselinePin);
    if(savedSignedTus.artifact.sha256!==signedResumableBaselinePin.sha256)throw new Error();
+   const s3=this.s3.forAttempt(binding),s3BaselinePin=await s3.baseline();
+   const ready=await this.control.recordS3BaselinePin(attempt.value.attemptId,signedTusReady.revision,s3BaselinePin);
+   if(ready.value.phase!=='S3_BASELINED'||!ready.value.s3BaselinePin)throw new Error();
+   const savedS3=await s3.observeBaseline(ready.value.s3BaselinePin);
+   if(savedS3.artifact.sha256!==s3BaselinePin.sha256)throw new Error();
    await this.provider.suspend();
    await this.database.close();
    await this.database.invalidatePasswords();
@@ -90,9 +97,13 @@ export class ManagedBackendMaintenance {
    const signedObservationPin=await signer.evidence.publishObservation(signedObservation,ready.value.signedBaselinePin);
    const resumableObservation=await resumable.verifyRefusal(ready.value.resumableBaselinePin);
    const signedTusObservation=await signedTus.verifyRefusal(ready.value.signedResumableBaselinePin);
-   const observations=await this.readback(readObservation.observationDigest,writeObservation.observationDigest,signedObservation.observationDigest,resumableObservation.observationDigest,signedTusObservation.observationDigest);
-   const recorded=await this.control.recordObservedClosed(attempt.value.attemptId,ready.revision,observations,readObservation,writeObservationPin,signedObservationPin,resumableObservation.pin,signedTusObservation.pin);
+   const s3Observation=await s3.verifyRefusal(ready.value.s3BaselinePin);
+   const observations=await this.readback(readObservation.observationDigest,writeObservation.observationDigest,signedObservation.observationDigest,resumableObservation.observationDigest,signedTusObservation.observationDigest,s3Observation.observationDigest);
+   const checkedS3=await s3.observeObservation(s3Observation.pin,ready.value.s3BaselinePin);
+   if(checkedS3.observationDigest!==s3Observation.observationDigest||Math.abs(Date.now()-Date.parse(checkedS3.observedAt))>180000)throw new Error();
+   const recorded=await this.control.recordObservedClosed(attempt.value.attemptId,ready.revision,observations,readObservation,writeObservationPin,signedObservationPin,resumableObservation.pin,signedTusObservation.pin,s3Observation.pin);
    return{phase:recorded.value.phase,attemptId:recorded.value.attemptId,observations,
+    configuredS3CoverageObserved:true as const,s3Mode:s3Observation.mode,s3Coverage:s3Observation.coverage,s3BaselinePin:recorded.value.s3BaselinePin,s3ObservationPin:recorded.value.s3ObservationPin,
     credentialReadRefusalsObserved:true as const,readBaselineSha256:retained.sha256,readObservationSha256:recorded.value.readObservation?.sha256,
     testedSignedResumablePatchRefusalObserved:true as const,signedResumableBaselinePin:recorded.value.signedResumableBaselinePin,signedResumableObservationPin:recorded.value.signedResumableObservationPin,
     resumableCredentialCohortRefusalsObserved:true as const,resumableBaselinePin:recorded.value.resumableBaselinePin,resumableObservationPin:recorded.value.resumableObservationPin,
@@ -108,7 +119,7 @@ export class ManagedBackendMaintenance {
    if(before.value.installationId!==this.config.installationId||before.value.planDigest!==this.planDigest()
     ||before.value.maintenanceEpoch!==this.config.maintenanceEpoch||before.value.phase==='READY')throw new Error();
    if(before.value.phase==='OBSERVED_CLOSED'&&(!before.value.observations?.storageDigest||!before.value.observations.readProofDigest
-    ||!before.value.readBaseline||!before.value.readObservation||!before.value.writeBaselinePin||!before.value.writeObservationPin||!before.value.observations.writeProofDigest||!before.value.signedBaselinePin||!before.value.signedObservationPin||!before.value.observations.signedProofDigest||!before.value.observations.signingDigest||!before.value.resumableBaselinePin||!before.value.resumableObservationPin||!before.value.observations.resumableProofDigest||!before.value.signedResumableBaselinePin||!before.value.signedResumableObservationPin||!before.value.observations.signedResumableProofDigest))throw new Error();
+    ||!before.value.readBaseline||!before.value.readObservation||!before.value.writeBaselinePin||!before.value.writeObservationPin||!before.value.observations.writeProofDigest||!before.value.signedBaselinePin||!before.value.signedObservationPin||!before.value.observations.signedProofDigest||!before.value.observations.signingDigest||!before.value.resumableBaselinePin||!before.value.resumableObservationPin||!before.value.observations.resumableProofDigest||!before.value.signedResumableBaselinePin||!before.value.signedResumableObservationPin||!before.value.observations.signedResumableProofDigest||!before.value.s3BaselinePin||!before.value.s3ObservationPin||!before.value.observations.s3ProofDigest))throw new Error();
    const binding={attemptId:before.value.attemptId,planDigest:before.value.planDigest,sourceSha:this.config.sourceSha,maintenanceEpoch:this.config.maintenanceEpoch};
    const retained=before.value.readBaseline?this.proof.assertBaseline(before.value.readBaseline,binding):null;
    if(before.value.readObservation){if(!retained)throw new Error();this.proof.assertObservation(before.value.readObservation,retained.sha256);}
@@ -129,6 +140,10 @@ export class ManagedBackendMaintenance {
    if(before.value.signedResumableBaselinePin)await signedTus.observeBaseline(before.value.signedResumableBaselinePin);
    const recordedSignedResumableObservation=before.value.signedResumableObservationPin?await signedTus.observeObservation(before.value.signedResumableObservationPin,before.value.signedResumableBaselinePin):null;
    if(recordedSignedResumableObservation&&recordedSignedResumableObservation.value.observationDigest!==before.value.observations?.signedResumableProofDigest)throw new Error();
+   const s3=this.s3.forAttempt(binding);
+   if(before.value.s3BaselinePin)await s3.observeBaseline(before.value.s3BaselinePin);
+   const recordedS3Observation=before.value.s3ObservationPin?await s3.observeObservation(before.value.s3ObservationPin,before.value.s3BaselinePin):null;
+   if(recordedS3Observation&&recordedS3Observation.observationDigest!==before.value.observations?.s3ProofDigest)throw new Error();
    const metadata=await this.readback();
    const freshReadObservation=retained?await this.proof.verifyReadRefusal(retained.body,retained.sha256):null;
    const observations={...metadata,...(freshReadObservation?{readProofDigest:freshReadObservation.observationDigest}:{})},after=await this.control.observe();
@@ -138,6 +153,7 @@ export class ManagedBackendMaintenance {
    return{phase:after.value.phase,attemptId:after.value.attemptId,observations,
     credentialReadRefusalsObserved:freshReadObservation!==null,readBaselineSha256:retained?.sha256??null,
     recordedReadObservation:after.value.readObservation??null,freshReadObservation,
+    recordedS3Observation,recordedS3CoverageObserved:recordedS3Observation!==null,freshS3CoverageObserved:false as const,s3Mode:s3.mode,
     recordedSignedResumableObservation,recordedSignedResumablePatchRefusalObserved:recordedSignedResumableObservation!==null,freshSignedResumablePatchRefusalObserved:false as const,
     recordedResumableObservation,recordedResumableCredentialCohortRefusalsObserved:recordedResumableObservation!==null,freshResumableCredentialCohortRefusalsObserved:false as const,
     recordedSignedObservation,recordedTestedSignedUploadRefusalObserved:recordedSignedObservation!==null,freshSignedUploadRefusalObserved:false as const,

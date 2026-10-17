@@ -1,5 +1,12 @@
 # Original S3 capability and feature-exclusion probe
 
+> **17 October protocol9 S3 integration:** The default coordinator now requires
+> explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
+> shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection
+> never repeats S3 probes or backfills ACKs. Both modes pass native PostgreSQL
+> integration with synthetic providers. See [required S3 maintenance](durable-s3-maintenance.md).
+
+
 17 October 2026. `SupabaseS3CapabilityProof` implements actual SDK-signed S3
 requests, an original presigned PUT and an original multipart upload through
 synthetic HTTP transports. It supports separate DIRECT and GATEWAY scopes.

@@ -1,5 +1,12 @@
 # Required original signed TUS maintenance
 
+> **17 October protocol9 S3 integration:** The default coordinator now requires
+> explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
+> shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection
+> never repeats S3 probes or backfills ACKs. Both modes pass native PostgreSQL
+> integration with synthetic providers. See [required S3 maintenance](durable-s3-maintenance.md).
+
+
 17 October 2026. Default internal `ManagedBackendMaintenance` now uses protocol8
 and requires `ManagedSignedResumableUploadEvidence` as its tenth component.
 Protocol1–7 plan hashes refuse before dispatch. Source integration and synthetic

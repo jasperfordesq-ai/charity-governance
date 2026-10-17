@@ -1,3 +1,6 @@
+import {managedS3WorkingFixture} from './fixtures/managed-s3-working.js';
+import {managedS3CurrentFixture} from './fixtures/managed-s3-current.js';
+import {SupabaseStorageWriterControl} from '../services/supabase-storage-writer-control.js';
 import {managedSignedResumableFixture} from './fixtures/managed-signed-resumable.js';
 import {resumableCohortFixture} from './fixtures/resumable-cohort.js';
 import type {ResumableCohortPin} from '../services/resumable-cohort-contract.js';
@@ -23,8 +26,8 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
  let value={format:1,installationId:config.installationId,maintenanceEpoch:1,planDigest:'1'.repeat(64),
   phase:'READY',attemptId:null as string|null,observations:null as unknown,readBaseline:undefined as {body:string;sha256:string}|undefined,readObservation:undefined as {body:string;sha256:string}|undefined,
   writeBaselinePin:undefined as ManagedWriteEvidencePin|undefined,writeObservationPin:undefined as ManagedWriteEvidencePin|undefined,
-  signedBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedObservationPin:undefined as SignedUploadEvidencePin|undefined,resumableBaselinePin:undefined as ResumableCohortPin|undefined,resumableObservationPin:undefined as ResumableCohortPin|undefined,signedResumableBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedResumableObservationPin:undefined as SignedUploadEvidencePin|undefined,publicationId:randomUUID()};
- let version=1,reads=0,puts=0,storageClosed=false;
+  signedBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedObservationPin:undefined as SignedUploadEvidencePin|undefined,resumableBaselinePin:undefined as ResumableCohortPin|undefined,resumableObservationPin:undefined as ResumableCohortPin|undefined,signedResumableBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedResumableObservationPin:undefined as SignedUploadEvidencePin|undefined,s3BaselinePin:undefined as ResumableCohortPin|undefined,s3ObservationPin:undefined as ResumableCohortPin|undefined,publicationId:randomUUID()};
+ let version=1,reads=0,puts=0,storageClosed=false,initialS3Enabled=false;
  const calls:string[]=[];
  let fault:((command:GetObjectCommand|PutObjectCommand)=>unknown)|undefined;
  const metadata=()=>({VersionId:'version-'+version,ETag:'"etag-'+version+'"',ServerSideEncryption:'aws:kms' as const,SSEKMSKeyId:config.kmsKeyArn});
@@ -55,7 +58,15 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
  const database={configurationDigest:()=>hash('db-registry'),close:async()=>{calls.push('database-close');},
   invalidatePasswords:async()=>{calls.push('password-invalidate');},
   observePasswordsInvalidated:async()=>{calls.push('database-observe');return{observationDigest:hash('database'),passwordCredentialsInvalidated:true};}};
- const storage={configurationDigest:()=>hash('storage-registry'),readProofScope:()=>({installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',captureKeyId:'11111111-1111-4111-8111-111111111111',secretWriterIds:retired.map(k=>k.id)}),close:async()=>{calls.push('storage-close');storageClosed=true;},
+ const s3MetadataConfig={installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:retired.map(k=>({id:k.id,type:'secret'}))};
+ const s3Metadata=new SupabaseStorageWriterControl(s3MetadataConfig,'synthetic-management',async(input,init)=>{
+  calls.push('s3-metadata-'+init?.method);assert.equal(init?.method,'GET');const u=new URL(String(input));
+  if(u.pathname.endsWith('/config/storage'))return Response.json({features:{s3Protocol:{enabled:initialS3Enabled&&!storageClosed}}});
+  if(u.pathname.endsWith('/api-keys/legacy'))return Response.json({enabled:!storageClosed});
+  if(u.pathname.endsWith('/api-keys'))return Response.json([{id:s3MetadataConfig.captureKeyId,type:'secret'},...(!storageClosed?s3MetadataConfig.writerKeys:[])]);
+  return Response.json({ref:s3MetadataConfig.projectRef,organization_id:s3MetadataConfig.organisationId,region:s3MetadataConfig.region,status:'ACTIVE_HEALTHY'});
+ });
+ const storage={configurationDigest:()=>s3Metadata.configurationDigest(),s3FeatureProofScope:()=>s3Metadata.s3FeatureProofScope(),readProofScope:()=>({installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',captureKeyId:'11111111-1111-4111-8111-111111111111',secretWriterIds:retired.map(k=>k.id)}),close:async()=>{calls.push('storage-close');storageClosed=true;},
   observeClosed:async()=>{calls.push('storage-observe');return{observationDigest:hash('storage'),configuredAccessPathsObservedClosed:true};}};
  const proof={configurationDigest:()=>hash('proof-registry'),assertStorageScope:(_raw:unknown)=>{},
   assertBaseline:(raw:unknown,_binding?:unknown)=>raw as {body:string;sha256:string},assertObservation:(raw:unknown,_pin:string)=>raw as {body:string;sha256:string},
@@ -82,16 +93,17 @@ function fixture(options:{retired?:{id:string;secret:string}[]}={}){
  const signedFixture=managedSignedFixture(config,client,calls),signed=signedFixture.factory();
  const resumableFixture=resumableCohortFixture({storage:config,client,events:calls,retired,isRetiredAllowed:()=>!storageClosed});
  const signedTusFixture=managedSignedResumableFixture(signedFixture,config,client,calls);
- const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never,write as never,signed,resumableFixture.factory(),signedTusFixture.factory());
+ const s3Fixture=managedS3CurrentFixture(config,client,s3Metadata,{id:s3MetadataConfig.captureKeyId,secret:'sb_secret_'+'a'.repeat(40)},calls);
+ const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never,write as never,signed,resumableFixture.factory(),signedTusFixture.factory(),s3Fixture.factory());
  value.planDigest=coordinator.planDigest();
- return{store,provider,database,storage,proof,write,signed,signedFixture,resumableFixture,signedTusFixture,writeOperations,artifacts,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
+ return{client,setInitiallyEnabledS3:()=>{initialS3Enabled=true;},isStorageClosed:()=>storageClosed,store,provider,database,storage,proof,write,signed,signedFixture,resumableFixture,signedTusFixture,s3Fixture,s3Metadata,writeOperations,artifacts,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
   get puts(){return puts;},get reads(){return reads;},setFault:(next:typeof fault)=>{fault=next;},
   commit:(command:PutObjectCommand)=>{value=JSON.parse(String(command.input.Body));version++;return metadata();}};
 }
 
 test('managed shutdown records an independent attempt before provider/database mutation and never repeats it',async()=>{
  const f=fixture();const result=await f.coordinator.close();
- assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,7);
+ assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,8);
  assert.equal(result.databasePasswordCredentialsInvalidated,true);
  assert.equal(result.storageAccessPathsObservedClosed,true);assert.ok(f.value.observations);
  assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(f.value.readBaseline);assert.ok(f.value.readObservation);
@@ -119,7 +131,7 @@ test('lost durable baseline acknowledgement blocks all shutdown mutations and pr
  assert.ok(f.value.readBaseline);assert.equal(f.value.observations,null);
  assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('storage-close'),false);
  f.setFault(undefined);const before=f.puts;
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory());
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory());
  await assert.rejects(fresh.close());assert.equal(f.puts,before);
  assert.equal(f.calls.filter(x=>x==='read-baseline').length,1);
 });
@@ -130,7 +142,7 @@ test('lost independent acquisition acknowledgement never dispatches, even after 
  });
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'ATTEMPTED');
  f.setFault(undefined);
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory());
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory());
  await assert.rejects(fresh.close());assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('database-close'),false);
  f.signedFixture.forceRevoked(); // explicit fixture resolution, not inspection or a resumed command.
  const observed=await fresh.inspect();assert.equal(observed.phase,'ATTEMPTED');assert.equal(observed.recordedObservations,null);
@@ -154,7 +166,7 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
    }
   });
   await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
-  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'SIGNED_RESUMABLE_BASELINED');
+  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'S3_BASELINED');
   f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length;
   await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
   if(stage==='suspend')assert.equal(f.calls.includes('database-close'),false);
@@ -173,10 +185,10 @@ test('maintenance plan binds copied installation/source/epoch and all component 
   if(stage==='storage')f.storage.configurationDigest=()=>hash('different-storage');
   if(stage==='proof')f.proof.configurationDigest=()=>hash('different-proof');
   if(stage==='write')f.write.configurationDigest=()=>hash('different-write');
-  await assert.rejects(async()=>new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory()).close());
+  await assert.rejects(async()=>new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory()).close());
   assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
  }
- const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory());
+ const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory());
  const before=coordinator.planDigest();input.sourceSha='2'.repeat(40);assert.equal(coordinator.planDigest(),before);
 });
 
@@ -223,7 +235,7 @@ test('maintenance SDK has no ambient endpoint/credential fallback and sanitises 
 });
 
 test('two concurrent maintenance callers cannot both dispatch from one READY record',async()=>{
- const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory());
+ const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory());
  const outcomes=await Promise.allSettled([f.coordinator.close(),other.close()]);
  assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
  assert.equal(f.calls.filter(c=>c==='suspend').length,1);assert.equal(f.calls.filter(c=>c==='database-close').length,1);
@@ -279,9 +291,9 @@ test('failed baseline never shuts writers; later inspection cannot invent a miss
  const first=fixture();first.proof.baseline=async()=>{throw new Error('synthetic baseline unavailable');};
  await assert.rejects(first.coordinator.close());assert.equal(first.value.phase,'ATTEMPTED');assert.equal(first.calls.includes('suspend'),false);
  const f=fixture(),verify=f.proof.verifyReadRefusal;f.proof.verifyReadRefusal=async()=>{throw new Error('synthetic refusal observation lost');};
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.readObservation,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.readObservation,undefined);
  f.proof.verifyReadRefusal=verify;const before=f.puts,baseline=f.value.readBaseline?.sha256;
- const inspected=await f.coordinator.inspect();assert.equal(inspected.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(inspected.recordedReadObservation,null);
+ const inspected=await f.coordinator.inspect();assert.equal(inspected.phase,'S3_BASELINED');assert.equal(inspected.recordedReadObservation,null);
  assert.ok(inspected.freshReadObservation);assert.equal(f.puts,before);assert.equal(f.value.readBaseline?.sha256,baseline);
 });
 test('fifty read refusals fit the bounded independent head and oversized updates cannot corrupt the saved baseline',async()=>{
@@ -345,7 +357,7 @@ test('write-report ACK loss stays consumed and inspection does not run active wr
    f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'committed-report'});throw new Error('PRIVATE report ACK lost');
   }
  });
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.writeObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.writeObservationPin,undefined);
  f.setFault(undefined);const mutations=f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length;
  const observed=await f.coordinator.inspect();assert.equal(observed.recordedWriteObservation,null);assert.equal(observed.freshStandardWriteRefusalsObserved,false);
  assert.equal(f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length,mutations);
@@ -361,7 +373,7 @@ test('failed active write baseline or refusal cannot bypass its durable barrier'
  const first=fixture();first.writeOperations.baseline=async()=>{throw new Error('synthetic write baseline failure');};
  await assert.rejects(first.coordinator.close());assert.equal(first.value.phase,'BASELINED');assert.equal(first.calls.includes('suspend'),false);
  const f=fixture();f.writeOperations.verifyWriteRefusal=async()=>{throw new Error('synthetic refusal failure');};
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.ok(f.value.writeBaselinePin);assert.equal(f.value.writeObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.ok(f.value.writeBaselinePin);assert.equal(f.value.writeObservationPin,undefined);
  const before=f.calls.filter(c=>c==='write-proof').length;const observed=await f.coordinator.inspect();assert.equal(observed.recordedWriteObservation,null);
  assert.equal(f.calls.filter(c=>c==='write-proof').length,before);
 });
@@ -459,7 +471,7 @@ test('lost signed report acknowledgement remains missing and fresh inspection ne
    f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'signed-report-lost-ack'});throw new Error('synthetic lost signed report ACK');
   }
  });
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
  f.setFault(undefined);const before=f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length;
  const observed=await f.coordinator.inspect();assert.equal(observed.recordedSignedObservation,null);assert.equal(observed.recordedTestedSignedUploadRefusalObserved,false);
  assert.equal(f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length,before);
@@ -467,7 +479,7 @@ test('lost signed report acknowledgement remains missing and fresh inspection ne
 
 test('management key revocation cannot substitute for an actual original-token refusal',async()=>{
  const f=fixture();f.signedFixture.acceptOld=true;await assert.rejects(f.coordinator.close());
- assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
  const mutations=f.calls.filter(c=>c==='signed-storage-PUT').length,observed=await f.coordinator.inspect();
  assert.equal(observed.recordedSignedObservation,null);assert.equal(observed.signedCapabilitiesRevoked,false);
  assert.equal(f.calls.filter(c=>c==='signed-storage-PUT').length,mutations);
@@ -482,7 +494,7 @@ test('protocol5 unsigned plan cannot dispatch the newly required signed workflow
 
 test('lost signing-key acknowledgement cannot be promoted into a completed original-token test',async()=>{
  const f=fixture();f.signedFixture.loseRevocationAck=true;
- await assert.rejects(f.coordinator.close());assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
  const mutations=f.calls.filter(c=>c==='signed-management-PATCH'||c==='signed-storage-PUT'||c.startsWith('signed-kms-')).length;
  const observed=await f.coordinator.inspect();assert.equal(observed.recordedTestedSignedUploadRefusalObserved,false);
  await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(c=>c==='signed-management-PATCH'||c==='signed-storage-PUT'||c.startsWith('signed-kms-')).length,mutations);
@@ -520,7 +532,7 @@ test('lost TUS location child manifest or head ACK never starts shutdown and ori
 test('lost original TUS child or aggregate report ACK remains absent at the parent and cannot be recreated by inspection',async()=>{
  for(const suffix of ['/resumable-observation.json','/resumable-cohort-observation.json']){
   const f=fixture();f.setFault(command=>{if(command instanceof PutObjectCommand&&command.input.Key!.endsWith(suffix)){f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'committed-unknown-tus-report'});throw new Error('synthetic report ACK lost');}});
-  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.resumableObservationPin,undefined);
+  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.resumableObservationPin,undefined);
   f.setFault(undefined);const before=f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('kms-')||c==='tus-POST'||c==='tus-PATCH').length;
   const observed=await f.coordinator.inspect();assert.equal(observed.recordedResumableCredentialCohortRefusalsObserved,false);await assert.rejects(f.coordinator.close());
   assert.equal(f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('kms-')||c==='tus-POST'||c==='tus-PATCH').length,before);
@@ -529,7 +541,7 @@ test('lost original TUS child or aggregate report ACK remains absent at the pare
 
 test('storage metadata closure cannot substitute for actual TUS refusal and an incomplete completed head refuses',async()=>{
  const f=fixture();f.resumableFixture.allowRetiredAfterClose=true;await assert.rejects(f.coordinator.close());
- assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.resumableObservationPin,undefined);const observed=await f.coordinator.inspect();assert.equal(observed.recordedResumableObservation,null);assert.equal(observed.resumableSessionsRevoked,false);
+ assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.resumableObservationPin,undefined);const observed=await f.coordinator.inspect();assert.equal(observed.recordedResumableObservation,null);assert.equal(observed.resumableSessionsRevoked,false);
  const good=fixture();await good.coordinator.close();good.value={...good.value,resumableObservationPin:undefined};await assert.rejects(good.store.observe());await assert.rejects(good.coordinator.inspect());
 });
 
@@ -573,11 +585,11 @@ test('lost signed TUS secret baseline readback or parent ACK prevents shutdown a
 });
 test('lost original signed TUS report remains absent at the parent and is never backfilled',async()=>{
  const f=fixture();f.setFault(command=>{if(command instanceof PutObjectCommand&&command.input.Key!.endsWith('/signed-resumable-observation.json')){f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'unknown-signed-tus-report'});throw new Error('synthetic report ACK lost');}});
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.signedResumableObservationPin,undefined);assert.equal(f.signedFixture.revoked,true);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.signedResumableObservationPin,undefined);assert.equal(f.signedFixture.revoked,true);
  f.setFault(undefined);const count=f.artifacts.size,before=f.signedTusFixture.calls.length,observed=await f.coordinator.inspect();assert.equal(observed.recordedSignedResumablePatchRefusalObserved,false);assert.equal(f.artifacts.size,count);assert.equal(f.signedTusFixture.calls.length,before);
 });
 test('signing metadata closure cannot substitute for original signed TUS refusal',async()=>{
- const f=fixture();f.signedTusFixture.mode.stillWorks=true;await assert.rejects(f.coordinator.close());assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');assert.equal(f.value.signedResumableObservationPin,undefined);
+ const f=fixture();f.signedTusFixture.mode.stillWorks=true;await assert.rejects(f.coordinator.close());assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.signedResumableObservationPin,undefined);
  const observed=await f.coordinator.inspect();assert.equal(observed.recordedSignedResumablePatchRefusalObserved,false);assert.equal(observed.signedCapabilitiesRevoked,false);
 });
 test('completed protocol8 head requires signed TUS dependencies and rejects recomputed report-association forgeries',async()=>{
@@ -606,4 +618,88 @@ test('signed TUS child identity binds every parent dimension and configuration w
  assert.throws(()=>factory.configurationDigest('other-installation'));assert.throws(()=>factory.assertSignedScope('0'.repeat(64)));
  assert.throws(()=>factory.assertStorageScope({...f.storage.readProofScope(),captureKeyId:randomUUID()}));
  assert.equal(f.puts,0);assert.equal(f.calls.some(c=>c==='signed-tus-POST'||c==='signed-tus-PATCH'||c.startsWith('secret-kms-')),false);
+});
+
+test('protocol9 parent composes previously working S3 credentials at both endpoints before recording closure',async()=>{
+ const f=fixture();f.setInitiallyEnabledS3();
+ const working=managedS3WorkingFixture(config,f.client,f.s3Metadata,{id:'11111111-1111-4111-8111-111111111111',secret:'sb_secret_'+'a'.repeat(40)},f.calls,
+  ()=>({attemptId:f.value.attemptId!,planDigest:f.value.planDigest,sourceSha:operation.sourceSha,maintenanceEpoch:1}),f.isStorageClosed);
+ const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),working.factory());
+ f.value={...f.value,planDigest:coordinator.planDigest()};
+ const result=await coordinator.close();assert.equal(result.s3Mode,'WORKING_CAPABILITIES');assert.equal(result.configuredS3CoverageObserved,true);
+ assert.equal(working.children.size,4);assert.ok(f.value.s3BaselinePin&&f.value.s3ObservationPin);assert.equal(result.wholeBackendQuiesced,false);
+ const active=()=>f.calls.filter(c=>c.startsWith('s3-working-')||c==='kms-generate'||c==='kms-decrypt'||c==='artifact-put'||c==='put').length,before=active();
+ const inspected=await coordinator.inspect();assert.equal(inspected.recordedS3CoverageObserved,true);assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(active(),before);
+ assert.ok(working.crypto.plaintext.every(p=>p.every(v=>v===0)));
+});
+
+test('S3 current baseline and original head are acknowledged before any shutdown mutation',async()=>{
+ const f=fixture(),suspend=f.provider.suspend;f.provider.suspend=async()=>{assert.equal(f.value.phase,'S3_BASELINED');assert.ok(f.value.s3BaselinePin);assert.ok([...f.artifacts.keys()].some(k=>k.endsWith('/s3-current-feature-baseline.json')));await suspend();};
+ const result=await f.coordinator.close();assert.equal(result.s3Mode,'CURRENT_DISABLED');assert.ok(result.s3ObservationPin);
+ const before=f.s3Fixture.calls.length,observed=await f.coordinator.inspect();assert.equal(observed.recordedS3CoverageObserved,true);assert.equal(observed.freshS3CoverageObserved,false);assert.equal(f.s3Fixture.calls.length,before);
+});
+
+test('lost S3 canary public baseline or control head acknowledgement prevents shutdown and is not reconstructed',async()=>{
+ for(const stage of ['canary','public','readback','head','head-readback']){
+  const f=fixture();let once=false;
+  if(stage==='canary')f.s3Fixture.mode.lostCanaryAck=true;
+  f.setFault(c=>{
+   if(stage==='head-readback'&&c instanceof GetObjectCommand&&c.input.Key!.endsWith('/control.json')&&f.value.phase==='S3_BASELINED'&&!once){once=true;throw new Error('synthetic lost S3 head readback');}
+   if(stage==='head'&&c instanceof PutObjectCommand&&c.input.Key!.endsWith('/control.json')&&JSON.parse(String(c.input.Body)).phase==='S3_BASELINED'){f.commit(c);throw new Error('synthetic committed S3 head ACK lost');}
+   if(stage==='public'&&c instanceof PutObjectCommand&&c.input.Key!.endsWith('/s3-current-feature-baseline.json')){f.artifacts.set(c.input.Key!,{body:String(c.input.Body),version:'unknown-s3'});throw new Error('synthetic public S3 ACK lost');}
+   if(stage==='readback'&&c instanceof GetObjectCommand&&c.input.Key!.endsWith('/s3-current-feature-baseline.json'))throw new Error('synthetic S3 baseline readback lost');
+  });
+  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,['head','head-readback'].includes(stage)?'S3_BASELINED':'SIGNED_RESUMABLE_BASELINED');assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('database-close'),false);
+  f.setFault(undefined);f.signedFixture.forceRevoked();f.s3Fixture.mode.lostCanaryAck=false;
+  const before=f.s3Fixture.calls.length,puts=f.puts,artifacts=f.artifacts.size;
+  await assert.rejects(f.coordinator.close());const inspected=await f.coordinator.inspect();assert.equal(inspected.recordedS3CoverageObserved,false);assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(f.s3Fixture.calls.length,before);assert.equal(f.puts,puts);assert.equal(f.artifacts.size,artifacts);
+ }
+});
+
+test('lost S3 report acknowledgement or stale POST gateway cannot be backfilled into the parent',async()=>{
+ for(const stage of ['report','readback','gateway']){
+  const f=fixture();if(stage==='gateway')f.s3Fixture.mode.stalePostGateway=true;
+  f.setFault(c=>{
+   if(stage==='report'&&c instanceof PutObjectCommand&&c.input.Key!.endsWith('/s3-current-feature-observation.json')){f.artifacts.set(c.input.Key!,{body:String(c.input.Body),version:'unknown-s3-report'});throw new Error('synthetic committed report ACK lost');}
+   if(stage==='readback'&&c instanceof GetObjectCommand&&c.input.Key!.endsWith('/s3-current-feature-observation.json'))throw new Error('synthetic S3 report readback lost');
+  });
+  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.s3ObservationPin,undefined);
+  f.setFault(undefined);const before=f.s3Fixture.calls.length,puts=f.puts;
+  const inspected=await f.coordinator.inspect();assert.equal(inspected.recordedS3Observation,null);assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(f.s3Fixture.calls.length,before);assert.equal(f.puts,puts);
+ }
+});
+
+test('S3 original head transition rejects early wrong attempt revision kind and repeat grants',async()=>{
+ const f=fixture(),original=f.store.recordS3BaselinePin.bind(f.store);let captured:Parameters<typeof original>|undefined;
+ f.store.recordS3BaselinePin=async(...input)=>{captured=input;throw new Error('synthetic pause before head publication');};
+ await assert.rejects(f.coordinator.close());assert.ok(captured);f.store.recordS3BaselinePin=original;assert.equal(f.value.phase,'SIGNED_RESUMABLE_BASELINED');
+ const [attempt,revision,pin]=captured,before=f.puts;
+ await assert.rejects(original(randomUUID(),revision,pin));await assert.rejects(original(attempt,'0'.repeat(64),pin));await assert.rejects(original(attempt,revision,{...(pin as object),kind:'OBSERVATION'}));assert.equal(f.puts,before);
+ const ready=await original(attempt,revision,pin);assert.equal(ready.value.phase,'S3_BASELINED');await assert.rejects(original(attempt,ready.revision,pin));
+ const early=fixture(),a=await early.store.acquire(operation.installationId,early.coordinator.planDigest(),1);await assert.rejects(early.store.recordS3BaselinePin(a.value.attemptId!,a.revision,pin));
+});
+
+test('current parent refuses missing S3 observations or digest and generic control refuses an incomplete final S3 pin',async()=>{
+ const f=fixture();await f.coordinator.close();const saved=f.value;
+ const facts=saved.observations as Record<string,unknown>;
+ for(const field of ['s3BaselinePin','s3ObservationPin','s3ProofDigest']){
+  const changed={...facts};if(field==='s3ProofDigest')delete changed.s3ProofDigest;
+  f.value={...saved,observations:changed,...(field==='s3BaselinePin'?{s3BaselinePin:undefined}:field==='s3ObservationPin'?{s3ObservationPin:undefined}:{})};
+  const before=f.calls.length;await assert.rejects(f.coordinator.inspect());assert.equal(f.calls.slice(before).includes('services-observe'),false);
+ }
+ f.value={...saved,phase:'S3_BASELINED',observations:null,readObservation:undefined,writeObservationPin:undefined,signedObservationPin:undefined,resumableObservationPin:undefined,signedResumableObservationPin:undefined,s3ObservationPin:undefined};
+ const current=await f.store.observe(),args=[saved.attemptId!,current.revision,facts,JSON.parse(saved.readObservation!.body),saved.writeObservationPin,saved.signedObservationPin,saved.resumableObservationPin,saved.signedResumableObservationPin] as const;
+ await assert.rejects(f.store.recordObservedClosed(...args));await assert.rejects(f.store.recordObservedClosed(...args,{...saved.s3ObservationPin!,sha256:'0'.repeat(64)}));
+});
+
+test('authentic protocol8 plan and omitted S3 component cannot dispatch the protocol9 coordinator',async()=>{
+ const f=fixture(),legacy={format:8,...operation,databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',readProofPolicy:'INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1',writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',signedProofPolicy:'ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1',resumableProofPolicy:'ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1',signedResumableProofPolicy:'ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1',provider:f.provider.configurationDigest(),database:f.database.configurationDigest(),storage:f.storage.configurationDigest(),readProof:f.proof.configurationDigest(),writeProof:f.write.configurationDigest(),signedProof:f.signed.configurationDigest(),resumableProof:f.resumableFixture.factory().configurationDigest(),signedResumableProof:f.signedTusFixture.factory().configurationDigest()};
+ f.value={...f.value,planDigest:hash(JSON.stringify(legacy))};await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('read-baseline'),false);
+ assert.throws(()=>Reflect.construct(ManagedBackendMaintenance,[operation,f.provider,f.database,f.store,f.storage,f.proof,f.write,f.signed,f.resumableFixture.factory(),f.signedTusFixture.factory()]));
+});
+
+test('slow final metadata cannot turn an old S3 observation into a fresh closed record',async t=>{
+ const f=fixture(),observe=f.provider.observeSuspended,now=Date.now;
+ f.provider.observeSuspended=async()=>{const result=await observe();t.mock.method(Date,'now',()=>now()+181000);return result;};
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'S3_BASELINED');assert.equal(f.value.s3ObservationPin,undefined);assert.equal(f.value.observations,null);
 });

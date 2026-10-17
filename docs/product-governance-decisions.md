@@ -229,3 +229,5 @@ The [configured working S3 cohort](managed-s3-capability-cohort.md) is implement
 The [durable current-disabled S3 branch](durable-s3-current-feature-evidence.md) requires fresh PRE and POST evidence without enabling S3 or issuing credentials. It cannot claim historical exclusion or replace originally working capability proof. Further common mode/coordinator integration remains required.
 
 The [common S3 mode selector](managed-s3-maintenance-evidence.md) now requires a declared mode and binds actual metadata configuration. It cannot guess a mode or silently fall back after failed evidence. Mandatory default coordinator/control-head integration remains required.
+
+[Protocol9 mandatory S3 coordinator integration](durable-s3-maintenance.md) is now implemented locally for both modes. Exact original head acknowledgement precedes shutdown; fresh paired S3 evidence is required for final recording. Earlier protocol8/no-dispatch next-work notes are historical. Actual provider/whole-backend and current tenant authority gates remain open.

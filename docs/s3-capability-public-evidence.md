@@ -1,5 +1,12 @@
 # Original S3 public evidence
 
+> **17 October protocol9 S3 integration:** The default coordinator now requires
+> explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
+> shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection
+> never repeats S3 probes or backfills ACKs. Both modes pass native PostgreSQL
+> integration with synthetic providers. See [required S3 maintenance](durable-s3-maintenance.md).
+
+
 17 October 2026. Local implementation with synthetic provider/evidence storage.
 
 `S3CapabilityEvidence` stores the exact original working S3 baseline and its

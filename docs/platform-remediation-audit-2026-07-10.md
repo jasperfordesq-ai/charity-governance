@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October protocol9 S3 integration:** The default coordinator now requires
+> explicit S3 mode evidence, an original S3_BASELINED head acknowledgement before
+> shutdown, and a fresh paired S3 report before OBSERVED_CLOSED. Saved inspection
+> never repeats S3 probes or backfills ACKs. Both modes pass native PostgreSQL
+> integration with synthetic providers. See [required S3 maintenance](durable-s3-maintenance.md).
+
+
 > **17 October explicit common S3 mode:** A single selector now binds actual
 > storage metadata configuration and requires working original capabilities or
 > explicit current-disabled PRE/POST evidence, without fallback or empty-list

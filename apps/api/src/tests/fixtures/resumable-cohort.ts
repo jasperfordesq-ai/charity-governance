@@ -22,6 +22,7 @@ export const cohortParent = {
   maintenanceEpoch: 1,
 };
 type FixtureOptions = {
+  custodyPurpose?: 'charitypilot-s3-capability-v1';
   storage?: {
     installationId: string;
     bucket: string;
@@ -155,7 +156,7 @@ export function resumableCohortFixture(options: FixtureOptions = {}) {
       assert.equal(command.input.KeyId, vaultStorage.dataKeyArn);
       assert.equal(
         command.input.EncryptionContext?.purpose,
-        'charitypilot-resumable-location-v1',
+        options.custodyPurpose ?? 'charitypilot-resumable-location-v1',
       );
       if (command instanceof GenerateDataKeyCommand) {
         const key = randomBytes(32),
