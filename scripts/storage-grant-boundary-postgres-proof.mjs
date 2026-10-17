@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {PrismaClient} from '@prisma/client';
+import {proveStorageMetadataWindow} from './storage-metadata-window-postgres-proof.mjs';
 import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
 
 /** SQL semantics experiment in the EXISTING disposable TLS PostgreSQL fixture.
@@ -194,6 +195,10 @@ export async function proveStorageGrantBoundary({admin,url}){
   await admin.$executeRaw`CREATE TABLE public.synthetic_inventory_partition(value text) PARTITION BY RANGE(value)`;
   const [partition]=await admin.$queryRaw`SELECT oid::text AS oid FROM pg_class WHERE oid='public.synthetic_inventory_partition'::regclass`;
   await assert.rejects(()=>new ManagedStorageDatabaseInventory(admin,{...config,relations:[{schema:'public',name:'synthetic_inventory_partition',oid:partition.oid}]}).observe());
+  const originalInventoryDigest=inventory.configurationDigest();report.capture.name='mutated-result';
+  assert.equal(inventory.configurationDigest(),originalInventoryDigest);
+  assert.equal((await inventory.observe()).capture.name,config.capture.name);
+  await proveStorageMetadataWindow({admin,fencer,actor,capture,config});
   // Read-only report must refuse truncation instead of hiding another definer.
   await admin.$executeRaw`DO $fixture$ BEGIN FOR i IN 1..257 LOOP
    EXECUTE format('CREATE FUNCTION public.synthetic_inventory_overflow_%s() RETURNS integer LANGUAGE sql SECURITY DEFINER AS %L',i,'SELECT 1');

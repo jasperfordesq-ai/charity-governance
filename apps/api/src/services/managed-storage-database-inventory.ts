@@ -76,7 +76,7 @@ export class ManagedStorageDatabaseInventory {
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef
     AND n.nspname<>'information_schema' AND n.nspname!~'^pg_' ORDER BY p.oid LIMIT 257`);
    const facts={format:1,kind:'MANAGED_STORAGE_DATABASE_AUTHORITY_INVENTORY_V1',configurationDigest:this.configurationDigest(),
-    identity,capture:c.capture,relations,roles,memberships,grants,definers};
+    identity,capture:{...c.capture},relations,roles,memberships,grants,definers};
    return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
     scope:'CONFIGURED_RELATIONS_CATALOGUE_OBSERVATION_ONLY' as const,
     grantsChanged:false as const,functionsExecuted:false as const,metadataWindowHeld:false as const,

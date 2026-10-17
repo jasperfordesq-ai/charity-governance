@@ -1,3 +1,13 @@
+## 17 October: guarded metadata-capture interval
+
+The [metadata window](managed-storage-metadata-window.md) now holds exact
+configured ordinary tables under SHARE locks while a cancellation-aware capture
+callback runs. Native checks observe prior-writer drain, fresh reads and a waiting
+privileged writer on a second table, plus failure/expiry/connection-loss/unknown
+ACK refusal. Registry output is copied to protect validated private configuration.
+This is internal PostgreSQL evidence; actual provider mapping, object-byte writers,
+capture/custody admission and whole-backend recovery proof remain open.
+
 ## 17 October: read-only Storage database authority inventory
 
 The [database authority inventory](managed-storage-database-inventory.md) now
