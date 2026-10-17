@@ -2,8 +2,8 @@
 
 17 October 2026. `S3ResumableLocationVault` retains the original upload location
 needed by the [TUS probe](supabase-resumable-upload-proof.md). The probe and vault
-share one strict target validator. Default maintenance protocol6 does not call
-either resumable component yet; no real cloud resource, permission or upload was
+share one strict target validator. [Default maintenance protocol7](durable-resumable-maintenance.md) now requires
+these components behind the parent guard; no real cloud resource, permission or upload was
 created for these local tests.
 
 ## Purpose and exact target
@@ -80,8 +80,8 @@ temporary-key clearing and late KMS responses.
 These are fresh component instances, not an OS-process restart, real supplier,
 native database, deployment or physical-host-loss result. Independent original
 [TUS baseline/report publication and pair validation](resumable-upload-evidence-custody.md)
-are now implemented. Required parent pin barriers and factory/coordinator integration
-remain next. Signed TUS, other credentials/sessions, S3, in-flight/
+are now implemented. Required parent pin barriers and factory/coordinator integration are now
+implemented in protocol7. Signed TUS, other credentials/sessions, S3, in-flight/
 control-plane exclusion, common capture, current authority, full restore and
 actual provider/source-host-off/reopening proof remain open.
 

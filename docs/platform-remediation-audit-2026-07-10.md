@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October protocol7 TUS integration:** The default coordinator now requires
+> complete configured-credential TUS baseline-manifest publication, parent pin CAS
+> and actual original child readback before shutdown. Original report manifest/
+> digest is required at completion; inspection never runs TUS/KMS/PUT work.
+> Actual provider/capability/global/capture/recovery gates remain open. See
+> [durable TUS maintenance](durable-resumable-maintenance.md).
+
 > **17 October complete configured TUS set:** The factory now prepares separate
 > original upload/vault/artifacts for every configured retired modern secret,
 > with deterministic parent-bound child identities and complete128KiB manifests.

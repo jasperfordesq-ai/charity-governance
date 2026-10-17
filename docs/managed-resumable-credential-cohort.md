@@ -3,8 +3,9 @@
 17 October 2026. `ManagedResumableUploadEvidence` prepares and tests one original
 TUS session for **every** configured retired modern secret,1–50 credentials. It
 does not acquire the parent maintenance guard, change supplier configuration or
-enter a default coordinator phase. Protocol6 remains unchanged and the TUS
-factory is not activated by a route, command or job.
+acquire a default coordinator phase itself. The
+[default protocol7 coordinator](durable-resumable-maintenance.md) now requires it
+behind the acquired guard. No route, command or job activates a real supplier.
 
 ## Static scope and child identities
 
@@ -26,7 +27,7 @@ the derivation. The child keeps the parent's plan/source/epoch and receives its
 own synthetic path, encrypted-location object and baseline/report objects.
 
 **A derived ID is identity, never acquisition or acknowledgement authority.**
-Only the eventual parent's fresh acknowledged guard can authorise starting the
+Only the parent's fresh acknowledged guard can authorise starting the
 factory. A fresh factory can otherwise create another incomplete session before
 conditional custody rejects it; the factory does not replace that guard or resume
 an uncertain parent operation.
@@ -49,7 +50,7 @@ when public hashes are recomputed.
 Each manifest is limited to128KiB so fifty long child-version pins fit. Only the
 new `resumable-cohort` namespace permits that transport bound. Existing child
 artifact, write and signed-upload limits remain unchanged. The parent control
-head is still limited to8192bytes; eventual integration will store a manifest
+head is still limited to8192bytes; protocol7 stores a manifest
 pin rather than embed the set. Conditional creation and exact-version readback
 use the shared [evidence transport](resumable-upload-evidence-custody.md).
 
@@ -99,9 +100,8 @@ child/aggregate ACKs, fresh GET-only inspection, compound pin/digest/chronology
 substitution and fifty-entry manifest bounds. These are fresh components, not an
 OS-process restart, real cloud activation or physical-host-loss exercise.
 
-Next bind this factory into a new parent plan version and required TUS-manifest
-head transition before shutdown, retain the original report manifest at final
-completion, and use original-only inspection. Add actual default-component and
-native PostgreSQL lost-ACK scenarios for that integrated path. Keep common
+Protocol7 now requires the TUS-manifest head transition before shutdown, original
+report manifest at final completion and original-only inspection; default-component
+and native PostgreSQL lost-ACK scenarios exercise that integrated path. Keep common
 capture/current authority/full application restore and actual supplier/source-
 host-off/reopening proof open.

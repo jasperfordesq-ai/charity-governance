@@ -3,8 +3,8 @@
 17 October 2026. `S3ResumableUploadEvidence` independently publishes the original
 resumable baseline and refusal report through exact-version pins. It composes
 locally with the [probe](supabase-resumable-upload-proof.md) and
-[location vault](resumable-location-vault.md). The default coordinator remains
-protocol6 and does not call these TUS components yet.
+[location vault](resumable-location-vault.md). The [default protocol7 coordinator](durable-resumable-maintenance.md) now
+requires these components behind the original acquired guard.
 
 ## Retained evidence
 
@@ -86,9 +86,8 @@ remain synthetic; this is not a hosted/provider/OS-process/physical-host-loss te
 
 The [complete configured-set factory](managed-resumable-credential-cohort.md) now
 adds parent-bound child identities and complete baseline/report manifests.
-Next add required acquired-attempt parent pin transitions and a new coordinator
-plan version, including read-only original-report
-inspection and native/default-component lost-ACK cases. Signed TUS, other
+Protocol7 now requires acquired-attempt parent pin transitions, original-only
+inspection and native/default-component lost-ACK checks. Signed TUS, other
 credentials/sessions, S3, in-flight/control-plane exclusion, common capture,
 current preservation/disposal authority, full restore and actual supplier/
 source-host-off/reopening proof remain open.

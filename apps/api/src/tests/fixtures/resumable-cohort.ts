@@ -21,19 +21,32 @@ export const cohortParent = {
   sourceSha: '2'.repeat(40),
   maintenanceEpoch: 1,
 };
-export function resumableCohortFixture() {
-  const storage = {
+type FixtureOptions = {
+  storage?: {
+    installationId: string;
+    bucket: string;
+    accountId: string;
+    kmsKeyArn: string;
+  };
+  client?: S3Client;
+  events?: string[];
+  control?: { id: string; secret: string };
+  retired?: { id: string; secret: string }[];
+  isRetiredAllowed?: (id: string) => boolean;
+};
+export function resumableCohortFixture(options: FixtureOptions = {}) {
+  const storage = options.storage ?? {
       installationId: 'synthetic',
       bucket: 'synthetic-tus-cohort',
       accountId: '123456789012',
       kmsKeyArn:
         'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-4111-8111-111111111111',
     },
-    control = {
+    control = options.control ?? {
       id: '11111111-1111-4111-8111-111111111111',
       secret: 'sb_secret_' + 'a'.repeat(40),
     },
-    retired = [
+    retired = options.retired ?? [
       {
         id: '22222222-2222-4222-8222-222222222222',
         secret: 'sb_secret_' + 'b'.repeat(40),
@@ -66,9 +79,9 @@ export function resumableCohortFixture() {
         'arn:aws:kms:eu-west-1:123456789012:key/88888888-8888-4888-8888-888888888888',
     },
     credentials = { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
-    sdk = new S3Client({ region: 'eu-west-1', credentials }),
+    sdk = options.client ?? new S3Client({ region: 'eu-west-1', credentials }),
     kms = new KMSClient({ region: 'eu-west-1', credentials }),
-    events: string[] = [],
+    events: string[] = options.events ?? [],
     objects = new Map<string, { body: string; version: string }>(),
     wrapped = new Map<string, { key: Buffer; context: unknown }>(),
     plaintext: Uint8Array[] = [],
@@ -78,6 +91,7 @@ export function resumableCohortFixture() {
       { object: string; offset: number; length: number; expires: string }
     >(),
     completed = new Map<string, Uint8Array>();
+  let allowRetiredAfterClose = false;
   let fault:
     | ((command: GetObjectCommand | PutObjectCommand) => unknown)
     | undefined;
@@ -102,30 +116,33 @@ export function resumableCohortFixture() {
     objects.set(command.input.Key!, row);
     return metadata(row.version);
   };
-  mock.method(
-    sdk,
-    'send',
-    async (command: GetObjectCommand | PutObjectCommand) => {
-      events.push(command instanceof PutObjectCommand ? 's3-put' : 's3-get');
-      assert.equal(command.input.Bucket, storage.bucket);
-      assert.equal(command.input.ExpectedBucketOwner, storage.accountId);
-      assert.ok(
-        command.input.Key!.startsWith('managed-maintenance/synthetic/'),
-      );
-      const injected = fault?.(command);
-      if (injected !== undefined) return injected;
-      if (command instanceof PutObjectCommand) return commit(command);
-      assert.equal(command.input.ChecksumMode, 'ENABLED');
-      const row = objects.get(command.input.Key!);
-      if (!row) throw new Error('synthetic absent artifact');
-      assert.equal(command.input.VersionId, row.version);
-      return {
-        ...metadata(row.version),
-        ContentLength: Buffer.byteLength(row.body),
-        Body: Readable.from([Buffer.from(row.body)]),
-      };
-    },
-  );
+  if (!options.client)
+    mock.method(
+      sdk,
+      'send',
+      async (command: GetObjectCommand | PutObjectCommand) => {
+        events.push(command instanceof PutObjectCommand ? 's3-put' : 's3-get');
+        assert.equal(command.input.Bucket, storage.bucket);
+        assert.equal(command.input.ExpectedBucketOwner, storage.accountId);
+        assert.ok(
+          command.input.Key!.startsWith(
+            'managed-maintenance/' + storage.installationId + '/',
+          ),
+        );
+        const injected = fault?.(command);
+        if (injected !== undefined) return injected;
+        if (command instanceof PutObjectCommand) return commit(command);
+        assert.equal(command.input.ChecksumMode, 'ENABLED');
+        const row = objects.get(command.input.Key!);
+        if (!row) throw new Error('synthetic absent artifact');
+        assert.equal(command.input.VersionId, row.version);
+        return {
+          ...metadata(row.version),
+          ContentLength: Buffer.byteLength(row.body),
+          Body: Readable.from([Buffer.from(row.body)]),
+        };
+      },
+    );
   mock.method(
     kms,
     'send',
@@ -200,7 +217,9 @@ export function resumableCohortFixture() {
       assert.equal(data.bucketName, registry.bucket);
       assert.ok(
         data.objectName.startsWith(
-          'charitypilot-recovery-resumable-probe/synthetic/',
+          'charitypilot-recovery-resumable-probe/' +
+            storage.installationId +
+            '/',
         ),
       );
       const object = registry.bucket + '/' + data.objectName,
@@ -235,7 +254,15 @@ export function resumableCohortFixture() {
         });
       assert.equal(method, 'PATCH');
       assert.equal(Number(h.get('upload-offset')), s.offset);
-      if (blocked.has(secret))
+      if (
+        !allowRetiredAfterClose &&
+        (blocked.has(secret) ||
+          (retired.some((k) => k.secret === secret) &&
+            options.isRetiredAllowed &&
+            !options.isRetiredAllowed(
+              retired.find((k) => k.secret === secret)!.id,
+            )))
+      )
         return Response.json(
           { code: 'AccessDenied' },
           { status: 403, headers },
@@ -294,6 +321,9 @@ export function resumableCohortFixture() {
     factory,
     setFault: (value: typeof fault) => {
       fault = value;
+    },
+    set allowRetiredAfterClose(value: boolean) {
+      allowRetiredAfterClose = value;
     },
     blockAll: () => retired.forEach((k) => blocked.add(k.secret)),
   };

@@ -1,3 +1,4 @@
+import {resumableCohortFixture} from '../apps/api/dist/tests/fixtures/resumable-cohort.js';
 import {managedSignedFixture} from '../apps/api/dist/tests/fixtures/managed-signed-upload.js';
 import assert from 'node:assert/strict';
 import {Readable} from 'node:stream';
@@ -68,7 +69,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
- for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost']){
+ for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','resumable-child-report-ack-lost','resumable-manifest-report-ack-lost','resumable-still-writable','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost']){
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
   await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN PASSWORD 'synthetic-writer-only'`;
@@ -109,7 +110,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
     if(command instanceof PutObjectCommand){
      assert.equal(command.input.IfNoneMatch,'*');assert.equal(artifacts.has(command.input.Key),false);
      const row={body:String(command.input.Body),version:'artifact-'+(artifacts.size+1)};artifacts.set(command.input.Key,row);
-     if((scenario==='write-baseline-ack-lost'&&command.input.Key.endsWith('write-baseline.json'))||(scenario==='write-report-ack-lost'&&command.input.Key.endsWith('write-observation.json'))||(scenario==='signed-credential-ack-lost'&&command.input.Key.endsWith('signed-upload-credential.json'))||(scenario==='signed-baseline-ack-lost'&&command.input.Key.endsWith('signed-baseline.json'))||(scenario==='signed-report-ack-lost'&&command.input.Key.endsWith('signed-observation.json')))throw new Error('synthetic artifact committed ACK lost');
+     if((scenario==='write-baseline-ack-lost'&&command.input.Key.endsWith('write-baseline.json'))||(scenario==='write-report-ack-lost'&&command.input.Key.endsWith('write-observation.json'))||(scenario==='signed-credential-ack-lost'&&command.input.Key.endsWith('signed-upload-credential.json'))||(scenario==='signed-baseline-ack-lost'&&command.input.Key.endsWith('signed-baseline.json'))||(scenario==='signed-report-ack-lost'&&command.input.Key.endsWith('signed-observation.json'))||(scenario==='resumable-location-ack-lost'&&command.input.Key.endsWith('/resumable-location.json'))||(scenario==='resumable-child-baseline-ack-lost'&&command.input.Key.endsWith('/resumable-baseline.json'))||(scenario==='resumable-manifest-baseline-ack-lost'&&command.input.Key.endsWith('/resumable-cohort-baseline.json'))||(scenario==='resumable-child-report-ack-lost'&&command.input.Key.endsWith('/resumable-observation.json'))||(scenario==='resumable-manifest-report-ack-lost'&&command.input.Key.endsWith('/resumable-cohort-observation.json')))throw new Error('synthetic artifact committed ACK lost');
      return{...metadata(),VersionId:row.version};
     }
     const row=artifacts.get(command.input.Key);assert.equal(command.input.VersionId,row.version);
@@ -119,7 +120,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    assert.ok(command instanceof PutObjectCommand);assert.equal(command.input.IfMatch,metadata().ETag);
    assert.equal(command.input.ChecksumSHA256,createHash('sha256').update(String(command.input.Body)).digest('base64'));
    value=JSON.parse(String(command.input.Body));version++;events.push('control-'+value.phase);
-   if((scenario==='acquire-ack-lost'&&value.phase==='ATTEMPTED')||(scenario==='baseline-ack-lost'&&value.phase==='BASELINED')||(scenario==='write-head-ack-lost'&&value.phase==='WRITE_BASELINED')||(scenario==='signed-head-ack-lost'&&value.phase==='SIGNED_BASELINED')||(scenario==='record-ack-lost'&&value.phase==='OBSERVED_CLOSED'))throw new Error('synthetic committed SDK acknowledgement lost');
+   if((scenario==='acquire-ack-lost'&&value.phase==='ATTEMPTED')||(scenario==='baseline-ack-lost'&&value.phase==='BASELINED')||(scenario==='write-head-ack-lost'&&value.phase==='WRITE_BASELINED')||(scenario==='signed-head-ack-lost'&&value.phase==='SIGNED_BASELINED')||(scenario==='resumable-head-ack-lost'&&value.phase==='RESUMABLE_BASELINED')||(scenario==='record-ack-lost'&&value.phase==='OBSERVED_CLOSED'))throw new Error('synthetic committed SDK acknowledgement lost');
    return metadata();
   };
   const store=new S3ManagedMaintenanceControl(storage,credentials,sdk);
@@ -190,7 +191,9 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    {control:controlCredential,retired:[retiredCredential]},storage,credentials,writeTransport,sdk);
   const signed=managedSignedFixture(storage,sdk,events,controlCredential);
   if(scenario==='signing-ack-lost')signed.loseRevocationAck=true;
-  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,newStorageControl(),newReadProof(),newWriteEvidence(),signed.factory());
+  const resumable=resumableCohortFixture({storage,client:sdk,events,control:controlCredential,retired:[retiredCredential],isRetiredAllowed:()=>writerKeyPresent});
+  if(scenario==='resumable-still-writable')resumable.allowRetiredAfterClose=true;
+  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,newStorageControl(),newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory());
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
@@ -209,6 +212,8 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
     assert.equal(result.storageAccessPathsObservedClosed,true);assert.equal(storageCommands,3);assert.ok(value.observations.storageDigest);
     assert.equal(events[0],'control-ATTEMPTED');assert.ok(events.indexOf('control-BASELINED')<events.indexOf('suspend-'+ids[0]));
     assert.ok(value.readBaseline&&value.readObservation);assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(events.indexOf('cancel')<events.indexOf('database-close'));
+    assert.ok(value.resumableBaselinePin&&value.resumableObservationPin);assert.equal(result.resumableCredentialCohortRefusalsObserved,true);assert.ok(Buffer.byteLength(JSON.stringify(value))<=8192);
+    assert.ok(events.indexOf('control-RESUMABLE_BASELINED')<events.indexOf('suspend-'+ids[0]));
     assert.ok(value.signedBaselinePin&&value.signedObservationPin);assert.equal(result.testedSignedUploadRefusalObserved,true);
     assert.ok(events.indexOf('control-SIGNED_BASELINED')<events.indexOf('suspend-'+ids[0]));assert.ok(value.writeBaselinePin&&value.writeObservationPin);assert.equal(result.standardWriteRefusalsObserved,true);
     assert.ok(events.indexOf('control-WRITE_BASELINED')<events.indexOf('suspend-'+ids[0]));
@@ -218,33 +223,33 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
     assert.ok(events.includes('post-database-provider-read'));assert.equal(events.at(-1),'control-OBSERVED_CLOSED');
    }else{
     await assert.rejects(coordinator.close());
-    if(['acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost'].includes(scenario)){
-     assert.equal(commands,0);assert.equal(value.phase,scenario==='acquire-ack-lost'?'ATTEMPTED':scenario==='signed-head-ack-lost'?'SIGNED_BASELINED':['write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost'].includes(scenario)?'WRITE_BASELINED':'BASELINED');await writer.$queryRaw`SELECT 1`;
+    if(['acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost'].includes(scenario)){
+     assert.equal(commands,0);assert.equal(value.phase,scenario==='acquire-ack-lost'?'ATTEMPTED':scenario==='resumable-head-ack-lost'?'RESUMABLE_BASELINED':['resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','signed-head-ack-lost'].includes(scenario)?'SIGNED_BASELINED':['write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost'].includes(scenario)?'WRITE_BASELINED':'BASELINED');await writer.$queryRaw`SELECT 1`;
      // Explicit fixture-only cleanup; the coordinator never silently drains an
      // operation for which acquisition may have reached storage without consent.
      const cleanup=new ManagedDatabaseWriterFence(admin,configuration);await cleanup.close();await cleanup.invalidatePasswords();
      for(const service of services)service.suspended='suspended';job='canceled';databaseClosed=true;
     }
     if(scenario==='database-ack-lost'){
-     assert.equal(commands,5);assert.equal(value.phase,'SIGNED_BASELINED');
+     assert.equal(commands,5);assert.equal(value.phase,'RESUMABLE_BASELINED');
      await writer.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('managed-old-session-after-lost-commit')`;
      await assert.rejects(coordinator.inspect());
      const cleanup=new ManagedDatabaseWriterFence(admin,configuration);await cleanup.close();await cleanup.invalidatePasswords();databaseClosed=true;
     }
     if(scenario==='password-ack-lost'){
-     assert.equal(commands,5);assert.equal(value.phase,'SIGNED_BASELINED');
+     assert.equal(commands,5);assert.equal(value.phase,'RESUMABLE_BASELINED');
      const [state]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolpassword IS NULL AND NOT rolcanlogin`;
      assert.equal(state.n,2);
     }
    }
    // Explicit synthetic fixture resolution after the earlier uncertain DB/
    // acquisition cases; never part of production inspect or an automatic retry.
-   if(['acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','database-ack-lost','password-ack-lost'].includes(scenario))await newStorageControl().close();
-   if(scenario==='storage-ack-lost'){assert.equal(storageCommands,3);assert.equal(value.phase,'SIGNED_BASELINED');}
+   if(['acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','database-ack-lost','password-ack-lost'].includes(scenario))await newStorageControl().close();
+   if(scenario==='storage-ack-lost'){assert.equal(storageCommands,3);assert.equal(value.phase,'RESUMABLE_BASELINED');}
    if(!signed.revoked)signed.forceRevoked(); // explicit synthetic fixture resolution; never parent inspection.
-   const signedMutations=()=>events.filter(e=>e.startsWith('signed-kms-')||e==='signed-storage-POST'||e==='signed-storage-PUT'||e==='signed-management-PATCH').length;
-   const signedBefore=signedMutations();
-   const before=commands,storageBefore=storageCommands,probeCount=probeObjects.size,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store,newStorageControl(),newReadProof(),newWriteEvidence(),signed.factory());
+   const activeProbeMutations=()=>events.filter(e=>e.startsWith('signed-kms-')||e==='signed-storage-POST'||e==='signed-storage-PUT'||e==='signed-management-PATCH'||e.startsWith('kms-')||e==='tus-POST'||e==='tus-PATCH').length;
+   const activeBefore=activeProbeMutations();
+   const before=commands,storageBefore=storageCommands,probeCount=probeObjects.size,artifactCount=artifacts.size,versionBefore=version,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store,newStorageControl(),newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory());
    await assert.rejects(fresh.close());assert.equal(commands,before);assert.equal(storageCommands,storageBefore);
    const inspected=await fresh.inspect();assert.equal(inspected.phase,value.phase);
    assert.equal(inspected.recordedObservations===null,!['success','record-ack-lost'].includes(scenario));
@@ -252,7 +257,9 @@ export async function proveManagedBackendMaintenance({admin,configuration,url}){
    assert.equal(inspected.recordedReadObservation===null,!['success','record-ack-lost'].includes(scenario));
    assert.equal(inspected.recordedStandardWriteRefusalsObserved,['success','record-ack-lost'].includes(scenario));
    assert.equal(inspected.recordedTestedSignedUploadRefusalObserved,['success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshSignedUploadRefusalObserved,false);
-   assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(signedMutations(),signedBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
+   assert.equal(inspected.recordedResumableCredentialCohortRefusalsObserved,['success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshResumableCredentialCohortRefusalsObserved,false);
+   assert.equal(artifacts.size,artifactCount);assert.equal(version,versionBefore);assert.ok(resumable.plaintext.every(p=>p.every(v=>v===0)));
+   assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}

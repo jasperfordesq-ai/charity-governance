@@ -2,7 +2,7 @@
 
 17 October 2026. `SupabaseResumableUploadProof` implements an active probe of
 one original TUS upload with one reviewed modern secret credential. It is an
-internal component, not called by default maintenance protocol6. No actual
+internal component required by [default protocol7](durable-resumable-maintenance.md). No actual
 supplier resource, upload or token was used in its local tests.
 
 ## Source-driven decisions
@@ -96,8 +96,8 @@ callbacks/provider bodies. They do not prove actual provider or host-loss behavi
 
 Encrypted original-location custody and
 [independent baseline/report publication](resumable-upload-evidence-custody.md)
-are implemented and compose locally. Next add the static factory and required
-parent pin barriers, then compose with the default coordinator/native fixture. Add signed-resumable and S3 coverage and
+are implemented and compose locally. The complete configured-set factory, required parent pin barriers and default
+coordinator/native fixture now compose through protocol7. Add signed-resumable and S3 coverage and
 prove actual provider in-flight/control-plane exclusion before common capture.
 Keep the full independent-recovery/current-authority/full-restore/host-loss goal
 open; a local PATCH model is not its completion.
