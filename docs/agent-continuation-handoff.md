@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October resumable PATCH component:** A source-guided original TUS session
+> probe now requires a working6MiB partial upload, valid offset/expiry and actual
+> final PATCH refusal between successful controls. HEAD alone is not write proof.
+> Location custody/publication/parent integration, signed-TUS/S3/in-flight and
+> actual provider proof remain open; protocol6 is unchanged. See
+> [resumable proof](supabase-resumable-upload-proof.md).
+
 > **17 October protocol6 signed integration:** The default coordinator now requires
 > encrypted original-token custody and exact signed-baseline pin/head/readback
 > before shutdown, then actual scoped refusal and retained report pin/digest.
