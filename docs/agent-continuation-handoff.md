@@ -1,5 +1,14 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October durable archive preparation:** Final-root publication now reads an
+> authenticated exact-version `prepared-root.json`; the new staging/observation
+> flow handles lost preparation responses without automatic writes. Independent
+> trusted pins/catalogue and actual cloud custody remain open. Source inspection
+> corrected the suspected retained-Document purge stub: the claim dispatcher
+> deletes that row, retaining separate audit/cleanup records. Missing files still
+> fail closed; orphan cleanup objects and old backup disposal need explicit
+> authority in common capture/restoration. See [archive sets](archived-recovery-sets.md).
+
 > **17 October authenticated archive-set roots:** The coordinator stages metadata,
 > reads/decrypt-checks declared database/document candidates, seals a separate-key
 > root, and supports conditional publication plus fresh read-only reconciliation

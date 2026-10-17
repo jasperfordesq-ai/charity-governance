@@ -76,7 +76,8 @@ function backend() {
     reads = 0,
     generates = 0,
     sequence = 0,
-    loseRoot = false;
+    loseRoot = false,
+    losePrepared = false;
   let onRootVerify = () => {};
   const metadata: Record<string, string> = {};
   const encryption = {
@@ -172,6 +173,8 @@ function backend() {
             });
             if (loseRoot && key.endsWith('/root.json'))
               throw new Error('synthetic lost root ACK');
+            if (losePrepared && key.endsWith('/prepared-root.json'))
+              throw new Error('synthetic lost prepared ACK');
             return reply(
               uploaded
                 ? `<CompleteMultipartUploadResult><Bucket>${config.bucket}</Bucket><Key>${key}</Key><ETag>"complete"</ETag><ChecksumType>${type}</ChecksumType><ChecksumSHA256>${checksum}</ChecksumSHA256></CompleteMultipartUploadResult>`
@@ -290,6 +293,9 @@ function backend() {
     },
     set loseRoot(value: boolean) {
       loseRoot = value;
+    },
+    set losePrepared(value: boolean) {
+      losePrepared = value;
     },
     close() {
       for (const key of secrets.values()) key.fill(0);
@@ -490,10 +496,9 @@ test('source report, authenticated index and all encrypted candidates form a rea
   const fresh = { s3: b.s3(), kms: b.kms() };
   try {
     const prepared = await first.prepare(f.input);
+    const staged = await first.stagePrepared(prepared.pin, prepared.artifact);
     b.loseRoot = true;
-    await assert.rejects(
-      first.publishPrepared(prepared.pin, prepared.artifact),
-    );
+    await assert.rejects(first.publishPrepared(prepared.pin, staged.versionId));
     const writes = b.writes,
       generates = b.generates;
     const observed = await new ArchivedRecoverySets(
@@ -539,7 +544,11 @@ test('normal root publication verifies exact version and rejects tampering even 
       artifact.body = '{}';
       artifact.sha256 = '0'.repeat(64);
     };
-    const published = await service.publishPrepared(prepared.pin, artifact);
+    const staged = await service.stagePrepared(prepared.pin, artifact);
+    const published = await service.publishPrepared(
+      prepared.pin,
+      staged.versionId,
+    );
     assert.equal(published.kind, 'ARCHIVED_ROOT_READBACK');
     assert.equal(
       (await service.verifySet(prepared.pin, published.versionId))
@@ -559,6 +568,77 @@ test('normal root publication verifies exact version and rejects tampering even 
       sha256: hash(object.body).toString('hex'),
     };
     await assert.rejects(service.verifySet(forgedPin));
+  } finally {
+    f.clients.s3.destroy();
+    f.clients.kms.destroy();
+    b.close();
+  }
+});
+test('lost prepared response survives discarded source clients and reconciles read-only before exact-version publication', async () => {
+  const b = backend(),
+    f = await fixture(b),
+    first = new ArchivedRecoverySets(config, credentials, f.clients);
+  const fresh = { s3: b.s3(), kms: b.kms() };
+  try {
+    const prepared = await first.prepare(f.input),
+      pin = prepared.pin;
+    b.losePrepared = true;
+    await assert.rejects(first.stagePrepared(pin, prepared.artifact));
+    assert.ok(![...b.objects.keys()].some((key) => key.endsWith('/root.json')));
+    prepared.artifact.body = '{}';
+    f.clients.s3.destroy();
+    f.clients.kms.destroy();
+    const resumed = new ArchivedRecoverySets(config, credentials, fresh),
+      writes = b.writes,
+      generates = b.generates;
+    const observed = await resumed.observePrepared(pin);
+    assert.equal(observed.kind, 'PREPARED_ROOT_READBACK');
+    assert.equal(b.writes, writes);
+    assert.equal(b.generates, generates);
+    await assert.rejects(resumed.publishPrepared(pin, 'wrong-version'));
+    assert.equal(b.writes, writes);
+    const published = await resumed.publishPrepared(pin, observed.versionId);
+    assert.equal(
+      (await resumed.verifySet(pin, published.versionId)).documentCount,
+      1,
+    );
+  } finally {
+    f.clients.s3.destroy();
+    f.clients.kms.destroy();
+    fresh.s3.destroy();
+    fresh.kms.destroy();
+    b.close();
+  }
+});
+test('missing or substituted prepared state cannot publish a root and duplicate staging never retries a write', async () => {
+  const b = backend(),
+    f = await fixture(b),
+    service = new ArchivedRecoverySets(config, credentials, f.clients);
+  try {
+    const prepared = await service.prepare(f.input),
+      before = b.writes;
+    await assert.rejects(
+      service.publishPrepared(prepared.pin, 'missing-version'),
+    );
+    assert.equal(b.writes, before);
+    const staged = await service.stagePrepared(prepared.pin, prepared.artifact);
+    const writes = b.writes;
+    await assert.rejects(
+      service.stagePrepared(prepared.pin, prepared.artifact),
+    );
+    assert.equal(b.writes, writes + 1);
+    const object = b.objects.get(staged.objectKey)!;
+    const value = JSON.parse(object.body.toString());
+    value.manifest.preparedAt = '2026-10-16T00:00:00.000Z';
+    object.body = Buffer.from(JSON.stringify(value));
+    object.checksum = hash(object.body).toString('base64');
+    const forgedPin = {
+      ...prepared.pin,
+      sha256: hash(object.body).toString('hex'),
+    };
+    await assert.rejects(service.publishPrepared(forgedPin, staged.versionId));
+    assert.equal(b.writes, writes + 1);
+    assert.ok(![...b.objects.keys()].some((key) => key.endsWith('/root.json')));
   } finally {
     f.clients.s3.destroy();
     f.clients.kms.destroy();

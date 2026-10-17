@@ -559,9 +559,10 @@ export class ArchivedRecoverySets {
       };
     }, caller);
   }
-  /** Caller must durably retain the prepared pin/body BEFORE this one-shot write.
-   * A failed response is reconciled with verifySet, never an automatic write. */
-  async publishPrepared(
+  /** Persist the authenticated root body before any final-root write. An unknown
+   * response is reconciled with observePrepared, never an automatic retry.
+   * The pin and bootstrap configuration still require independent custody. */
+  async stagePrepared(
     pinRaw: unknown,
     artifact: { body: string; sha256: string },
     caller?: AbortSignal,
@@ -572,8 +573,63 @@ export class ArchivedRecoverySets {
       const { pin, manifest } = await this.envelope(pinRaw, body);
       if (expectedSha !== pin.sha256) throw refused();
       const observed = await this.metadata.publish(
-        target(manifest.scope, 'ARCHIVED_SET_V1'),
+        target(manifest.scope, 'PREPARED_SET_V1'),
         { body, sha256: pin.sha256 },
+        signal,
+      );
+      await this.envelope(pin, observed.artifact.body);
+      return {
+        kind: 'PREPARED_ROOT_READBACK' as const,
+        sha256: pin.sha256,
+        objectKey: observed.objectKey,
+        versionId: observed.versionId,
+      };
+    }, caller);
+  }
+  async observePrepared(
+    pinRaw: unknown,
+    preparedVersion?: string,
+    caller?: AbortSignal,
+  ) {
+    return this.work(async (signal) => {
+      const pin = pinSchema.parse(pinRaw),
+        scope = this.scope(pin.scope);
+      const observed = await this.metadata.observe(
+        target(scope, 'PREPARED_SET_V1'),
+        pin.sha256,
+        preparedVersion,
+        signal,
+      );
+      await this.envelope(pin, observed.artifact.body);
+      return {
+        kind: 'PREPARED_ROOT_READBACK' as const,
+        sha256: pin.sha256,
+        objectKey: observed.objectKey,
+        versionId: observed.versionId,
+      };
+    }, caller);
+  }
+  /** The final write is sourced only from an authenticated, exact-version
+   * durable preparation. An unknown final response uses verifySet read-only. */
+  async publishPrepared(
+    pinRaw: unknown,
+    preparedVersion: string,
+    caller?: AbortSignal,
+  ) {
+    return this.work(async (signal) => {
+      const pin = pinSchema.parse(pinRaw),
+        scope = this.scope(pin.scope);
+      const exactVersion = version.parse(preparedVersion);
+      const staged = await this.metadata.observe(
+        target(scope, 'PREPARED_SET_V1'),
+        pin.sha256,
+        exactVersion,
+        signal,
+      );
+      await this.envelope(pin, staged.artifact.body);
+      const observed = await this.metadata.publish(
+        target(scope, 'ARCHIVED_SET_V1'),
+        staged.artifact,
         signal,
       );
       await this.envelope(pin, observed.artifact.body);

@@ -29,7 +29,12 @@ const targetSchema = z
       .string()
       .regex(/^[a-f0-9]{40}$/)
       .length(40),
-    kind: z.enum(['DOCUMENT_INDEX_V1', 'SOURCE_REPORT_V2', 'ARCHIVED_SET_V1']),
+    kind: z.enum([
+      'DOCUMENT_INDEX_V1',
+      'SOURCE_REPORT_V2',
+      'ARCHIVED_SET_V1',
+      'PREPARED_SET_V1',
+    ]),
   })
   .strict();
 export type BackupManifestTarget = z.infer<typeof targetSchema>;
@@ -52,11 +57,13 @@ const filename = {
   DOCUMENT_INDEX_V1: 'index.json',
   SOURCE_REPORT_V2: 'source-report.json',
   ARCHIVED_SET_V1: 'root.json',
+  PREPARED_SET_V1: 'prepared-root.json',
 };
 const maximum = {
   DOCUMENT_INDEX_V1: 16 * 1024 * 1024,
   SOURCE_REPORT_V2: 32 * 1024 * 1024,
   ARCHIVED_SET_V1: 1024 * 1024,
+  PREPARED_SET_V1: 1024 * 1024,
 };
 const version = (v: unknown): v is string =>
   typeof v === 'string' &&
