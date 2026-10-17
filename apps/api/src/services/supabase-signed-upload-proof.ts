@@ -5,7 +5,7 @@ import {
   signedUploadCredentialPinSchema,
   type SignedUploadCredentialPin,
 } from './signed-upload-credential-contract.js';
-import { signedUploadBaselineSchema as baselineSchema } from './signed-upload-evidence-contract.js';
+import { signedUploadBaselineSchema as baselineSchema, parseSignedUploadBaseline } from './signed-upload-evidence-contract.js';
 import {
   StorageSignedUploadIssuer,
   storageSignedUploadIssuerSchema,
@@ -414,6 +414,25 @@ export class SupabaseSignedUploadProof {
     }
     await this.read('control', syntheticWriteUpdate, budget);
     await this.write('control', false, budget);
+  }
+  /** Pure saved-evidence checks only; no token decryption, signature test or I/O. */
+  assertBaseline(raw: unknown, expectedCustodyDigest: string) {
+    const artifact = parseSignedUploadBaseline(raw),
+      b = baselineSchema.parse(JSON.parse(artifact.body)),
+      issuer = this.previous.identity();
+    if (
+      !sha.safeParse(expectedCustodyDigest).success ||
+      b.credentialPin.custodyDigest !== expectedCustodyDigest ||
+      b.configurationDigest !== this.configurationDigest() ||
+      JSON.stringify(b.maintenance) !== JSON.stringify(this.config.maintenance) ||
+      b.tokenProof.providerKeyId !== issuer.providerKeyId ||
+      b.tokenProof.tokenKid !== issuer.tokenKid ||
+      b.tokenProof.issuerFingerprint !== issuer.fingerprint ||
+      b.initialPayloadSha256 !== hash(syntheticWriteProbe) ||
+      b.updatePayloadSha256 !== hash(syntheticWriteUpdate) ||
+      Date.parse(b.capturedAt) > Date.now() + 60000
+    ) throw failure();
+    return artifact;
   }
   async baseline(retain: RetainSignedUploadCredential, caller?: AbortSignal) {
     if (this.baselineAttempted) throw failure();

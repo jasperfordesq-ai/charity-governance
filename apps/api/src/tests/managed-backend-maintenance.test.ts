@@ -7,6 +7,7 @@ import {S3ManagedMaintenanceControl} from '../services/managed-maintenance-contr
 import {z} from 'zod';
 import {ManagedBackendMaintenance} from '../services/managed-backend-maintenance.js';
 import {S3ManagedWriteEvidence,type ManagedWriteEvidencePin} from '../services/managed-write-evidence.js';
+import type {SignedUploadEvidencePin} from '../services/signed-upload-evidence.js';
 
 const config={installationId:'synthetic-installation',bucket:'synthetic-maintenance',accountId:'123456789012',
  kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
@@ -16,7 +17,8 @@ const hash=(text:string)=>createHash('sha256').update(text).digest('hex');
 function fixture(){
  let value={format:1,installationId:config.installationId,maintenanceEpoch:1,planDigest:'1'.repeat(64),
   phase:'READY',attemptId:null as string|null,observations:null as unknown,readBaseline:undefined as {body:string;sha256:string}|undefined,readObservation:undefined as {body:string;sha256:string}|undefined,
-  writeBaselinePin:undefined as ManagedWriteEvidencePin|undefined,writeObservationPin:undefined as ManagedWriteEvidencePin|undefined,publicationId:randomUUID()};
+  writeBaselinePin:undefined as ManagedWriteEvidencePin|undefined,writeObservationPin:undefined as ManagedWriteEvidencePin|undefined,
+  signedBaselinePin:undefined as SignedUploadEvidencePin|undefined,signedObservationPin:undefined as SignedUploadEvidencePin|undefined,publicationId:randomUUID()};
  let version=1,reads=0,puts=0;
  const calls:string[]=[];
  let fault:((command:GetObjectCommand|PutObjectCommand)=>unknown)|undefined;
@@ -353,4 +355,69 @@ test('failed active write baseline or refusal cannot bypass its durable barrier'
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'WRITE_BASELINED');assert.ok(f.value.writeBaselinePin);assert.equal(f.value.writeObservationPin,undefined);
  const before=f.calls.filter(c=>c==='write-proof').length;const observed=await f.coordinator.inspect();assert.equal(observed.recordedWriteObservation,null);
  assert.equal(f.calls.filter(c=>c==='write-proof').length,before);
+});
+async function prepareSignedHead(){
+ const f=fixture(),attempt=await f.store.acquire(operation.installationId,f.coordinator.planDigest(),1);
+ const binding={attemptId:attempt.value.attemptId!,planDigest:f.coordinator.planDigest(),sourceSha:operation.sourceSha,maintenanceEpoch:1};
+ const baseline=await f.proof.baseline(undefined,binding);
+ const read=await f.store.recordReadBaseline(binding.attemptId,attempt.revision,baseline);
+ const writePin={kind:'BASELINE' as const,versionId:'synthetic-write-version',sha256:hash('write-baseline'),byteLength:1024};
+ const write=await f.store.recordWriteBaselinePin(binding.attemptId,read.revision,writePin);
+ const signedPin={kind:'BASELINE' as const,versionId:'synthetic-signed-version',sha256:hash('signed-baseline'),byteLength:1024};
+ const report=await f.proof.verifyReadRefusal(baseline.body,baseline.sha256);
+ const observations={servicesDigest:hash('services'),databaseDigest:hash('database'),storageDigest:hash('storage'),readProofDigest:report.observationDigest,writeProofDigest:hash('write-report'),signedProofDigest:hash('signed-report'),observedAt:new Date().toISOString()};
+ const writeReportPin={...writePin,kind:'OBSERVATION' as const,sha256:hash('write-report')};
+ const signedReportPin={...signedPin,kind:'OBSERVATION' as const,sha256:hash('signed-report')};
+ return{f,binding,write,signedPin,report,observations,writeReportPin,signedReportPin};
+}
+
+test('signed baseline head CAS retains exact original pins and requires both reports at completion',async()=>{
+ const {f,binding,write,signedPin,report,observations,writeReportPin,signedReportPin}=await prepareSignedHead();
+ const ready=await f.store.recordSignedBaselinePin(binding.attemptId,write.revision,signedPin);
+ assert.equal(ready.value.phase,'SIGNED_BASELINED');assert.deepEqual(ready.value.signedBaselinePin,signedPin);
+ const before=f.puts;
+ await assert.rejects(f.store.recordObservedClosed(binding.attemptId,ready.revision,observations,report,writeReportPin));
+ await assert.rejects(f.store.recordObservedClosed(binding.attemptId,ready.revision,{...observations,signedProofDigest:undefined},report,writeReportPin,signedReportPin));
+ await assert.rejects(f.store.recordObservedClosed(binding.attemptId,ready.revision,observations,report,undefined,signedReportPin));
+ assert.equal(f.puts,before);
+ const complete=await f.store.recordObservedClosed(binding.attemptId,ready.revision,observations,report,writeReportPin,signedReportPin);
+ assert.equal(complete.value.phase,'OBSERVED_CLOSED');assert.deepEqual(complete.value.signedObservationPin,signedReportPin);
+ const n=f.puts,observed=await f.store.observe();
+ assert.deepEqual(observed.value.signedBaselinePin,signedPin);assert.equal(f.puts,n);assert.equal(f.calls.includes('suspend'),false);
+});
+
+test('signed pin transition rejects wrong attempt revision kind and premature completion without writing',async()=>{
+ const {f,binding,write,signedPin,report,observations,writeReportPin,signedReportPin}=await prepareSignedHead(),before=f.puts;
+ for(const [attempt,revision,pin] of [[randomUUID(),write.revision,signedPin],[binding.attemptId,'0'.repeat(64),signedPin],[binding.attemptId,write.revision,signedReportPin]] as const){
+  await assert.rejects(f.store.recordSignedBaselinePin(attempt,revision,pin));
+ }
+ await assert.rejects(f.store.recordObservedClosed(binding.attemptId,write.revision,observations,report,writeReportPin,signedReportPin));
+ assert.equal(f.puts,before);assert.equal(f.value.phase,'WRITE_BASELINED');
+ const early=fixture(),attempt=await early.store.acquire(operation.installationId,early.coordinator.planDigest(),1),n=early.puts;
+ await assert.rejects(early.store.recordSignedBaselinePin(attempt.value.attemptId!,attempt.revision,signedPin));assert.equal(early.puts,n);
+});
+
+test('lost signed head acknowledgement stays consumed and cannot authorise a fresh coordinator shutdown',async()=>{
+ const {f,binding,write,signedPin}=await prepareSignedHead();
+ f.setFault(command=>{
+  if(command instanceof PutObjectCommand&&JSON.parse(String(command.input.Body)).phase==='SIGNED_BASELINED'){
+   f.commit(command);throw new Error('synthetic lost signed head acknowledgement');
+  }
+ });
+ await assert.rejects(f.store.recordSignedBaselinePin(binding.attemptId,write.revision,signedPin));
+ f.setFault(undefined);const before=f.puts,observed=await f.store.observe();
+ assert.equal(observed.value.phase,'SIGNED_BASELINED');assert.equal(observed.value.signedObservationPin,undefined);
+ await assert.rejects(f.store.recordSignedBaselinePin(binding.attemptId,write.revision,signedPin));
+ await assert.rejects(f.coordinator.close());assert.equal(f.puts,before);assert.equal(f.calls.includes('suspend'),false);
+});
+
+test('signed evidence cannot appear in earlier phases or vanish from a completed signed head',async()=>{
+ for(const phase of ['READY','ATTEMPTED','BASELINED','WRITE_BASELINED']){
+  const {f,signedPin}=await prepareSignedHead();f.value={...f.value,phase,signedBaselinePin:signedPin};
+  await assert.rejects(f.store.observe());
+ }
+ const {f,binding,write,signedPin,observations,report,writeReportPin,signedReportPin}=await prepareSignedHead();
+ const ready=await f.store.recordSignedBaselinePin(binding.attemptId,write.revision,signedPin);
+ await f.store.recordObservedClosed(binding.attemptId,ready.revision,observations,report,writeReportPin,signedReportPin);
+ f.value={...f.value,signedObservationPin:undefined};await assert.rejects(f.store.observe());
 });

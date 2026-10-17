@@ -417,3 +417,18 @@ test('signed probe composes with encrypted custody and fresh instances use the s
     );
   assert.equal(f.calls.length, before);
 });
+
+test('pure saved signed baseline checks bind actual configured issuer payload and encrypted custody without provider access',async()=>{
+ const f=fixture(),probe=f.service(),baseline=await probe.baseline(f.retain),saved=JSON.parse(baseline.body),before=f.calls.length;
+ assert.deepEqual(probe.assertBaseline(baseline,saved.credentialPin.custodyDigest),{body:baseline.body,sha256:baseline.sha256});
+ for(const change of [
+  {tokenProof:{...saved.tokenProof,providerKeyId:'99999999-9999-4999-8999-999999999999'}},
+  {tokenProof:{...saved.tokenProof,tokenKid:'synthetic-substituted-kid'}},
+  {tokenProof:{...saved.tokenProof,issuerFingerprint:'0'.repeat(64)}},
+  {initialPayloadSha256:'0'.repeat(64)},
+  {maintenance:{...saved.maintenance,maintenanceEpoch:999}},
+ ]){
+  const body=JSON.stringify({...saved,...change});assert.throws(()=>probe.assertBaseline({body,sha256:hash(body)},saved.credentialPin.custodyDigest));
+ }
+ assert.throws(()=>probe.assertBaseline(baseline,'0'.repeat(64)));assert.equal(f.calls.length,before);
+});

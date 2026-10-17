@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October signed head barrier:** The installation head now supports exact
+> attempt/revision SIGNED_BASELINED CAS and requires signed/read/write report
+> dependencies at signed completion. Pure baseline checks bind configured issuer,
+> payload and encrypted custody. Default protocol5 integration and actual issuer/
+> provider proof remain open; see [signed parent barrier](signed-upload-parent-barrier.md).
+
 > **17 October signed-artifact custody:** Signed-upload baseline/report artifacts
 > now have conditional creation, exact-version readback/pins, closed cross-artifact
 > validation and fresh GET-only inspection. The real local vault/probe compose
