@@ -33,7 +33,7 @@ export type MaintenanceArtifactPin = {
   byteLength: number;
 };
 export type MaintenanceArtifactPolicy<P extends MaintenanceArtifactPin> = {
-  namespace: 'write' | 'signed' | 'resumable';
+  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort';
   pinSchema: z.ZodType<P>;
   limits: Record<MaintenanceArtifactKind, number>;
   baseline: (raw: unknown) => MaintenanceArtifact;
@@ -62,10 +62,11 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
     this.policy = { ...policy, limits: { ...policy.limits } };
     this.config = configuration.parse(raw);
     if (!credentials) throw this.policy.failure();
-    z.enum(['write', 'signed', 'resumable']).parse(policy.namespace);
+    z.enum(['write', 'signed', 'resumable', 'resumable-cohort']).parse(policy.namespace);
+    const maximum=policy.namespace==='resumable-cohort'?131072:16384;
     z.object({
-      BASELINE: z.number().int().min(1).max(16384),
-      OBSERVATION: z.number().int().min(1).max(16384),
+      BASELINE: z.number().int().min(1).max(maximum),
+      OBSERVATION: z.number().int().min(1).max(maximum),
     })
       .strict()
       .parse(policy.limits);

@@ -84,8 +84,10 @@ write/signed tests and the default-component disposable TLS PostgreSQL exercise
 verify transport integration with their original formats. Supplier transports
 remain synthetic; this is not a hosted/provider/OS-process/physical-host-loss test.
 
-Next add a static TUS factory, required acquired-attempt parent pin transitions
-and a new coordinator plan version, including read-only original-report
+The [complete configured-set factory](managed-resumable-credential-cohort.md) now
+adds parent-bound child identities and complete baseline/report manifests.
+Next add required acquired-attempt parent pin transitions and a new coordinator
+plan version, including read-only original-report
 inspection and native/default-component lost-ACK cases. Signed TUS, other
 credentials/sessions, S3, in-flight/control-plane exclusion, common capture,
 current preservation/disposal authority, full restore and actual supplier/

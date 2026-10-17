@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October complete configured TUS set:** The factory now prepares separate
+> original upload/vault/artifacts for every configured retired modern secret,
+> with deterministic parent-bound child identities and complete128KiB manifests.
+> Partial or unknown outcomes never become aggregate success; fresh inspection
+> uses original GETs only. Parent/protocol integration and supplier/full recovery
+> proof remain open; see [configured TUS set](managed-resumable-credential-cohort.md).
+
 > **17 October durable TUS artifacts:** Original resumable baseline/report now
 > publish with conditional creation, exact-version readback and closed scope/pair/
 > chronology checks. Write/signed/TUS stores share one bounded transport. Fresh
