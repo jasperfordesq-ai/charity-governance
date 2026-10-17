@@ -1,3 +1,11 @@
+## 17 October: provider recovery-reader policy preparation
+
+Read [provider reader policy](recovery-reader-provider-policy.md). The local
+generator produces an installation-scoped dedicated-role inline policy with
+explicit mutation, cross-resource and wrong-context denials. S3-mediated storage
+key use is separate from direct application key generation. No IAM grant or
+provider validation occurred; real provider and host-loss gates remain open.
+
 ## 17 October: read-only recovery capability in separate custody test
 
 Read [separate custody process](separate-synthetic-custody-process.md). The cold
