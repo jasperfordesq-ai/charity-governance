@@ -121,7 +121,7 @@ test('managed database fence closes real stale credentials and sessions while re
   await proveManagedPasswordInvalidation({admin,configuration,url});
   await proveManagedBackendMaintenance({admin,configuration,url});
   await proveStorageGrantBoundary({admin,url});
-  await proveManagedDatabaseSnapshot({admin,url,id,database});
+  await proveManagedDatabaseSnapshot({admin,url,id,database,certificate:join(certDir,'cert.pem')});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();
   try {if(id)docker(['rm','--force',id]);}

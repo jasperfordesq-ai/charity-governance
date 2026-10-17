@@ -2520,6 +2520,7 @@ function captureDatabaseFingerprint({
   dryRun,
   kind,
   tempFileLimitMb,
+  importedSnapshot,
 }) {
   if (dryRun) {
     console.log(
@@ -2534,18 +2535,24 @@ function captureDatabaseFingerprint({
     }
   }
   const containerName = proofContainerName(kind);
+  const imported=importedSnapshot===undefined?null:prepareSnapshotFingerprintCapture({databaseUrl,endpointIdentitySha256,rawReportName,dumpName,snapshot:importedSnapshot,tempFileLimitMb});
   const { args, env } = proofToolsDockerArgs({
     containerName,
     databaseUrl,
     endpointIdentitySha256,
     actionScript: dumpName ? SOURCE_PROOF_ACTION_SCRIPT : DATABASE_FINGERPRINT_ACTION_SCRIPT,
-    holderScript: SNAPSHOT_HOLDER_SCRIPT,
+    holderScript: imported?.script ?? SNAPSHOT_HOLDER_SCRIPT,
     dockerNetwork,
     outputDir,
     rawReportName,
     dumpName,
     tempFileLimitMb,
   });
+  if(imported){
+    const extra=Object.keys(imported.environment).filter(k=>k.startsWith('CHARITYPILOT_IMPORTED_'));
+    args.splice(args.indexOf(postgresToolsImage()),0,...extra.flatMap(k=>['-e',k]));
+    Object.assign(env,imported.environment);
+  }
   runNamedProofContainer(containerName, args, { env, dryRun });
 }
 
@@ -2916,15 +2923,27 @@ function installExclusiveProofOutputs(stagedDump, finalDump, stagedReport, final
   }
 }
 
-async function proveRestore(options) {
+async function proveRestore(options, importedSnapshot) {
   const dryRun = isEnabled(options, 'dry-run');
   if (isEnabled(options, 'overwrite')) {
     throw new Error('--overwrite is not supported for prove-restore; recovery evidence outputs must be unique and immutable');
   }
   const databaseUrl = optionString(options, 'database-url') ?? process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL or --database-url is required for prove-restore');
-  const { dockerNetwork, sourceContainerId } = resolveProofSource(options, databaseUrl);
+  let proofSource;
+  if(importedSnapshot!==undefined&&optionString(options,'source-container-id')){
+    // Internal supervised TLS container source; ordinary CLI contracts unchanged.
+    const base=new URL(databaseUrl);const parameters=[...base.searchParams.keys()];
+    if(parameters.length!==2||!parameters.includes('sslmode')||!parameters.includes('sslrootcert')||optionString(options,'docker-network'))throw new Error('Imported snapshot source transport unavailable');
+    base.search='';validateContainerProofSourceDatabaseUrl(base.href);
+    const sourceContainerId=requireSourceContainerId(optionString(options,'source-container-id'));
+    proofSource={sourceContainerId,dockerNetwork:`container:${sourceContainerId}`};
+  }else proofSource=resolveProofSource(options,databaseUrl);
+  const {dockerNetwork,sourceContainerId}=proofSource;
+  if(importedSnapshot!==undefined)prepareSnapshotFingerprintCapture({databaseUrl,
+    endpointIdentitySha256:sourceEndpointIdentitySha256(databaseUrl,{sourceContainerId}),rawReportName:'validate.raw',dumpName:'validate.dump',snapshot:importedSnapshot});
   const helperImplementation = requireHelperImplementationBinding(captureHelperImplementationBinding());
+  if(importedSnapshot!==undefined&&!dryRun&&(!helperImplementation.sourceMatchesCommit||!helperImplementation.canonicalRepositoryMatched))throw new Error('Imported source proof requires a clean canonical committed helper');
   const recoverySetId = requireRecoverySetId(optionString(options, 'recovery-set-id'));
   const expectedSourceDatabaseIdentitySha256 = requireSha256(
     optionString(options, 'expected-source-database-identity-sha256'),
@@ -2985,6 +3004,7 @@ async function proveRestore(options) {
       dryRun,
       kind: 'source-snapshot',
       tempFileLimitMb,
+      importedSnapshot,
     });
     assertProtectedDirectoryUnchanged(outputDir, outputDirIdentity, 'after source capture');
 
@@ -3102,6 +3122,14 @@ async function proveRestore(options) {
       comparison,
       helperImplementation,
     });
+    if(importedSnapshot!==undefined){
+      const lease={snapshotId:importedSnapshot.snapshotId,database:importedSnapshot.database,databaseOid:importedSnapshot.databaseOid,
+        observerOid:importedSnapshot.observerOid,backendPid:importedSnapshot.backendPid};
+      report.importedSnapshot={format:1,kind:'GUARDED_IMPORTED_SOURCE_SNAPSHOT_V1',
+        snapshotBindingSha256:sha256Text('CHARITYPILOT_MANAGED_EXPORTED_SNAPSHOT_V1\n'+JSON.stringify(lease)),
+        database:lease.database,databaseOid:lease.databaseOid,observerOid:lease.observerOid,backendPid:lease.backendPid,
+        originalViewImported:true,declaredExporterPresent:true,metadataWindowCompletionVerified:false,wholeBackendQuiesced:false,actionAuthorized:false};
+    }
     const reportBytes = safeJsonStringify(report);
     if (Buffer.byteLength(reportBytes, 'utf8') > 16 * 1024 * 1024) {
       throw new Error('Restore proof report exceeds the 16 MiB safety bound');
@@ -4276,11 +4304,20 @@ function isUsageError(error) {
 }
 
 export async function runPostgresBackupFromArgs(args = process.argv.slice(2), env = process.env) {
+  return runBackupCommand(args,env);
+}
+/** Internal supervised entry point; no new CLI flag or saved execution grant. */
+export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.env){
+  if(snapshot===undefined||snapshot===null)return result(1,'','Original imported snapshot is required');
+  return runBackupCommand(args,env,snapshot);
+}
+async function runBackupCommand(args,env,importedSnapshot){
   const output = captureConsole();
 
   try {
     await withProcessEnv(env, async () => {
       const { command, options } = parseArgs(args);
+      if(importedSnapshot!==undefined&&command!=='prove-restore')throw new Error('Imported snapshot is restricted to the supervised restore proof');
       if (!command || command === 'help' || isEnabled(options, 'help')) {
         console.log(usage().trim());
         return;
@@ -4307,7 +4344,7 @@ export async function runPostgresBackupFromArgs(args = process.argv.slice(2), en
       }
 
       if (command === 'prove-restore') {
-        await proveRestore(options);
+        await proveRestore(options,importedSnapshot);
         return;
       }
 

@@ -20,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
+  runImportedSnapshotRestoreProof,
   prepareSnapshotFingerprintCapture,
   buildRestoreProofReport,
   calculateCapacityRequirement,
@@ -52,7 +53,7 @@ test('source-bound backup helper never spawns an unpinned Docker lifecycle child
 
 test('restore proof never chmods the dump after opening its protected descriptor', () => {
   const source = readFileSync(join(scriptsDir, 'postgres-backup.mjs'), 'utf8').replace(/\r\n/g, '\n');
-  const proofStart = source.indexOf('async function proveRestore(options) {');
+  const proofStart = source.indexOf('async function proveRestore(options, importedSnapshot) {');
   const proofEnd = source.indexOf('\nasync function runStreamingCommand(', proofStart);
   assert.ok(proofStart >= 0 && proofEnd > proofStart);
   const proofSource = source.slice(proofStart, proofEnd);
@@ -1443,4 +1444,13 @@ test('snapshot program environment contains only explicit action inputs',()=>{
  try{const p=prepareSnapshotFingerprintCapture(importedCapture);assert.equal(p.environment.CHARITYPILOT_UNRELATED_PRIVATE,undefined);
   assert.equal(p.environment.PATH,undefined);assert.equal(p.environment.DOCKER_HOST,undefined);
  }finally{delete process.env.CHARITYPILOT_UNRELATED_PRIVATE;}
+});
+
+test('supervised imported restore proof refuses absent snapshots and other commands',async()=>{
+ const absent=await runImportedSnapshotRestoreProof(['prove-restore'],null);assert.equal(absent.status,1);
+ const wrong=await runImportedSnapshotRestoreProof(['source-identity'],importedSnapshot);
+ assert.equal(wrong.status,1);assert.match(wrong.stderr,/restricted to the supervised restore proof/);
+ const invalid=await runImportedSnapshotRestoreProof(['prove-restore','--source-container-id='+'a'.repeat(64),
+  '--database-url='+importedCapture.databaseUrl],{...importedSnapshot,database:'wrong'});
+ assert.notEqual(invalid.status,0);assert.ok(!invalid.stderr.includes('PRIVATE-secret'));
 });

@@ -1,3 +1,12 @@
+## 17 October: full original restore proof accepts the guarded snapshot
+
+The [imported restore proof](managed-imported-restore-proof.md) now routes an
+explicit original snapshot through the complete protected-output, source identity,
+dump descriptor, isolated restore/comparison/cleanup and report-v2 path. It
+requires a canonical committed helper. Native acceptance runs against that exact
+commit; dated outcomes are in the private checkpoint. Report context cannot
+attest outer window completion or common-set admission. The full goal stays active.
+
 ## 17 October: original canonical source actions import the guarded snapshot
 
 Read [imported source capture](managed-imported-source-capture.md). The original

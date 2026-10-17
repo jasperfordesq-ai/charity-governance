@@ -1,3 +1,12 @@
+## 17 October: full original restore proof accepts the guarded snapshot
+
+The [imported restore proof](managed-imported-restore-proof.md) now routes an
+explicit original snapshot through the complete protected-output, source identity,
+dump descriptor, isolated restore/comparison/cleanup and report-v2 path. It
+requires a canonical committed helper. Native acceptance runs against that exact
+commit; dated outcomes are in the private checkpoint. Report context cannot
+attest outer window completion or common-set admission. The full goal stays active.
+
 # Original canonical capture actions with an imported snapshot
 
 17 October 2026. Internal supervised capture preparation and synthetic native
@@ -74,11 +83,13 @@ custody or source-host-off recovery.
 
 ## Remaining integration
 
-There is still no complete canonical report-v2 publication from this supervised
-path. `ArchivedRecoverySets` continues to require the full original isolated
-restore/dump descriptor, exact source-helper release, identity/capacity and
-public.Document proof. Do not construct a permissive report from the returned
-program or interval flags, and do not relax those admission assertions.
+The [full imported restore proof](managed-imported-restore-proof.md) now connects
+this program to the original report-v2 publication path, including genuine
+isolated restore/dump descriptors, exact source-helper release, identity/capacity
+and public.Document proof. The program by itself is still not such a report.
+ArchivedRecoverySets assertions remain unchanged; do not construct a permissive
+report from a prepared program or interval flags. Common encrypted database/file
+custody and authenticated index/root publication remain to be integrated.
 
 A production runner must preserve exact-release/helper binding, protected output
 files and descriptors, actual endpoint/certificate/provider identity, bounded
