@@ -49,10 +49,11 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   }finally{for(const c of [...Object.values(ownerClients),...Object.values(recoveryClients)])c.destroy();}
   reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
   assert.equal((await readerTerminal).code,0,readLog().slice(-4000));assert.equal(reportCount,1);assert.equal(result.kind,'SYNTHETIC_COLD_CUSTODY_READER_V1');assert.ok(result.verifiedRoots>=1);assert.ok(result.killedSourceServiceRecords>=1);assert.equal(result.suppliedSourceIdsOrPins,false);assert.equal(result.executionAuthorized,false);
+  assert.equal(result.currentInspections,6);assert.equal(result.currentVerifiedRoots,2);assert.equal(result.currentUnresolved,4);
   service.send({kind:'STOP_SYNTHETIC_CUSTODY_V1'});assert.equal((await serviceTerminal).code,0);
   await assert.rejects(callSyntheticCustody(descriptor,{op:'sessions'}));
   console.log('PASS independent synthetic process: source normal exit + genuine source SIGKILL; cold SDK LIST/GET/MAC/decrypt verifies retained roots and killed-source service bytes without source IDs/pins or new writes/data keys; service loss has no cache fallback; not real provider/VM-loss proof');
-  console.log('COLD_READER_COUNTS='+JSON.stringify({sessions:result.sessions,records:result.records,roots:result.verifiedRoots,killedSourceServices:result.killedSourceServiceRecords}));
+  console.log('COLD_READER_COUNTS='+JSON.stringify({sessions:result.sessions,records:result.records,roots:result.verifiedRoots,killedSourceServices:result.killedSourceServiceRecords,currentInspections:result.currentInspections,currentVerifiedRoots:result.currentVerifiedRoots,currentUnresolved:result.currentUnresolved}));
  }finally{
   for(const child of [reader,source,service])if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
   await Promise.allSettled([readerTerminal,sourceTerminal,serviceTerminal].filter(Boolean));for(const path of [root,recoveryRoot].filter(Boolean)){assert.equal(dirname(path),resolve(tmpdir()));assert.match(basename(path),/^charitypilot-synthetic-custody-[A-Za-z0-9]{6}$/);assert.equal(realpathSync(path),path);assert.equal(lstatSync(path).uid,process.getuid());rmSync(path,{recursive:true,force:true});}

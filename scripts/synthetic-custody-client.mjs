@@ -22,7 +22,7 @@ export function connectSyntheticCustody(descriptor,id,config){
   const r=await callSyntheticCustody(descriptor,{op:'sdk',id,service,request:encoded});
   return{response:{statusCode:r.statusCode,headers:r.headers,body:Readable.from([Buffer.from(r.body,'base64')])}};
  },destroy(){}});
- const b={s3:()=>new S3Client({region:'eu-west-1',endpoint:'https://s3.eu-west-1.amazonaws.com',credentials,maxAttempts:1,requestHandler:handler('s3')}),
+ const b={sessionId:id,bindControl:controlSessionId=>sync(descriptor,{op:'bindControl',id,controlSessionId}),s3:()=>new S3Client({region:'eu-west-1',endpoint:'https://s3.eu-west-1.amazonaws.com',credentials,maxAttempts:1,requestHandler:handler('s3')}),
   kms:()=>new KMSClient({region:'eu-west-1',endpoint:'https://kms.eu-west-1.amazonaws.com',credentials,maxAttempts:1,requestHandler:handler('kms')}),close(){}};
  for(const name of ['reads','writes','generates'])Object.defineProperty(b,name,{get:()=>sync(descriptor,{op:'stats',id})[name]});
  Object.defineProperty(b,'objects',{get:()=>new Map(sync(descriptor,{op:'metadata',id}))});

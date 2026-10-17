@@ -22,6 +22,18 @@ The internal `CHARITYPILOT_TEST_CUSTODY_SESSION_FILE` selector is created by tha
 
 ## Limits
 
+The selected successful native maintenance scenario now issues its original
+READY creation and subsequent conditional control transitions through the
+separate keeper's SDK transport. No head is copied after source loss. Its six
+separate archive sessions retain one-shot fixture links to that original control
+session. After the source terminates, the recovery-only cold process runs the
+current recovery inspector against that retained control and each original
+candidate catalogue, using the actual archive crypto verifier. It must verify
+two available roots and retain four incomplete/unknown cases as unresolved.
+The other fault scenarios still use their existing local control fixtures.
+The links/epoch floor remain test-owner trust, not authenticated real provider
+authority or physical-host independence. Exact native results belong privately.
+
 The keeper is a volatile process on the same test host. Its session registry and capability are fixture-owner trust, not an independent provider authority or authenticated current tenant decision head. Discovering and MAC-verifying a historical root does not establish that it is current or permit reopening. This test cannot prove persistence after keeper restart, provider IAM/key custody, source-VM loss, current retention/disposal replay or production readiness. Those remain explicit requirements of the full goal.
 
 Provider activation is separately unapproved; standard AWS credentials/profile were absent on the inspected workstation. No paid resource, account, terms, access grant or charity-data transfer is inferred from this test or the software-owner delegation.

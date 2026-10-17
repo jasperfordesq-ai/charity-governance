@@ -1,3 +1,12 @@
+## 17 October: original synthetic control custody and cold inspection
+
+Read [separate custody process](separate-synthetic-custody-process.md). The native
+cohort sends original successful-scenario control creation/transitions to the
+separate keeper. Recovery-only cold readers inspect the linked current catalogue
+and actual archive crypto after source exit. This is still volatile same-host
+synthetic custody; exact execution evidence is private, real provider/host-loss
+gates remain open.
+
 ## 17 October: current recovery inspection composition
 
 Read [current recovery inspection](managed-current-recovery-inspection.md). The

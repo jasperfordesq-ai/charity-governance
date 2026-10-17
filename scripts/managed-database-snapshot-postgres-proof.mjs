@@ -159,6 +159,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   let result;
   if(managed){
    const {coordinator,control,mode}=managed,journal=cloud.journal,archive=cloud.archive;
+   if(managed.controlSessionId)cloud.b.bindControl(managed.controlSessionId);
    const head=await control.observe();await coordinator.publishCaptureBootstrap(journal);
    const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
     captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:service.configurationDigest(),

@@ -131,8 +131,11 @@ export function backend(selected=config) {
           }
           if (request.method === 'PUT' || request.method === 'POST') {
             writes++;
-            assert.equal(request.headers['if-none-match'], '*');
-            if (objects.has(key))
+            const controlKey=`managed-maintenance/${config.installationId}/control.json`;
+            const existing=objects.get(key),conditionalControl=key===controlKey&&request.headers['if-match']!==undefined;
+            if(conditionalControl)assert.equal(request.headers['if-none-match'],undefined);
+            else assert.equal(request.headers['if-none-match'], '*');
+            if ((conditionalControl&&(!existing||request.headers['if-match']!=='"'+existing.version+'"'))||(!conditionalControl&&objects.has(key)))
               return reply(
                 '<Error><Code>PreconditionFailed</Code></Error>',
                 {},

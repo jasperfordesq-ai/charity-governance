@@ -13,8 +13,12 @@ async function dispatch(v,role){
   assert.ok(sessions.size<32);assert.match(v.config.installationId,/^[A-Za-z0-9_.-]{1,120}$/);assert.deepEqual({...v.config,installationId:defaults.installationId},defaults);
   const id=randomUUID(),b=backend(v.config);sessions.set(id,{b,config:v.config,s3:b.s3(),kms:b.kms(),macKeys:new Set()});return{id};
  }
- if(v.op==='sessions')return[...sessions].map(([id,s])=>({id,config:s.config}));
+ if(v.op==='sessions')return[...sessions].map(([id,s])=>({id,config:s.config,...(s.controlSessionId?{controlSessionId:s.controlSessionId}:{})}));
  const s=sessions.get(v.id);assert.ok(s);
+ if(v.op==='bindControl'){
+  const control=sessions.get(v.controlSessionId);assert.ok(control&&control!==s&&!s.controlSessionId);
+  assert.equal(control.config.installationId,s.config.installationId);s.controlSessionId=v.controlSessionId;return true;
+ }
  if(v.op==='stats')return{reads:s.b.reads,writes:s.b.writes,generates:s.b.generates};
  if(v.op==='metadata')return[...s.b.objects].map(([k,o])=>[k,{version:o.version,checksum:o.checksum,type:o.type,contentType:o.contentType,byteLength:o.body.length}]);
  if(v.op==='flag'){assert.ok(flags.includes(v.name));assert.equal(typeof v.value,'boolean');s.b[v.name]=v.value;return true;}

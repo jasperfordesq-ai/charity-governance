@@ -4,10 +4,12 @@ import {ListObjectsV2Command,GetObjectCommand} from '@aws-sdk/client-s3';
 import {readSyntheticCustodyDescriptor,callSyntheticCustody} from './synthetic-custody-wire.mjs';
 import {connectSyntheticCustody} from './synthetic-custody-client.mjs';
 import {ArchivedRecoverySets} from '../apps/api/dist/services/archived-recovery-set.js';
+import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
+import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-maintenance-control.js';
 import {credentials} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
 const sessions=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(sessions.length>=1&&sessions.length<=32);
-let roots=0,records=0,services=0,killedSourceServices=0;
+let roots=0,records=0,services=0,killedSourceServices=0,currentInspections=0,currentVerifiedRoots=0,currentUnresolved=0;
 for(const session of sessions){
  const b=connectSyntheticCustody(descriptor,session.id,session.config),before={writes:b.writes,generates:b.generates},clients={s3:b.s3(),kms:b.kms()};
  try{
@@ -26,10 +28,23 @@ for(const session of sessions){
    assert.equal(verified.restoreMode,'QUARANTINE_ONLY');assert.equal(verified.completedIntervalBindingVerified,true);assert.equal(verified.actionAuthorized,false);roots++;sessionRoots++;
   }
   if(session.id===sessions.at(-1).id){assert.equal(sessionRoots,0);assert.ok(sessionServices>=1);killedSourceServices=sessionServices;}
+  if(session.controlSessionId){
+   const originalControl=sessions.find(v=>v.id===session.controlSessionId);assert.ok(originalControl);
+   const controlBackend=connectSyntheticCustody(descriptor,originalControl.id,originalControl.config),controlClient=controlBackend.s3();
+   const storage=c=>({installationId:c.installationId,bucket:c.bucket,accountId:c.accountId,kmsKeyArn:c.storageKeyArn});
+   try{
+    const journal=new ManagedCandidateCaptureJournal(storage(session.config),credentials,clients.s3);
+    const observation=await journal.inspectCurrentRecovery(new S3ManagedMaintenanceControl(storage(originalControl.config),credentials,controlClient),1,new ArchivedRecoverySets(session.config,credentials,clients));
+    assert.equal(observation.currentTenantAuthorityVerified,false);assert.equal(observation.atomicSnapshotVerified,false);assert.equal(observation.actionAuthorized,false);
+    assert.equal(observation.records.filter(r=>r.kind==='COMMON_CAPTURE_RECOVERY_OBSERVATION').length,1);
+    currentInspections++;currentVerifiedRoots+=observation.records.filter(r=>r.rootStatus==='ARCHIVE_VERIFIED_QUARANTINE_ONLY').length;currentUnresolved+=observation.unresolvedCommonCandidates;
+   }finally{controlClient.destroy();}
+  }
   assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
 const report={kind:'SYNTHETIC_COLD_CUSTODY_READER_V1',sessions:sessions.length,records,verifiedRoots:roots,verifiedSourceServiceRecords:services,killedSourceServiceRecords:killedSourceServices,
+ currentInspections,currentVerifiedRoots,currentUnresolved,
  suppliedSourceIdsOrPins:false,executionAuthorized:false,realProvider:false,sourceHostLossProven:false};
 if(process.connected){await new Promise((yes,no)=>process.send(report,error=>error?no(error):yes()));process.disconnect();}
 else process.stdout.write(JSON.stringify(report)+'\n');

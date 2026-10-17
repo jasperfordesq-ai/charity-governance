@@ -62,4 +62,7 @@ S3/KMS or native cold-process/whole-host-loss evidence.
 
 The [reader provider policy](recovery-reader-provider-policy.md) is still a local
 review artifact. Actual provider validation, independent credentials/custody,
-native integration of this composition and source-host-off recovery remain open.
+source-host-off recovery remain open. The separate synthetic keeper cohort now
+also exercises this composition with original control custody and actual archive
+crypto after source exit; exact native execution and proof limits are recorded
+privately. That same-host volatile test does not close the real provider gate.

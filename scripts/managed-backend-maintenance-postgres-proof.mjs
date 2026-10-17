@@ -1,4 +1,5 @@
 import {proveManagedDatabaseSnapshot} from './managed-database-snapshot-postgres-proof.mjs';
+import {managedCommonCustodyBackend} from './managed-common-custody-postgres-proof.mjs';
 import {captureHelperImplementationBinding} from './postgres-backup.mjs';
 import {proveManagedCandidateCapture} from './managed-candidate-capture-postgres-proof.mjs';
 import {managedS3WorkingFixture} from '../apps/api/dist/tests/fixtures/managed-s3-working.js';
@@ -74,9 +75,11 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
  assert.ok(['KERNEL_CONTAINED','INTERNAL_IPC_PROOF'].includes(sourceExecutionMode));
  const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
- const storage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
+ const localStorage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
  for(const scenario of ['legacy-three-service-plan','success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','resumable-child-report-ack-lost','resumable-manifest-report-ack-lost','resumable-still-writable','signed-tus-credential-ack-lost','signed-tus-baseline-ack-lost','signed-tus-readback-ack-lost','signed-tus-head-ack-lost','signed-tus-report-ack-lost','signed-tus-still-writable','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost','s3-canary-ack-lost','s3-baseline-ack-lost','s3-readback-ack-lost','s3-head-ack-lost','s3-head-readback-ack-lost','s3-report-ack-lost','s3-report-readback-ack-lost','s3-post-stale-gateway','s3-enabled-metadata','working-s3-success']){
+  const independentControl=scenario==='success'&&process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?managedCommonCustodyBackend(localStorage.installationId):undefined;
+  const storage=independentControl?{installationId:independentControl.config.installationId,bucket:independentControl.config.bucket,accountId:independentControl.config.accountId,kmsKeyArn:independentControl.config.storageKeyArn}:localStorage;
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
   await admin.$executeRaw`ALTER ROLE managed_writer_a LOGIN PASSWORD 'synthetic-writer-only'`;
@@ -113,6 +116,14 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   const metadata=()=>({VersionId:'version-'+version,ETag:'"etag-'+version+'"',ServerSideEncryption:'aws:kms',SSEKMSKeyId:storage.kmsKeyArn});
   sdk.send=async command=>{
    assert.equal(command.input.ExpectedBucketOwner,storage.accountId);
+   if(independentControl){
+    const saved=await independentControl.clients.s3.send(command);
+    if(command instanceof PutObjectCommand){
+     if(command.input.Key===`managed-maintenance/${storage.installationId}/control.json`){value=JSON.parse(String(command.input.Body));version++;events.push('control-'+value.phase);}
+     else artifacts.set(command.input.Key,{body:String(command.input.Body),version:saved.VersionId});
+    }
+    return saved;
+   }
    if(command.input.Key!==`managed-maintenance/${storage.installationId}/control.json`){
     if(command instanceof PutObjectCommand){
      assert.equal(command.input.IfNoneMatch,'*');assert.equal(artifacts.has(command.input.Key),false);
@@ -212,6 +223,11 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
+   if(independentControl){
+    const body=JSON.stringify(value);
+    await sdk.send(new PutObjectCommand({Bucket:storage.bucket,ExpectedBucketOwner:storage.accountId,Key:`managed-maintenance/${storage.installationId}/control.json`,
+     Body:body,IfNoneMatch:'*',ChecksumSHA256:createHash('sha256').update(body).digest('base64'),ServerSideEncryption:'aws:kms',SSEKMSKeyId:storage.kmsKeyArn}));
+   }
    await writer.$queryRaw`SELECT 1`;
    if(scenario==='legacy-three-service-plan'){
     const hash=text=>createHash('sha256').update(text).digest('hex');
@@ -281,10 +297,10 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    assert.equal(inspected.recordedS3CoverageObserved,['success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),controlStorage:storage,controlClient:sdk,url});
-   if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack',...(sourceExecutionMode==='KERNEL_CONTAINED'?['service-ack']:[])])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode}});
+   if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack',...(sourceExecutionMode==='KERNEL_CONTAINED'?['service-ack']:[])])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode}});
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');
-  }finally{await writer.$disconnect();sdk.destroy();}
+  }finally{await writer.$disconnect();sdk.destroy();independentControl?.close();}
  }
 }
