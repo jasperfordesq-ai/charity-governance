@@ -33,7 +33,7 @@ export type MaintenanceArtifactPin = {
   byteLength: number;
 };
 export type MaintenanceArtifactPolicy<P extends MaintenanceArtifactPin> = {
-  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability';
+  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability' | 's3-capability-cohort';
   /** S3 capability cohorts only; source-defined policy, never a raw object path. */
   scopeDigest?: string;
   pinSchema: z.ZodType<P>;
@@ -64,11 +64,11 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
     this.policy = { ...policy, limits: { ...policy.limits } };
     this.config = configuration.parse(raw);
     if (!credentials) throw this.policy.failure();
-    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability']).parse(policy.namespace);
+    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability', 's3-capability-cohort']).parse(policy.namespace);
     if (policy.namespace === 's3-capability')
       z.string().regex(/^[a-f0-9]{64}$/).parse(policy.scopeDigest);
     else if (policy.scopeDigest !== undefined) throw this.policy.failure();
-    const maximum=policy.namespace==='resumable-cohort'?131072:16384;
+    const maximum=['resumable-cohort','s3-capability-cohort'].includes(policy.namespace)?131072:16384;
     z.object({
       BASELINE: z.number().int().min(1).max(maximum),
       OBSERVATION: z.number().int().min(1).max(maximum),

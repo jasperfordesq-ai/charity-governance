@@ -66,3 +66,7 @@ protocol8 has no S3 dispatch yet. Preserve all wider JWT/session, in-flight,
 control-plane/capture-privilege, common database/files capture, independent
 catalogue/current preservation-disposal authority, full application restore,
 actual provider/source-host-loss and guarded reopening requirements.
+
+## Configured working cohort addendum
+
+The [working-mode cohort factory](managed-s3-capability-cohort.md) now composes every configured credential at both endpoints and conditionally stores complete original manifests. Durable already-disabled mode, common parent integration and actual provider proof remain open.

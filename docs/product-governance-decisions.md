@@ -223,3 +223,5 @@ revocation. Actual supplier activation/authority remains a separate gate.
 The distinct [current feature-boundary component](s3-current-feature-boundary-proof.md) is now implemented locally. It uses both endpoint profiles and real metadata-adapter reads with synthetic transports. Parent mode selection, mandatory fresh post-closure proof and actual provider evidence remain open; this establishes no tenant retention or disclosure policy.
 
 Original S3 URL/UploadId [combined custody](s3-capability-custody.md) now composes locally with the active SDK probe. Keep historical inspection separate from execution acknowledgement, and isolate each endpoint/credential cohort in storage. Actual provider/IAM proof and complete parent integration remain required.
+
+The [configured working S3 cohort](managed-s3-capability-cohort.md) is implemented locally. Require both endpoints for every configured reviewed key, preserve original acknowledgements and never infer complete issuer inventory. The already-disabled branch requires its own fresh PRE/POST evidence; no empty-cohort exemption is permitted.

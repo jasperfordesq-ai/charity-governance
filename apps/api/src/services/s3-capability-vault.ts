@@ -15,9 +15,19 @@ const sha = z.string().regex(/^[a-f0-9]{64}$/),
     .string()
     .uuid()
     .refine((v) => v === v.toLowerCase());
-const configuration = resumableLocationVaultStorageSchema
+export const s3CapabilityVaultStorageSchema =
+  resumableLocationVaultStorageSchema
+    .innerType()
+    .omit({ uploadIdFormat: true })
+    .refine(
+      (c) =>
+        c.dataKeyArn !== c.storageKeyArn &&
+        [c.dataKeyArn, c.storageKeyArn].every(
+          (k) => k.split(':')[4] === c.accountId,
+        ),
+    );
+const configuration = s3CapabilityVaultStorageSchema
   .innerType()
-  .omit({ uploadIdFormat: true })
   .extend({
     maintenance: credentialReadMaintenanceBindingSchema,
     probeDigest: sha,

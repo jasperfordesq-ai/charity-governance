@@ -39,8 +39,17 @@ const configuration = {
     secretAccessKeySha256: hash(retired.secretAccessKey),
   },
 };
-export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
-  const config = { ...configuration, endpoint },
+export function s3CapabilityProbeFixture(
+  endpoint = 'DIRECT',
+  options: {
+    config?: typeof configuration;
+    retired?: typeof retired;
+    control?: typeof control;
+  } = {},
+) {
+  const selectedRetired = options.retired ?? retired,
+    selectedControl = options.control ?? control;
+  const config = { ...(options.config ?? configuration), endpoint },
     origin =
       'https://' +
       config.projectRef +
@@ -93,7 +102,7 @@ export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
     assert.equal(h.get('cache-control'), 'no-cache, no-store');
     calls.push({ method, path: url.pathname, url: String(input), presigned });
     if (url.pathname.startsWith('/storage/v1/bucket/')) {
-      assert.equal(h.get('apikey'), control.secret);
+      assert.equal(h.get('apikey'), selectedControl.secret);
       assert.equal(h.has('authorization'), false);
       return Response.json(
         { id: config.bucket, public: false },
@@ -101,7 +110,7 @@ export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
       );
     }
     if (url.pathname.startsWith('/storage/v1/object/')) {
-      assert.equal(h.get('apikey'), control.secret);
+      assert.equal(h.get('apikey'), selectedControl.secret);
       assert.equal(h.has('authorization'), false);
       const key = url.pathname.slice(
         ('/storage/v1/object/' + config.bucket + '/').length,
@@ -147,7 +156,7 @@ export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
       signature = presigned ? q.get('X-Amz-Signature')! : match![3],
       date = presigned ? q.get('X-Amz-Date')! : h.get('x-amz-date')!,
       scope = credential.split('/');
-    assert.equal(scope[0], retired.accessKeyId);
+    assert.equal(scope[0], selectedRetired.accessKeyId);
     assert.equal(scope[1], date.slice(0, 8));
     assert.equal(scope[2], config.region);
     assert.equal(scope[3], 's3');
@@ -197,7 +206,7 @@ export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
       ].join('\n');
     const hmac = (key: string | Buffer, data: string) =>
       createHmac('sha256', key).update(data).digest();
-    let signingKey = hmac('AWS4' + retired.secretAccessKey, scope[1]);
+    let signingKey = hmac('AWS4' + selectedRetired.secretAccessKey, scope[1]);
     for (const part of scope.slice(2)) signingKey = hmac(signingKey, part);
     assert.equal(
       createHmac('sha256', signingKey).update(stringToSign).digest('hex'),
@@ -319,7 +328,11 @@ export function s3CapabilityProbeFixture(endpoint = 'DIRECT') {
   };
   const custody = '9'.repeat(64),
     factory = (raw: unknown = config) =>
-      new SupabaseS3CapabilityProof(raw, { control, retired }, transport),
+      new SupabaseS3CapabilityProof(
+        raw,
+        { control: selectedControl, retired: selectedRetired },
+        transport,
+      ),
     retain: RetainS3Capability = async (v, signal) => {
       signal.throwIfAborted();
       assert.equal(uploads.get(v.uploadId)!.parts.size, 0);

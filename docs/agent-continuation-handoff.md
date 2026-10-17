@@ -1,5 +1,12 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October configured working S3 cohort:** The working-mode factory now
+> requires every configured key at both endpoints, original encrypted/public
+> evidence and a complete paired manifest. One working scope prevents success;
+> saved inspection is GET only. Durable already-disabled mode/common parent and
+> actual supplier proof remain open. See [S3 cohort](managed-s3-capability-cohort.md).
+
+
 > **17 October original S3 public evidence:** Original baseline/refusal artifacts
 > now publish conditionally with exact-version readback and scope-specific paths.
 > Fresh saved-pair inspection uses GET only and does not reconstruct missing
