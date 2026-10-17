@@ -79,6 +79,7 @@ const configuration = storageSchema
     );
   });
 type Configuration = z.infer<typeof configuration>;
+export const archivedRecoveryConfigurationSchema = configuration;
 const scopeSchema = z
   .object({
     index: z.unknown().transform(documentBackupIndexScope),

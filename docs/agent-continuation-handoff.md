@@ -1,3 +1,12 @@
+## 17 October: explicit-credential recovery diagnostic command
+
+Read [current recovery inspection](managed-current-recovery-inspection.md). The
+API job now exposes a bounded stdin-only diagnostic command using explicit
+reader credentials, fixed AWS endpoints and a trusted epoch floor. It emits
+only a limited summary with no restore/reopening authority. Unresolved/no-root
+evidence exits separately from successful available-evidence inspection. Actual
+provider execution remains unverified; no grant or deployment is inferred.
+
 ## 17 October: original synthetic control custody and cold inspection
 
 Read [separate custody process](separate-synthetic-custody-process.md). The native

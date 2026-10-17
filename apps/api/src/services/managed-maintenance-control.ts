@@ -15,6 +15,7 @@ const configuration=z.object({installationId:identity,bucket:z.string().regex(/^
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/)}).strict()
  .refine(c=>c.kmsKeyArn.split(':')[4]===c.accountId);
 const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),writeProofDigest:digest.optional(),signedProofDigest:digest.optional(),signingDigest:digest.optional(),resumableProofDigest:digest.optional(),signedResumableProofDigest:digest.optional(),s3ProofDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
+export const managedMaintenanceStorageConfigurationSchema=configuration;
 const control=z.object({format:z.literal(1),installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:digest,phase:z.enum(['READY','ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','RESUMABLE_BASELINED','SIGNED_RESUMABLE_BASELINED','S3_BASELINED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
  observations:observations.nullable(),readBaseline:z.unknown().transform(parseCredentialReadBaselineArtifact).optional(),
