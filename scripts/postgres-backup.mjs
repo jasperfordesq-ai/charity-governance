@@ -2283,10 +2283,10 @@ export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDecla
  if(acknowledge!==undefined&&typeof acknowledge!=='function')throw daemonJournalFailure();
  const s=daemonScope(raw),volumes=imageVolumes();if(JSON.stringify(volumes)!==JSON.stringify(['/var/lib/postgresql/data']))throw daemonJournalFailure();
  const header={format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:s.jobId,inputDigest:s.inputDigest,image:DEFAULT_POSTGRES_IMAGE,imageVolumeTargets:volumes};
- const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false,custodyFailed=false;
+ const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false,custodyFailed=false,transportUncertain=false;
  if(acknowledge&&acknowledge('HEADER',{...headerPin,body:JSON.stringify(header)})!==true)throw daemonJournalFailure();
  return{dispatch(args,run){
-  if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();if(custodyFailed)throw daemonJournalFailure();const {operation,target}=request;
+  if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();if(custodyFailed||transportUncertain)throw daemonJournalFailure();const {operation,target}=request;
   if(sequence>=64)throw daemonJournalFailure();const ordinal=String(++sequence).padStart(3,'0');
   const storagePlan=operation==='run'?planManagedProofStorage(args,s.jobId):null;
   const intent={format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:s.jobId,sequence,previousDigest:previous,operation,target,storagePlan,
@@ -2297,10 +2297,15 @@ export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDecla
   const response={format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:s.jobId,sequence,intentPin,
    status:Number.isSafeInteger(result?.status)?result.status:null,transportError:!!result?.error,signal:typeof result?.signal==='string'?true:false,
    removalAlreadyAbsent:operation==='rm'&&result?.status===1&&!result?.error&&!result?.signal&&(result?.stderr??'').trim()==='Error response from daemon: No such container: '+target};
-  daemonWrite(s.root,s.identity,daemonFile+ordinal+'.response.json',response);return result;
+    const responsePin=daemonWrite(s.root,s.identity,daemonFile+ordinal+'.response.json',response);
+    if(acknowledge){try{if(acknowledge('RESPONSE',{...responsePin,body:JSON.stringify(response)})!==true)throw daemonJournalFailure();}catch{custodyFailed=true;throw daemonJournalFailure();}}
+    if(response.status===null||response.transportError||response.signal)transportUncertain=true;
+    return result;
  },finish(){
-  if(finished)throw daemonJournalFailure();finished=true;
-  daemonWrite(s.root,s.identity,daemonFile+'end.json',{format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:s.jobId,headerPin,requestCount:sequence,lastIntentDigest:previous});
+    if(finished||custodyFailed)throw daemonJournalFailure();finished=true;
+    const end={format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:s.jobId,headerPin,requestCount:sequence,lastIntentDigest:previous};
+    const endPin=daemonWrite(s.root,s.identity,daemonFile+'end.json',end);
+    if(acknowledge){try{if(acknowledge('END',{...endPin,body:JSON.stringify(end)})!==true)throw daemonJournalFailure();}catch{custodyFailed=true;throw daemonJournalFailure();}}
   return inspectManagedDaemonRequests(raw);
  }};
 }

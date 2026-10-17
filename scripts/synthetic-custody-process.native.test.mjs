@@ -50,9 +50,9 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
   assert.equal((await readerTerminal).code,0,readLog().slice(-4000));assert.equal(reportCount,1);assert.equal(result.kind,'SYNTHETIC_COLD_CUSTODY_READER_V1');assert.ok(result.verifiedRoots>=1);assert.ok(result.killedSourceServiceRecords>=1);assert.equal(result.suppliedSourceIdsOrPins,false);assert.equal(result.executionAuthorized,false);
   console.log('CURRENT_INSPECTION_COUNTS='+JSON.stringify({inspected:result.currentInspections,verifiedRoots:result.currentVerifiedRoots,unresolved:result.currentUnresolved}));
-  // Eight normal ACK-fault cases plus the original current control retained by
-  // the genuinely killed caller. That ninth attempt must remain unresolved.
-  assert.equal(result.currentInspections,9);assert.equal(result.currentVerifiedRoots,2);assert.equal(result.currentUnresolved,7);
+  // Ten normal ACK-fault cases plus the original current control retained by
+  // the genuinely killed caller. That eleventh attempt must remain unresolved.
+  assert.equal(result.currentInspections,11);assert.equal(result.currentVerifiedRoots,2);assert.equal(result.currentUnresolved,9);
   service.send({kind:'STOP_SYNTHETIC_CUSTODY_V1'});assert.equal((await serviceTerminal).code,0);
   await assert.rejects(callSyntheticCustody(descriptor,{op:'sessions'}));
   console.log('PASS independent synthetic process: source normal exit + genuine source SIGKILL; cold SDK LIST/GET/MAC/decrypt verifies retained roots and killed-source service bytes without source IDs/pins or new writes/data keys; service loss has no cache fallback; not real provider/VM-loss proof');

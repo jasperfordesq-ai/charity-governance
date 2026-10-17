@@ -5,7 +5,7 @@ import {backend,config as defaults} from '../apps/api/dist/tests/fixtures/archiv
 import {syntheticCustodyAllowed} from './synthetic-custody-policy.mjs';
 if(!process.connected||process.argv.length!==2)throw new Error('Synthetic custody owner required');
 const capability=randomBytes(32).toString('hex'),recoveryCapability=randomBytes(32).toString('hex'),sessions=new Map(),limit=32*1024*1024;
-const flags=['loseRoot','losePrepared','loseCommonRequestRead','loseCommonReportRead','loseJobRequestRead','loseJobObservationRead','loseJobServiceRead','loseDaemonHeaderRead','loseDaemonIntentRead'];
+const flags=['loseRoot','losePrepared','loseCommonRequestRead','loseCommonReportRead','loseJobRequestRead','loseJobObservationRead','loseJobServiceRead','loseDaemonHeaderRead','loseDaemonIntentRead','loseDaemonResponseRead','loseDaemonEndRead'];
 async function bounded(stream){const chunks=[];let size=0;for await(const b of stream){size+=b.length;if(size>16*1024*1024)throw new Error();chunks.push(Buffer.from(b));}return Buffer.concat(chunks);}
 async function dispatch(v,role){
  assert.equal(syntheticCustodyAllowed(role,v),true);

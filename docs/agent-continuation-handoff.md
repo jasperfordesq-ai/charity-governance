@@ -1,3 +1,12 @@
+## 17 October: original response and completion acknowledgement barrier
+
+Read [daemon intent custody](managed-daemon-intent-custody.md). Response/end
+retention now joins the frozen job context and fixed worker/socket. The next
+intent requires original response ACK; successful invocation requires end ACK.
+Unknown completion remains unresolved even with local dump/report bytes. SDK and
+helper checks are distinct from native exact-source and actual provider proof.
+Complete fresh discovery and independent queue ownership/fencing remain open.
+
 ## 17 October: original daemon response custody component
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). Original client

@@ -108,7 +108,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
  if(executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'&&typeof jobCustody?.bindService!=='function')throw unresolved();
  const daemonCustodyRequired=executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE';
- if(daemonCustodyRequired&&(typeof jobCustody.reserveDaemonHeader!=='function'||typeof jobCustody.reserveDaemonIntent!=='function'))throw unresolved();
+ if(daemonCustodyRequired&&(typeof jobCustody.reserveDaemonHeader!=='function'||typeof jobCustody.reserveDaemonIntent!=='function'||typeof jobCustody.observeDaemonResponse!=='function'||typeof jobCustody.finishDaemonRequests!=='function'))throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  prepareLocalDockerCommand(['docker','version'],process.env);
  const env=managedProofWorkerEnvironment(process.env,databaseUrl);
@@ -126,7 +126,8 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId,...(daemonCustodyRequired?{daemonCustodyRequired:true}:{})}));
  try{
   if(daemonCustodyRequired){daemonGate=await createManagedDaemonCustodyChannel({jobId,sourceSha:helper.commitSha,inputDigest:hash(input),
-   onHeader:artifact=>jobCustody.reserveDaemonHeader(artifact),onIntent:artifact=>jobCustody.reserveDaemonIntent(artifact)});env.CHARITYPILOT_INTERNAL_DAEMON_GATE=daemonGate.descriptorPath;}
+   onHeader:artifact=>jobCustody.reserveDaemonHeader(artifact),onIntent:artifact=>jobCustody.reserveDaemonIntent(artifact),
+   onResponse:artifact=>jobCustody.observeDaemonResponse(artifact),onEnd:artifact=>jobCustody.finishDaemonRequests(artifact)});env.CHARITYPILOT_INTERNAL_DAEMON_GATE=daemonGate.descriptorPath;}
   if(executionMode==='KERNEL_CONTAINED'){
    await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,diagnostics,daemonGateBinding:daemonGate?.binding(),authorizeInvocation:async identity=>{
     boundService=await job.bindService(identity,input);if(jobCustody)await jobCustody.bindService(boundService.artifact);signal?.throwIfAborted();return true;
@@ -144,12 +145,13 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
   let settled=false;try{const r=inspectManagedDaemonInvocation({args,snapshot,jobId,daemonCustodyRequired});settled=r.mutatingRequestsObservedSuccessful===true&&r.declaredImageVolumesCovered===true
-   &&(!daemonCustodyRequired||(gateClosed&&gateState?.headerAcknowledged&&!gateState.failed&&gateState.inFlight===0&&r.requestCount>0&&gateState.intentCount===r.requestCount));}catch{}
+   &&(!daemonCustodyRequired||(gateClosed&&gateState?.headerAcknowledged&&!gateState.failed&&gateState.inFlight===0&&r.requestCount>0&&gateState.intentCount===r.requestCount&&gateState.responseCount===r.requestCount&&gateState.endAcknowledged));}catch{}
   try{result=await job.observe(success&&settled&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',settled);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&(!settled||cleanup.removedCount!==0))throw unresolved();
  }
  return{jobId,requestPin:job.requestPin,observationPin:result.pin,servicePin:boundService?.pin??null,kernelContained:executionMode==='KERNEL_CONTAINED',
   daemonCustodyRequired,daemonHeaderCustodyAcknowledged:daemonGateState?.headerAcknowledged??false,daemonIntentCustodyAcknowledgements:daemonGateState?.intentCount??0,
+  daemonResponseCustodyAcknowledgements:daemonGateState?.responseCount??0,daemonEndCustodyAcknowledged:daemonGateState?.endAcknowledged??false,
   directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
 }

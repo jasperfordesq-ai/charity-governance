@@ -91,8 +91,8 @@ test('original custody ACK precedes dispatch; refused or unknown header/intent A
   const f=fixture();let dispatched=0,headers=0,intents=0;
   try{
    const make=()=>createManagedDaemonRequestJournal(f.scope,{imageVolumes:()=>['/var/lib/postgresql/data'],acknowledge:(kind,artifact)=>{
-    assert.equal(dispatched,0);assert.equal(Buffer.byteLength(artifact.body),artifact.byteLength);
-    if(kind==='HEADER')headers++;else intents++;
+    assert.equal(dispatched,['HEADER','INTENT'].includes(kind)?0:1);assert.equal(Buffer.byteLength(artifact.body),artifact.byteLength);
+    if(kind==='HEADER')headers++;else if(kind==='INTENT')intents++;else return true;
     return failure===(kind==='HEADER'?'header':'intent')&&(kind==='HEADER'||intents===1)?false:true;
    }});
    if(failure==='header'){assert.throws(make);assert.equal(headers,1);assert.equal(intents,0);}
@@ -101,6 +101,19 @@ test('original custody ACK precedes dispatch; refused or unknown header/intent A
     else{dispatch();assert.equal(journal.finish().mutatingRequestsObservedSuccessful,true);}
    }
    assert.equal(dispatched,failure==='none'?1:0);
+  }finally{f.close();}
+ }
+});
+
+test('unknown response/end ACK prevents success and any later daemon mutation',()=>{
+ for(const failure of ['RESPONSE','END']){
+  const f=fixture();let dispatched=0;const acknowledgements=[];
+  try{
+   const j=createManagedDaemonRequestJournal(f.scope,{imageVolumes:()=>['/var/lib/postgresql/data'],acknowledge:(kind)=>{acknowledgements.push(kind);return kind!==failure;}});
+   const dispatch=()=>j.dispatch(runArgs(),()=>{dispatched++;return{status:0};});
+   if(failure==='RESPONSE'){assert.throws(dispatch);assert.throws(()=>j.finish());assert.deepEqual(acknowledgements,['HEADER','INTENT','RESPONSE']);}
+   else{dispatch();assert.throws(()=>j.finish());assert.deepEqual(acknowledgements,['HEADER','INTENT','RESPONSE','END']);}
+   assert.throws(dispatch);assert.equal(dispatched,1);
   }finally{f.close();}
  }
 });

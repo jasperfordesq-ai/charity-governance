@@ -41,7 +41,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent'].map(name=>[name,async artifact=>{
+  const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent','observeDaemonResponse','finishDaemonRequests'].map(name=>[name,async artifact=>{
    if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ENTER');
    const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');
    if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal});
@@ -61,6 +61,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   assert.equal(supervised.workerExited,true);assert.equal(supervised.observedJobContainersAbsent,true);
   if(sourceExecutionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'){
    assert.equal(supervised.daemonCustodyRequired,true);assert.equal(supervised.daemonHeaderCustodyAcknowledged,true);assert.ok(supervised.daemonIntentCustodyAcknowledgements>0);
+   assert.equal(supervised.daemonResponseCustodyAcknowledgements,supervised.daemonIntentCustodyAcknowledgements);assert.equal(supervised.daemonEndCustodyAcknowledged,true);
   }
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));
@@ -168,23 +169,23 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
     captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:service.configurationDigest(),
     journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest()};
-   cloud.b.loseDaemonHeaderRead=mode==='daemon-header-ack';cloud.b.loseDaemonIntentRead=mode==='daemon-intent-ack';cloud.b.loseJobServiceRead=mode==='service-ack';cloud.b.loseJobRequestRead=mode==='job-ack';cloud.b.loseRoot=mode==='root-ack';cloud.b.loseCommonReportRead=mode==='report-ack';cloud.b.loseCommonRequestRead=mode==='request-ack';
+   cloud.b.loseDaemonResponseRead=mode==='daemon-response-ack';cloud.b.loseDaemonEndRead=mode==='daemon-end-ack';cloud.b.loseDaemonHeaderRead=mode==='daemon-header-ack';cloud.b.loseDaemonIntentRead=mode==='daemon-intent-ack';cloud.b.loseJobServiceRead=mode==='service-ack';cloud.b.loseJobRequestRead=mode==='job-ack';cloud.b.loseRoot=mode==='root-ack';cloud.b.loseCommonReportRead=mode==='report-ack';cloud.b.loseCommonRequestRead=mode==='request-ack';
    const execute=()=>coordinator.captureCommonQuarantined(request,capture,service,journal,archive,prepareSource);
    if(mode==='success')assert.equal((await execute()).root.completedIntervalBindingVerified,true);
    else await assert.rejects(execute);
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
-   cloud.b.loseDaemonHeaderRead=false;cloud.b.loseDaemonIntentRead=false;cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;cloud.b.loseJobRequestRead=false;cloud.b.loseJobServiceRead=false;
+   cloud.b.loseDaemonResponseRead=false;cloud.b.loseDaemonEndRead=false;cloud.b.loseDaemonHeaderRead=false;cloud.b.loseDaemonIntentRead=false;cloud.b.loseCommonReportRead=false;cloud.b.loseCommonRequestRead=false;cloud.b.loseJobRequestRead=false;cloud.b.loseJobServiceRead=false;
    await holder.$disconnect();
-   if(sourceCalls&&!['job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode)){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext']){assert.ok(existsSync(join(output,name)),'Expected full source proof absent: '+sourceFailure);rmSync(join(output,name));}}
+   if(sourceCalls&&!['job-ack','service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack'].includes(mode)){verifyOutput();for(const name of ['common.dump','common.json','database.ciphertext']){assert.ok(existsSync(join(output,name)),'Expected full source proof absent: '+sourceFailure);rmSync(join(output,name));}}
    // Independent reader must discover original pins from custody, without local UUID/pins.
    const writes=cloud.b.writes,generates=cloud.b.generates,from=cloud.fresh();
    const learned=await from.journal.discoverCurrentCandidates(managed.controlReader(),managed.operation.maintenanceEpoch);
    const rows=learned.catalogue.records.filter(r=>r.commonRoot); // No supplied candidate ID or root pin.
-   assert.equal(rows.length,['request-ack','job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode)?0:1);assert.equal(learned.savedObservationAuthorizesExecution,false);
+   assert.equal(rows.length,['request-ack','job-ack','service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack'].includes(mode)?0:1);assert.equal(learned.savedObservationAuthorizesExecution,false);
    if(sourceCalls){
     assert.equal(learned.catalogue.records.length,1);const original=learned.catalogue.records[0];assert.ok(original);
     const discovered=await from.journal.discoverSourceJob(original.binding);
-    assert.equal(discovered.state,mode==='job-ack'?'REQUESTED_ONLY':['service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode)?'UNRESOLVED':'WORKER_EXIT_ACK_OBSERVED');
+    assert.equal(discovered.state,mode==='job-ack'?'REQUESTED_ONLY':['service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack'].includes(mode)?'UNRESOLVED':'WORKER_EXIT_ACK_OBSERVED');
     assert.equal(discovered.serviceStatus,sourceExecutionMode==='KERNEL_CONTAINED'&&mode!=='job-ack'?'SAVED_SERVICE_BINDING':'NOT_LISTED_AT_BOUNDARY');
     if(discovered.serviceIdentity){assert.equal(discovered.serviceIdentity.jobId,discovered.jobId);assert.equal(discovered.serviceIdentity.sourceSha,managed.operation.sourceSha);}
     assert.equal(discovered.executionAuthorized,false);assert.equal(discovered.originalAcknowledgementReconstructed,false);
@@ -198,6 +199,17 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
     if(['job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode)){if(mode==='job-ack')assert.equal(discovered.observationPin,null);else assert.ok(discovered.servicePin);assert.equal(cloud.b.generates,0);
      for(const name of ['common.dump','common.json','database.ciphertext'])assert.equal(existsSync(join(output,name)),false);
      assert.equal([...cloud.b.objects.keys()].some(k=>k.endsWith('/root.json')),false);}
+    if(['daemon-response-ack','daemon-end-ack'].includes(mode)){
+     assert.equal(cloud.b.generates,0);assert.equal(existsSync(join(output,'database.ciphertext')),false);
+     assert.equal([...cloud.b.objects.keys()].some(k=>k.endsWith('/root.json')),false);
+     const names=readdirSync(output),intents=names.filter(n=>/^proof-daemon\.[0-9]{3}\.intent\.json$/.test(n)),responses=names.filter(n=>/^proof-daemon\.[0-9]{3}\.response\.json$/.test(n));
+     assert.ok(intents.length>0);assert.equal(intents.length,responses.length);
+     assert.equal(names.includes('proof-daemon.end.json'),mode==='daemon-end-ack');
+     if(mode==='daemon-response-ack'){assert.equal(intents.length,1);assert.equal(existsSync(join(output,'common.json')),false);}
+     else for(const name of ['common.dump','common.json'])assert.ok(existsSync(join(output,name)));
+     const kind=mode==='daemon-response-ack'?'MANAGED_DAEMON_CUSTODY_RESPONSE_V1':'MANAGED_DAEMON_CUSTODY_END_V1';
+     assert.ok([...cloud.b.objects.values()].some(v=>{try{return JSON.parse(v.body.toString()).kind===kind;}catch{return false;}}));
+    }
     if(['daemon-header-ack','daemon-intent-ack'].includes(mode)){
      const names=readdirSync(output);assert.equal(names.filter(n=>/^proof-daemon\.[0-9]{3}\.response\.json$/.test(n)).length,0);
      assert.equal(names.filter(n=>/^proof-daemon\.[0-9]{3}\.intent\.json$/.test(n)).length,mode==='daemon-header-ack'?0:1);
@@ -226,7 +238,8 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    if(mode==='job-ack')console.log('PASS native common job ACK lost: descriptor stored, worker/full proof/crypto/root never entered; fresh original candidate discovery learns job ID and baseline pin without caller memory; no replay or repair');
    if(mode==='service-ack')console.log('PASS native contained service ACK lost: exact identity stored but original ACK unknown; full dump/proof/crypto/root never entered; fresh clients discover service without replay');
    if(['daemon-header-ack','daemon-intent-ack'].includes(mode))console.log('PASS native '+mode+': original custody bytes stored but ACK unknown; controlled helper mutations not dispatched, no subsequent mutation intent, common proof/crypto/root absent; source/job remains unresolved');
-   if(['request-ack','job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode))return;
+   if(['daemon-response-ack','daemon-end-ack'].includes(mode))console.log('PASS native '+mode+': original dispatched work and local client response/completion retained but custody ACK unknown; no subsequent intent after response ACK loss, no common encryption/data keys/root, fresh source job remains unresolved; stored bytes do not reconstruct original ACK');
+   if(['request-ack','job-ack','service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack'].includes(mode))return;
   }else{
    result=await service.runWithSnapshot(async(snapshot,signal)=>{
     const source=await prepareSource(snapshot,signal);return{capture:await capture.capture(source.visit,signal),releaseProof:source.releaseProof};

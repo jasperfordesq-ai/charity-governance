@@ -47,6 +47,8 @@ export class ManagedProofJobCustody{
  }
  async reserveDaemonHeader(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).reserveHeader(local,signal);}
  async reserveDaemonIntent(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).reserveIntent(local,signal);}
+ async observeDaemonResponse(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).observeResponse(local,signal);}
+ async finishDaemonRequests(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).finishRequests(local,signal);}
  async observe(local:unknown,original:unknown,signal?:AbortSignal){
   const pin=candidatePinSchema.parse(original);if(!this.live(pin)||!this.acknowledged||this.observationAttempted)throw failure();this.observationAttempted=true;
   const saved=await this.evidence.publishObservation(jobObservationArtifact(this.binding,this.acknowledged,local),this.acknowledged,signal);

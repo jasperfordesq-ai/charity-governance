@@ -94,16 +94,30 @@ An absent-container claim requires an `rm` intent, status 1 and no transport err
 or signal. Transport failures may be retained as evidence but confer no resolution.
 Unknown readback, concurrent writes or context closure consume the original
 writer; a fresh reader cannot reconstruct its acknowledgement. Response writes
-are currently component-only: the worker/socket path still sends only headers
-and intents. Subsequent intents do not yet require response acknowledgement.
-End accounting and complete bounded discovery remain implementation work.
+now pass through the frozen original job context, fixed worker and private socket.
+The helper flushes the local response before requesting its custody ACK and may
+not send the next intent until that original ACK arrives. Transport errors or
+signals prohibit further helper mutations even when their response was retained.
+The end record binds the original header bytes, request count and final intent
+digest; all prior responses require original ACKs before it can be retained.
+Unknown response/end ACK makes the source outcome unresolved, even if a complete
+local dump or report already exists. No common encryption or root may follow.
+
+`finishRequests` and `inspectEnd` retain and inspect completion in the header's
+observation slot. End inspection verifies its declared chain of up to 64 intents
+and their exact response pairs. It is not complete independent discovery: it does
+not prove absence of records outside that declared chain or historical requests.
+Both response and end evidence always report `pendingRequestResolved: false`.
+The socket ACK V2 binds the record kind in addition to nonce, scope and bytes.
+Successful original invocation now requires matched local/remote intent and
+response counts, end ACK, original worker exit and existing containment checks.
 
 1. Verify the exact-release source/helper/channel composition with actual Linux
-   source/SQL and lost header/intent ACKs. Preserve the difference between
+   source/SQL and lost header/intent/response/end ACKs. Preserve the difference between
    synthetic custody outside a source process and real independent providers.
-2. Bind and retain original responses/end accounting separately; make unknown
-   dispatch/completion remain unresolved after caller/guardian/host loss. Complete
-   the independently surviving owner or proven daemon-side fence before closure.
+2. Keep unknown dispatch/completion unresolved after caller/guardian/host loss.
+   Complete the independently surviving owner or proven daemon-side fence before
+   closure; retained client responses alone do not settle daemon queue finality.
 3. Implement fresh complete bounded discovery under original candidate/job
    custody, without local process-memory pins or invented acknowledgements.
 4. Run genuine SQL/restore, original ACK-loss/concurrency/cancellation, source

@@ -17,14 +17,15 @@ export async function requestManagedDaemonCustody(v){
   ||descriptor.path!==join(root,'gate.sock')||descriptor.jobId!==v.jobId||descriptor.inputDigest!==v.inputDigest||descriptor.sourceSha!==v.sourceSha||!(/^[a-f0-9]{64}$/).test(descriptor.capability))throw refuse();
  const s=lstatSync(descriptor.path);if(!s.isSocket()||s.uid!==process.getuid()||(s.mode&0o777)!==0o600)throw refuse();
  const a=v.artifact;if(!a||typeof a.body!=='string'||Buffer.byteLength(a.body)>8192||a.byteLength!==Buffer.byteLength(a.body)||createHash('sha256').update(a.body).digest('hex')!==a.sha256)throw refuse();
- const ordinal=v.kind==='HEADER'?0:JSON.parse(a.body).sequence,nonce=randomBytes(32).toString('hex');
+ if(!['HEADER','INTENT','RESPONSE','END'].includes(v.kind))throw refuse();
+ const ordinal=['HEADER','END'].includes(v.kind)?0:JSON.parse(a.body).sequence,nonce=randomBytes(32).toString('hex');
  const body=JSON.stringify({kind:v.kind,jobId:v.jobId,inputDigest:v.inputDigest,sourceSha:v.sourceSha,nonce,capability:descriptor.capability,artifact:a})+'\n';if(Buffer.byteLength(body)>32768)throw refuse();
  await new Promise((yes,no)=>{
   const socket=createConnection(descriptor.path);let result='',done=false;
   const finish=error=>{if(done)return;done=true;clearTimeout(timer);socket.destroy();error?no(refuse()):yes();};
   const timer=setTimeout(()=>finish(true),18000);socket.once('error',()=>finish(true));socket.once('connect',()=>socket.write(body));
   socket.on('data',b=>{result+=b.toString('utf8');if(Buffer.byteLength(result)>2048)finish(true);});
-  socket.once('end',()=>{try{const expected={kind:'MANAGED_DAEMON_CUSTODY_ACK_V1',jobId:v.jobId,inputDigest:v.inputDigest,sourceSha:v.sourceSha,nonce,ordinal,
+  socket.once('end',()=>{try{const expected={kind:'MANAGED_DAEMON_CUSTODY_ACK_V2',recordKind:v.kind,jobId:v.jobId,inputDigest:v.inputDigest,sourceSha:v.sourceSha,nonce,ordinal,
     localRecordPin:{sha256:a.sha256,byteLength:a.byteLength},savedEvidenceAuthorizesDispatch:false};if(result!==JSON.stringify(expected)+'\n')throw refuse();finish();}catch{finish(true);}});
   socket.once('close',()=>{if(!done)finish(true);});
  });return true;

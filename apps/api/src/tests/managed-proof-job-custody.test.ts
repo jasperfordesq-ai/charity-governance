@@ -136,7 +136,11 @@ async function daemonFixture(){
  const custody=(live=()=>false)=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,credentials,f.client,
   jobRequestArtifact(f.binding,f.original,f.input),request.pin,jobServiceArtifact(f.binding,request.pin,localService),bound.pin,live);
  const reader=()=>custody();
- return{...f,header,intent,reader,custody};
+ const response=(local:ReturnType<typeof f.local>,change={})=>f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,
+  sequence:JSON.parse(local.body).sequence,intentPin:{sha256:local.sha256,byteLength:local.byteLength},status:0,transportError:false,signal:false,removalAlreadyAbsent:false,...change});
+ const end=(requestCount:number,lastIntentDigest:string,change={})=>f.local({format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:f.request.jobId,
+  headerPin:{sha256:header.sha256,byteLength:header.byteLength},requestCount,lastIntentDigest,...change});
+ return{...f,header,intent,reader,custody,response,end};
 }
 
 test('original daemon responses are retained against exact intents and fresh reads confer no resolution',async()=>{
@@ -151,6 +155,60 @@ test('original daemon responses are retained against exact intents and fresh rea
   assert.equal(read.localRecord.sha256,value.sha256);assert.equal(read.originalAcknowledgementReconstructed,false);
   assert.equal(read.pendingRequestResolved,false);assert.equal(read.savedEvidenceAuthorizesDispatch,false);assert.equal(f.b.writes,writes);
   await assert.rejects(writer.observeResponse(value));await assert.rejects(f.reader().observeResponse(value));
+ }finally{f.close();}
+});
+
+test('original end ACK binds all acknowledged responses; fresh reads remain evidence without resolution or inventory authority',async()=>{
+ const f=await daemonFixture();try{
+  const local=f.intent();await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);
+  await f.session.observeDaemonResponse(f.response(local),f.original);
+  const end=f.end(1,local.sha256),saved=await f.session.finishDaemonRequests(end,f.original);assert.equal(saved.pin.kind,'OBSERVATION');
+  const writes=f.b.writes;f.session.closeExecution();const observed=await f.reader().inspectEnd();
+  assert.equal(observed.localRecord.sha256,end.sha256);assert.equal(observed.pendingRequestResolved,false);assert.equal(observed.completeResourceInventory,false);
+  assert.equal(observed.originalAcknowledgementReconstructed,false);assert.equal(f.b.writes,writes);
+  await assert.rejects(f.session.finishDaemonRequests(end,f.original));await assert.rejects(f.reader().finishRequests(end));
+ }finally{f.close();}
+});
+
+test('missing response ACK forbids next intent or end and consumes original writer',async()=>{
+ for(const next of ['intent','end']){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);const writes=f.b.writes;
+   await assert.rejects(next==='intent'?writer.reserveIntent(f.intent(2,local.sha256)):writer.finishRequests(f.end(1,local.sha256)));
+   await assert.rejects(writer.observeResponse(f.response(local)));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('end refuses changed header, last digest, count, job and secret fields before writes',async()=>{
+ for(const change of [{headerPin:{sha256:'0'.repeat(64),byteLength:1}},{lastIntentDigest:'0'.repeat(64)},{requestCount:0},{jobId:randomUUID()},{secret:'SYNTHETIC_SECRET'}]){
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.observeResponse(f.response(local));
+   const writes=f.b.writes;await assert.rejects(writer.finishRequests(f.end(1,local.sha256,change)));
+   await assert.rejects(writer.finishRequests(f.end(1,local.sha256)));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('lost end readback leaves saved completion readable but never revives source or retry permission',async()=>{
+ const f=await daemonFixture();try{
+  const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.observeResponse(f.response(local));
+  const original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonCustodyScope(f.binding.candidateId,0)+'/observation.json'))throw new Error('synthetic end ACK loss');
+   return original(command as never);
+  });
+  await assert.rejects(writer.finishRequests(f.end(1,local.sha256)));const writes=f.b.writes;
+  await assert.rejects(writer.finishRequests(f.end(1,local.sha256)));await assert.rejects(writer.reserveIntent(f.intent(2,local.sha256)));
+  lost=false;assert.equal((await f.reader().inspectEnd()).pendingRequestResolved,false);assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+});
+
+test('transport uncertainty is retained but prevents another daemon intent even with response ACK',async()=>{
+ const f=await daemonFixture();try{
+  const writer=f.custody(()=>true),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);
+  await writer.observeResponse(f.response(local,{status:null,transportError:true}));const writes=f.b.writes;
+  await assert.rejects(writer.reserveIntent(f.intent(2,local.sha256)));assert.equal(f.b.writes,writes);
  }finally{f.close();}
 });
 
@@ -207,7 +265,8 @@ test('original service ACK gates immutable daemon header/intents; saved reads re
  const f=await daemonFixture();try{
   const h=await f.session.reserveDaemonHeader(f.header,f.original),first=f.intent();
   h.pin.versionId='caller-edited-return-pin';
-  await f.session.reserveDaemonIntent(first,f.original);await f.session.reserveDaemonIntent(f.intent(2,first.sha256),f.original);
+  await f.session.reserveDaemonIntent(first,f.original);await f.session.observeDaemonResponse(f.response(first),f.original);
+  await f.session.reserveDaemonIntent(f.intent(2,first.sha256),f.original);
   const writes=f.b.writes;f.session.closeExecution();const reader=f.reader();
   const saved=await reader.inspectHeader();assert.equal(saved.localRecord.sha256,f.header.sha256);
   const one=await reader.inspectIntent(1,f.header.sha256),two=await reader.inspectIntent(2,one.localRecord.sha256);
@@ -278,7 +337,7 @@ test('daemon intent sequence is bounded to64 and cannot begin without the origin
  }finally{g.close();}
  const f=await daemonFixture();try{
   await f.session.reserveDaemonHeader(f.header,f.original);let previous=f.header.sha256,lastPrevious=previous;
-  for(let sequence=1;sequence<=64;sequence++){lastPrevious=previous;const local=f.intent(sequence,previous);await f.session.reserveDaemonIntent(local,f.original);previous=local.sha256;}
+  for(let sequence=1;sequence<=64;sequence++){lastPrevious=previous;const local=f.intent(sequence,previous);await f.session.reserveDaemonIntent(local,f.original);await f.session.observeDaemonResponse(f.response(local),f.original);previous=local.sha256;}
   const before=f.b.writes;await assert.rejects(f.session.reserveDaemonIntent(f.intent(65,previous),f.original));assert.equal(f.b.writes,before);
   assert.equal(JSON.parse((await f.reader().inspectIntent(64,lastPrevious)).localRecord.body).sequence,64);
   await assert.rejects(f.reader().inspectIntent(64,previous));
