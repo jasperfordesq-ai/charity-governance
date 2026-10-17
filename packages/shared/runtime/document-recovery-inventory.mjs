@@ -70,6 +70,48 @@ export function canonicalObjectKeySha256(fileUrl) {
     [string(fileUrl, 'Document.fileUrl')],
   ]);
 }
+// Snapshot-independent row projection; the source report binds its snapshot.
+// Existing timestamp/XID inventory hash domains remain unchanged.
+export function canonicalDocumentMetadataRowsSha256(entries) {
+  if (!Array.isArray(entries) || entries.length > 5000)
+    throw new TypeError('Document metadata projection exceeds its row bound');
+  const seen = new Set();
+  const rows = entries
+    .map((entry) => {
+      for (const key of [
+        'documentIdentitySha256',
+        'metadataBindingSha256',
+        'objectKeySha256',
+      ]) {
+        if (
+          typeof entry[key] !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(entry[key]) ||
+          entry[key].length !== 64
+        )
+          throw new TypeError(
+            'Document metadata projection requires canonical hashes',
+          );
+      }
+      if (
+        seen.has(entry.documentIdentitySha256) ||
+        !Number.isSafeInteger(entry.fileSize) ||
+        entry.fileSize < 0 ||
+        entry.fileSize > 10 * 1024 * 1024
+      )
+        throw new TypeError(
+          'Document metadata projection contains an invalid row',
+        );
+      seen.add(entry.documentIdentitySha256);
+      return [
+        entry.documentIdentitySha256,
+        entry.metadataBindingSha256,
+        entry.objectKeySha256,
+        entry.fileSize,
+      ];
+    })
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return digest('charitypilot:document-metadata-rows:v1', rows);
+}
 export function canonicalMetadataInventorySha256(
   entries,
   capturedAt,

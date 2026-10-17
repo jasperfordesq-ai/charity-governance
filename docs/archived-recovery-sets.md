@@ -81,7 +81,11 @@ capture-exercise identifier. Its SHA must match both database and index context.
 Check the reported source identity, release/helper binding, read-only exported
 snapshot, dump SHA/count/rehash, capacity/isolated-restore claims and zero reported
 comparison mismatches. The unpartitioned public Document row count must match
-the index. Unsupported or inconsistent inputs fail closed.
+the index. The source and isolated-restored metadata projections must also equal
+the complete index metadata, so equal counts cannot conceal different records
+or storage references. See [snapshot binding](document-metadata-snapshot.md).
+Older reports lacking this projection are refused by the archive coordinator.
+Unsupported or inconsistent inputs fail closed.
 
 These are consistency checks over reported evidence. A signed JSON claim does
 not establish its provenance or re-execute the capture proof. Common source

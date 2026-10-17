@@ -15,7 +15,12 @@ import { KmsDocumentBackupIndexMac } from '../services/document-backup-index-kms
 import { sealDatabaseByteBackup } from '../services/database-byte-backup.js';
 import { sealDocumentByteBackup } from '../services/document-byte-backup.js';
 import { sealDocumentBackupIndex } from '../services/document-backup-index.js';
-import { canonicalMetadataBindingSha256 } from '../../../../packages/shared/runtime/document-recovery-inventory.mjs';
+import {
+  canonicalMetadataBindingSha256,
+  canonicalDocumentIdentitySha256,
+  canonicalObjectKeySha256,
+  canonicalDocumentMetadataRowsSha256,
+} from '../../../../packages/shared/runtime/document-recovery-inventory.mjs';
 
 type Request = {
   hostname: string;
@@ -302,7 +307,11 @@ function backend() {
     },
   };
 }
-async function fixture(b: ReturnType<typeof backend>, badCount = false) {
+async function fixture(
+  b: ReturnType<typeof backend>,
+  badCount = false,
+  metadataMode: 'MATCH' | 'CHANGED' | 'MISSING' = 'MATCH',
+) {
   const s3 = b.s3(),
     kms = b.kms(),
     clients = { s3, kms };
@@ -315,6 +324,33 @@ async function fixture(b: ReturnType<typeof backend>, badCount = false) {
   const dataStorage = { ...storage, dataKeyArn: config.dataKeyArn };
   const db = Buffer.from('PGDMP synthetic database archive'),
     doc = Buffer.from('synthetic reviewed record');
+  const row = {
+    id: 'document',
+    organisationId: 'tenant',
+    fileUrl: 'private/document',
+    fileSize: doc.length,
+    mimeType: 'text/plain',
+  };
+  const documentMetadata =
+    metadataMode === 'MISSING'
+      ? undefined
+      : {
+          format: 'charitypilot-document-metadata-rows/v1',
+          rowCount: 1,
+          rowsSha256:
+            metadataMode === 'CHANGED'
+              ? '0'.repeat(64)
+              : canonicalDocumentMetadataRowsSha256([
+                  {
+                    documentIdentitySha256: canonicalDocumentIdentitySha256(
+                      row.id,
+                    ),
+                    metadataBindingSha256: canonicalMetadataBindingSha256(row),
+                    objectKeySha256: canonicalObjectKeySha256(row.fileUrl),
+                    fileSize: row.fileSize,
+                  },
+                ]),
+        };
   const sourceSha = 'a'.repeat(40),
     dbSha = hash(db).toString('hex'),
     databaseIdentitySha256 = 'b'.repeat(64),
@@ -359,6 +395,7 @@ async function fixture(b: ReturnType<typeof backend>, badCount = false) {
       mismatchCount: 0,
     },
     source: {
+      documentMetadata,
       tables: [
         {
           schema: 'public',
@@ -369,6 +406,7 @@ async function fixture(b: ReturnType<typeof backend>, badCount = false) {
         },
       ],
     },
+    restored: { documentMetadata },
     restoreTarget: {
       type: 'isolated-disposable-postgresql',
       cleanupVerified: true,
@@ -401,13 +439,6 @@ async function fixture(b: ReturnType<typeof backend>, badCount = false) {
     credentials,
     s3,
   ).publish(context, sealed, source(Buffer.concat(encrypted.chunks)));
-  const row = {
-    id: 'document',
-    organisationId: 'tenant',
-    fileUrl: 'private/document',
-    fileSize: doc.length,
-    mimeType: 'text/plain',
-  };
   const docContext = {
     installationId: config.installationId,
     setId,
@@ -531,6 +562,25 @@ test('source report/document inventory mismatch cannot produce a prepared root',
     f.clients.s3.destroy();
     f.clients.kms.destroy();
     b.close();
+  }
+});
+test('equal document counts do not excuse missing or substituted snapshot metadata', async () => {
+  for (const mode of ['CHANGED', 'MISSING'] as const) {
+    const b = backend(),
+      f = await fixture(b, false, mode);
+    try {
+      const writes = b.writes;
+      await assert.rejects(
+        new ArchivedRecoverySets(config, credentials, f.clients).prepare(
+          f.input,
+        ),
+      );
+      assert.equal(b.writes, writes);
+    } finally {
+      f.clients.s3.destroy();
+      f.clients.kms.destroy();
+      b.close();
+    }
   }
 });
 test('normal root publication verifies exact version and rejects tampering even with a substituted external digest', async () => {

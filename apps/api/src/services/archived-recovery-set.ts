@@ -18,6 +18,7 @@ import {
   type DocumentBackupIndex,
 } from './document-backup-index.js';
 import { KmsDocumentBackupIndexMac } from './document-backup-index-kms.js';
+import { canonicalDocumentMetadataRowsSha256 } from '../../../../packages/shared/runtime/document-recovery-inventory.mjs';
 import { KmsBackupManifestMac } from './backup-manifest-kms.js';
 import { KmsDatabaseBackupKeys } from './database-byte-backup-kms.js';
 import { KmsDocumentBackupKeys } from './document-byte-backup-kms.js';
@@ -299,7 +300,7 @@ export class ArchivedRecoverySets {
   private report(
     scope: ArchivedRecoveryScope,
     body: string,
-    documents: number,
+    index: DocumentBackupIndex,
   ) {
     if (
       Buffer.byteLength(body) > 32 * 1024 * 1024 ||
@@ -355,7 +356,14 @@ export class ArchivedRecoverySets {
       rows.length !== 1 ||
       rows[0].relationKind !== 'r' ||
       rows[0].isPartition !== false ||
-      rows[0].rowCount !== String(documents)
+      rows[0].rowCount !== String(index.entries.length) ||
+      r.source?.documentMetadata?.format !==
+        'charitypilot-document-metadata-rows/v1' ||
+      r.source?.documentMetadata?.rowCount !== index.metadata.length ||
+      r.source?.documentMetadata?.rowsSha256 !==
+        canonicalDocumentMetadataRowsSha256(index.metadata) ||
+      JSON.stringify(r.restored?.documentMetadata) !==
+        JSON.stringify(r.source.documentMetadata)
     )
       throw refused();
   }
@@ -509,7 +517,7 @@ export class ArchivedRecoverySets {
         value.index.sha256,
         this.indexMac,
       );
-      this.report(scope, sourceReport.artifact.body, index.entries.length);
+      this.report(scope, sourceReport.artifact.body, index);
       const database = await this.database(
         scope,
         value.database.artifact,
@@ -675,7 +683,7 @@ export class ArchivedRecoverySets {
         manifest.index.sha256,
         this.indexMac,
       );
-      this.report(scope, report.artifact.body, index.entries.length);
+      this.report(scope, report.artifact.body, index);
       if (
         index.entries.length !== manifest.documentCount ||
         index.objects.length !== manifest.objectCount ||

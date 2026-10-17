@@ -1,5 +1,13 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October database-snapshot metadata binding:** The source-hashed PostgreSQL
+> helper now derives a bounded document projection from the dump's exported
+> snapshot and compares it after isolated restoration. Archived-set preparation
+> and verification require its equality with index metadata, not just row count.
+> A native synthetic concurrent-write test passes. Actual file-store writer
+> closure, complete capture, current authority and provider/host-loss proof remain
+> open. See [snapshot metadata](document-metadata-snapshot.md); verify exact CI.
+
 > **17 October durable archive preparation:** Final-root publication now reads an
 > authenticated exact-version `prepared-root.json`; the new staging/observation
 > flow handles lost preparation responses without automatic writes. Independent

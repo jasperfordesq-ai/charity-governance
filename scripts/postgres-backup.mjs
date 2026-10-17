@@ -1094,6 +1094,18 @@ export function parseDatabaseFingerprintReport(rawReport) {
     throw new Error('Fingerprint report exceeds the configured aggregate row bound');
   }
 
+  let documentMetadata;
+  if (metadata.has('document_metadata_rows_sha256') || metadata.has('document_metadata_row_count')) {
+    const count = metadata.get('document_metadata_row_count');
+    const relation = tables.filter(table => table.schema === 'public' && table.table === 'Document');
+    if (typeof count !== 'string' || !/^(0|[1-9][0-9]{0,3})$/.test(count)
+      || Number(count) > 5000 || relation.length !== 1 || relation[0].relationKind !== 'r'
+      || relation[0].isPartition || relation[0].rowCount !== count
+      || !/^[a-f0-9]{64}$/.test(metadata.get('document_metadata_rows_sha256') ?? ''))
+      throw new Error('Fingerprint report document metadata projection is incomplete or inconsistent');
+    documentMetadata = { format: 'charitypilot-document-metadata-rows/v1', rowCount: Number(count),
+      rowsSha256: requireSha256(metadata.get('document_metadata_rows_sha256'), 'document metadata rows') };
+  }
   return {
     snapshotSha256: requireSha256(metadata.get('source_snapshot_sha256'), 'source snapshot fingerprint'),
     databaseIdentitySha256: requireSha256(metadata.get('database_identity_sha256'), 'database identity fingerprint'),
@@ -1119,6 +1131,7 @@ export function parseDatabaseFingerprintReport(rawReport) {
       largeObjectCount,
     },
     ...(capacityPreflight ? { capacityPreflight } : {}),
+    ...(documentMetadata ? { documentMetadata } : {}),
     tables: tables.map(({ schemaHex, tableHex, ...table }) => table),
   };
 }
@@ -1135,6 +1148,7 @@ export function compareDatabaseFingerprints(source, restored) {
   if (source.databaseFingerprintSha256 !== restored.databaseFingerprintSha256) mismatches.push('database fingerprint');
   if (JSON.stringify(source.schemaCoverage) !== JSON.stringify(restored.schemaCoverage)) mismatches.push('schema coverage');
   if (JSON.stringify(source.workloadSafety) !== JSON.stringify(restored.workloadSafety)) mismatches.push('workload safety bounds');
+  if (JSON.stringify(source.documentMetadata) !== JSON.stringify(restored.documentMetadata)) mismatches.push('document metadata projection');
 
   const tableKey = (table) => JSON.stringify([table.schema, table.table]);
   const tableName = (table) => `${table.schema}.${table.table}`;
@@ -1386,6 +1400,42 @@ else
 fi
 `;
 
+// Deliberately in this source-hashed helper: no unbound local SQL import.
+// Exact JSON framing matches the shared JS projection, without exposing values.
+export const DOCUMENT_METADATA_SNAPSHOT_SQL = String.raw`
+\set ON_ERROR_STOP on
+\set QUIET on
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET TRANSACTION SNAPSHOT :'snapshot';
+SET LOCAL search_path = pg_catalog;
+SET LOCAL row_security = off;
+SET LOCAL statement_timeout = '2min';
+DO $projection$
+BEGIN
+  IF (SELECT count(*) FROM public."Document") > 5000 OR EXISTS (
+    SELECT 1 FROM public."Document" WHERE
+      id IS NULL OR "organisationId" IS NULL OR "fileUrl" IS NULL OR "mimeType" IS NULL OR "fileSize" IS NULL
+      OR id !~ '^[A-Za-z0-9_-]{1,120}$' OR "organisationId" !~ '^[A-Za-z0-9_-]{1,120}$'
+      OR char_length("fileUrl") NOT BETWEEN 1 AND 2048 OR char_length("mimeType") NOT BETWEEN 1 AND 255
+      OR "fileSize" < 0 OR "fileSize" > 10485760
+  ) THEN RAISE EXCEPTION 'Document metadata exceeds archive projection bounds'; END IF;
+END;
+$projection$;
+WITH bindings AS (
+  SELECT encode(sha256(convert_to('charitypilot:document-identity:v1' || chr(10) || '[[' || to_json(id)::text || ']]', 'UTF8')), 'hex') AS identity,
+    encode(sha256(convert_to('charitypilot:document-metadata-binding:v1' || chr(10) || '[[' ||
+      to_json(id)::text || ',' || to_json("organisationId")::text || ',' || to_json("fileUrl")::text || ',' ||
+      "fileSize"::text || ',' || to_json("mimeType")::text || ']]', 'UTF8')), 'hex') AS binding,
+    encode(sha256(convert_to('charitypilot:document-object-key:v1' || chr(10) || '[[' || to_json("fileUrl")::text || ']]', 'UTF8')), 'hex') AS object_key,
+    "fileSize" AS bytes
+  FROM public."Document"
+)
+SELECT encode(sha256(convert_to('charitypilot:document-metadata-rows:v1' || chr(10) || '[' ||
+  coalesce(string_agg('["' || identity || '","' || binding || '","' || object_key || '",' || bytes::text || ']', ',' ORDER BY identity COLLATE "C"), '')
+  || ']', 'UTF8')), 'hex') FROM bindings;
+COMMIT;
+`;
+
 const DATABASE_FINGERPRINT_ACTION_SCRIPT = String.raw`
 set -eu
 umask 077
@@ -1405,6 +1455,10 @@ case "$CHARITYPILOT_RAW_REPORT_PATH" in /proof/*) ;; *) echo 'Unsafe fingerprint
 work_dir=$(mktemp -d)
 cleanup_fingerprint() { rm -rf "$work_dir"; }
 trap cleanup_fingerprint EXIT HUP INT TERM
+
+cat > "$work_dir/document-metadata.sql" <<'SQL'
+` + DOCUMENT_METADATA_SNAPSHOT_SQL + String.raw`
+SQL
 
 cat > "$work_dir/table-list.sql" <<'SQL'
 \set ON_ERROR_STOP on
@@ -1996,6 +2050,11 @@ printf '%s\n' "$table_records" | while IFS='|' read -r schema_hex table_hex rela
   schema_sha=$(hash_query "charitypilot-table-schema/v2:$schema_hex:$table_hex" "$work_dir/table-schema.sql" "$schema_hex" "$table_hex")
   rows_sha=$(hash_query "charitypilot-table-rows/v2:$schema_hex:$table_hex" "$work_dir/rows.sql" "$schema_hex" "$table_hex")
   printf 'table|%s|%s|%s|%s|%s|%s|%s|%s\n' "$schema_hex" "$table_hex" "$relation_kind" "$partition_flag" "$readable_flag" "$row_count" "$schema_sha" "$rows_sha" >> "$raw_tmp"
+  if [ "$schema_hex" = '7075626c6963' ] && [ "$table_hex" = '446f63756d656e74' ] && [ "$relation_kind" = 'r' ] && [ "$partition_flag" = '0' ] && [ "$row_count" -le 5000 ]; then
+    document_metadata_sha=$(psql --no-psqlrc --quiet --tuples-only --no-align --set=ON_ERROR_STOP=1 --set=snapshot="$snapshot" --dbname "$CHARITYPILOT_PROOF_DATABASE_URL" --file "$work_dir/document-metadata.sql")
+    if ! printf '%s' "$document_metadata_sha" | grep -Eq '^[0-9a-f]{64}$'; then echo 'Invalid document metadata projection.' >&2; exit 78; fi
+    printf 'meta|document_metadata_rows_sha256|%s\nmeta|document_metadata_row_count|%s\n' "$document_metadata_sha" "$row_count" >> "$raw_tmp"
+  fi
   if [ "$(wc -c < "$raw_tmp")" -gt "$CHARITYPILOT_MAX_FINGERPRINT_REPORT_BYTES" ]; then echo 'Fingerprint report exceeds its configured byte bound.' >&2; exit 78; fi
 done
 mv "$raw_tmp" "$CHARITYPILOT_RAW_REPORT_PATH"
@@ -2646,6 +2705,7 @@ function fingerprintReportForJson(fingerprint, { includeIdentity = false } = {})
     totalRows: fingerprint.totalRows,
     workloadSafety: fingerprint.workloadSafety,
     schemaCoverage: fingerprint.schemaCoverage,
+    ...(fingerprint.documentMetadata ? { documentMetadata: fingerprint.documentMetadata } : {}),
     tables: fingerprint.tables,
   };
   return {

@@ -21,6 +21,9 @@ export function canonicalMetadataBindingSha256(
   row: DocumentMetadataRow,
 ): string;
 export function canonicalObjectKeySha256(fileUrl: string): string;
+export function canonicalDocumentMetadataRowsSha256(
+  rows: DocumentMetadataInventoryRow[],
+): string;
 export function canonicalMetadataInventorySha256(
   rows: DocumentMetadataInventoryRow[],
   capturedAt: string,

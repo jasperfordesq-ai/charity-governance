@@ -181,6 +181,11 @@ jobs:
               helper.canonicalRepositoryMatched !== true ||
               value.dump?.unchangedDuringProof !== true ||
               value.dump?.capacityPreflight?.verified !== true ||
+              value.source?.documentMetadata?.format !== "charitypilot-document-metadata-rows/v1" ||
+              !/^[a-f0-9]{64}$/.test(value.source?.documentMetadata?.rowsSha256 ?? "") ||
+              !Number.isInteger(value.source?.documentMetadata?.rowCount) ||
+              value.source.documentMetadata.rowCount < 0 || value.source.documentMetadata.rowCount > 5000 ||
+              JSON.stringify(value.source.documentMetadata) !== JSON.stringify(value.restored?.documentMetadata) ||
               value.restoreTarget?.cleanupVerified !== true ||
               value.restoreTarget?.databaseEnvironmentPreserved !== true ||
               value.restoreTarget?.initializedFromSourceDatabaseEnvironment !== true ||
@@ -197,6 +202,7 @@ jobs:
           CHARITYPILOT_DATABASE_BACKUP_PROOF_REPORT="${backup_dir}/ci-postgres-restore-proof.json" \
           CHARITYPILOT_SOURCE_IDENTITY_SHA256="${source_identity_sha}" \
             node --import tsx --test scripts/database-byte-backup-postgres.test.mjs
+          node --test scripts/document-metadata-snapshot-postgres.test.mjs
 
       - name: Lint
         run: npm run lint

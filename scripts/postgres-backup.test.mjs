@@ -262,6 +262,22 @@ test('database fingerprint parser binds every public table, schema membership, c
   assert.match(report.tables[0].tableFingerprintSha256, /^[a-f0-9]{64}$/);
 });
 
+test('snapshot document metadata evidence is paired, count-bound and compared across restore', () => {
+  const fields = [
+    'meta|document_metadata_row_count|2',
+    `meta|document_metadata_rows_sha256|${digest('a')}`,
+  ];
+  const source = parseDatabaseFingerprintReport(rawFingerprintReport({ extraLines: fields }));
+  assert.deepEqual(source.documentMetadata, {
+    format: 'charitypilot-document-metadata-rows/v1', rowCount: 2, rowsSha256: digest('a'),
+  });
+  assert.throws(() => parseDatabaseFingerprintReport(rawFingerprintReport({ extraLines: fields.slice(0, 1) })), /document metadata/i);
+  assert.throws(() => parseDatabaseFingerprintReport(rawFingerprintReport({ extraLines: [fields[1], 'meta|document_metadata_row_count|1'] })), /document metadata/i);
+  const changed = parseDatabaseFingerprintReport(rawFingerprintReport({ extraLines: [fields[0], `meta|document_metadata_rows_sha256|${digest('b')}`] }));
+  assert.throws(() => compareDatabaseFingerprints(source, changed), /document metadata/i);
+  assert.throws(() => compareDatabaseFingerprints(source, parseDatabaseFingerprintReport(rawFingerprintReport())), /document metadata/i);
+});
+
 test('database fingerprint parser fails closed on empty, unreadable, duplicate, and malformed reports', () => {
   assert.throws(
     () => parseDatabaseFingerprintReport([
@@ -519,13 +535,16 @@ test('database fingerprint comparison fails on restored count, schema, row, and 
 });
 
 test('dump binding and proof report are sensitive to dump identity and expose only safe evidence', () => {
+  const extraLines = ['meta|document_metadata_row_count|2', `meta|document_metadata_rows_sha256|${digest('a')}`];
   const source = parseDatabaseFingerprintReport(rawFingerprintReport({
     sourceDatabaseSizeBytes: '1048576',
     capacityRequiredBytes: '1075838976',
+    extraLines,
   }));
   const restored = parseDatabaseFingerprintReport(rawFingerprintReport({
     identitySha256: digest('8'),
     snapshotSha256: digest('9'),
+    extraLines,
   }));
   const comparison = compareDatabaseFingerprints(source, restored);
   const helperImplementation = {
@@ -574,6 +593,8 @@ test('dump binding and proof report are sensitive to dump identity and expose on
   });
   assert.equal(report.format, 'charitypilot-postgres-restore-proof/v2');
   assert.equal(report.checksumAlgorithm, 'sha256');
+  assert.deepEqual(report.source.documentMetadata, source.documentMetadata);
+  assert.deepEqual(report.restored.documentMetadata, source.documentMetadata);
   assert.deepEqual(report.helperImplementation, helperImplementation);
   assert.equal(
     report.toolsImageReference,
