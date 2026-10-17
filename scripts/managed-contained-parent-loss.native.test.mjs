@@ -6,7 +6,7 @@ import {mkdtempSync,chmodSync,writeFileSync,readFileSync,realpathSync,lstatSync,
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {DEFAULT_POSTGRES_IMAGE,prepareLocalDockerCommand,captureHelperImplementationBinding} from './postgres-backup.mjs';
+import {DEFAULT_POSTGRES_IMAGE,prepareLocalDockerCommand,captureHelperImplementationBinding,inspectProofContainerInventory} from './postgres-backup.mjs';
 import {inspectContainmentUnit,containmentUnit} from './managed-proof-systemd-containment.mjs';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function docker(args,input){const p=prepareLocalDockerCommand(['docker',...args],process.env),r=spawnSync(p.command[0],p.command.slice(1),{env:p.environment,input,encoding:'utf8',timeout:15000,maxBuffer:65536});assert.equal(r.status,0,'Synthetic Docker operation refused');return r.stdout.trim();}
@@ -22,7 +22,8 @@ test('real source caller loss stops contained worker and exact daemon clients wh
  try{
   const otherJob=randomUUID(),controlName=`charitypilot-isolated-restore-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
   control=docker(['run','--detach','--rm','--name',controlName,'--network','none','--read-only','--tmpfs','/var/lib/postgresql/data:rw,noexec,nosuid,size=1m',
-   '--label','charitypilot.restore-proof=true','--label','charitypilot.proof-created-at-ms='+Date.now(),'--label','charitypilot.managed-proof-job='+otherJob,'--entrypoint','sh',DEFAULT_POSTGRES_IMAGE,'-eu','-c','sleep 120']);assert.match(control,/^[a-f0-9]{64}$/);
+   '--label','charitypilot.restore-proof=true','--label','charitypilot.proof-created-at-ms='+(Date.now()-7_200_000),'--label','charitypilot.managed-proof-job='+otherJob,'--entrypoint','sh',DEFAULT_POSTGRES_IMAGE,'-eu','-c','sleep 120']);assert.match(control,/^[a-f0-9]{64}$/);
+  const before=inspectProofContainerInventory({jobId:otherJob});assert.equal(before.containers.length,1);assert.equal(before.containers[0].id,control);assert.equal(before.containers[0].ageClass,'OLDER_THAN_PROOF_TIMEOUT');assert.equal(before.cleanupAuthorized,false);
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['NODE_TEST_CONTEXT','NODE_OPTIONS','NODE_PATH'].includes(key)));
   producer=fork(fileURLToPath(new URL('./managed-database-writer-fence-postgres.test.mjs',import.meta.url)),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE:'1'},stdio:['ignore','pipe','pipe','ipc']});
   producer.stdout.on('data',b=>{output+=b.toString();if(output.length>65536)producer.kill('SIGKILL');});producer.stderr.on('data',b=>{errors+=b.toString();if(errors.length>65536)producer.kill('SIGKILL');});
@@ -63,6 +64,7 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   assert.ok(!existsSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs','utf8').trim()==='');
   assert.equal(docker(['ps','-a','--no-trunc','--filter','label=charitypilot.restore-proof=true','--filter','label=charitypilot.managed-proof-job='+ready.jobId,'--format','{{.ID}}']),'');
   assert.equal(docker(['inspect','--format','{{.State.Running}}',ready.sourceId]),'true');assert.equal(docker(['inspect','--format','{{.State.Running}}',control]),'true');
+  const after=inspectProofContainerInventory({jobId:otherJob});assert.equal(after.containers.length,1);assert.equal(after.containers[0].id,control);assert.equal(after.containers[0].running,true);assert.equal(after.completeResourceInventory,false);assert.equal(after.executionAuthorized,false);
   const code=`import {openManagedCaptureWorkspace} from './scripts/managed-capture-workspace.mjs';import {inspectManagedProofJob} from './scripts/managed-proof-job.mjs';let input='';for await(const b of process.stdin)input+=b;const v=JSON.parse(input),w=await openManagedCaptureWorkspace(v.parentDirectory,v.workspaceRoot);try{const r=await inspectManagedProofJob(w,{requestPin:v.requestPin,expectedScope:v.scope,servicePin:v.servicePin});let denied=false;try{await w.createCiphertextDestination('replay-refused.json');}catch{denied=true;}process.stdout.write(JSON.stringify({...r,replayWriteRefused:denied}));}finally{await w.close();}`;
   const fresh=spawnSync(process.execPath,['--input-type=module','-e',code],{input:readFileSync(join(root,'original-pins.json')),encoding:'utf8',timeout:10000,maxBuffer:16384});assert.equal(fresh.status,0);
   const read=JSON.parse(fresh.stdout);assert.equal(read.jobId,ready.jobId);assert.equal(read.state,'REQUESTED_ONLY');assert.equal(read.resultSupplied,false);assert.deepEqual(read.serviceIdentity,ready.identity);assert.equal(read.replayWriteRefused,true);assert.equal(read.executionAuthorized,false);

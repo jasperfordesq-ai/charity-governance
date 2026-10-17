@@ -1,3 +1,14 @@
+## 17 October: read-only proof residue and other-job preservation
+
+Read [residue inspection](managed-proof-residue-inspection.md). Restore proof
+startup no longer deletes globally labelled containers based on age. The new
+local `inspect-proof-residue` command observes validated labels and attached
+storage without returning environment/bind paths or granting cleanup/replay
+permission. Matching lists or no containers do not prove pending daemon work,
+unattached volumes or kernel cohorts accounted for. The contained caller-loss
+cohort now requires a two-hour-old other-job control to survive. Exact test and
+release results remain in the private checkpoint; full orphan recovery stays open.
+
 ## 17 October: observed genuine source caller-loss acceptance
 
 Read [source caller loss](managed-contained-parent-loss.md). A separate driver

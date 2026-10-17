@@ -36,7 +36,7 @@ import {
   runPostgresBackupFromArgs,
   sourceEndpointIdentitySha256,
   nextDumpByteCount,
-  shouldScavengeProofContainer,
+  classifyProofContainerAge,
 } from './postgres-backup.mjs';
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -391,15 +391,15 @@ test('canonical policy descriptors preserve PUBLIC roles and fail closed on unkn
   assert.match(implementation, /pg_catalog\.pg_get_ruledef/);
 });
 
-test('abnormal proof residue cleanup preserves bounded-age runs and reaps stale running or stopped crash residue', () => {
+test('proof-container age is descriptive and never grants cleanup authority', () => {
   const nowMs = 10_000_000;
-  assert.equal(shouldScavengeProofContainer({ createdAtMs: nowMs - 3_600_001, running: false, nowMs }), true);
-  assert.equal(shouldScavengeProofContainer({ createdAtMs: nowMs - 3_600_000, running: false, nowMs }), false);
-  assert.equal(shouldScavengeProofContainer({ createdAtMs: 0, running: true, nowMs }), true);
-  assert.equal(shouldScavengeProofContainer({ createdAtMs: nowMs - 3_600_000, running: true, nowMs }), false);
-  assert.equal(shouldScavengeProofContainer({ createdAtMs: nowMs + 1, running: false, nowMs }), false);
+  assert.equal(classifyProofContainerAge({ createdAtMs: nowMs - 3_600_001, running: false, nowMs }), 'OLDER_THAN_PROOF_TIMEOUT');
+  assert.equal(classifyProofContainerAge({ createdAtMs: nowMs - 3_600_000, running: false, nowMs }), 'WITHIN_PROOF_TIMEOUT');
+  assert.equal(classifyProofContainerAge({ createdAtMs: 0, running: true, nowMs }), 'OLDER_THAN_PROOF_TIMEOUT');
+  assert.equal(classifyProofContainerAge({ createdAtMs: nowMs - 3_600_000, running: true, nowMs }), 'WITHIN_PROOF_TIMEOUT');
+  assert.equal(classifyProofContainerAge({ createdAtMs: nowMs + 1, running: false, nowMs }), 'FUTURE_TIMESTAMP');
   assert.throws(
-    () => shouldScavengeProofContainer({ createdAtMs: Number.NaN, running: false, nowMs }),
+    () => classifyProofContainerAge({ createdAtMs: Number.NaN, running: false, nowMs }),
     /timestamps failed strict validation/,
   );
 });
@@ -1112,7 +1112,7 @@ test('prove-restore dry run accepts a remote source only through a locked read-o
     assert.match(result.stdout, /pg_restore --list/);
     assert.equal((result.stdout.match(/pg_restore --list/g) ?? []).length, 2);
     assert.match(result.stdout, /--tmpfs "?\/var\/lib\/postgresql\/data:rw,noexec,nosuid,size=4g"?/);
-    assert.match(result.stdout, /docker ps -a --filter label=charitypilot\.restore-proof=true/);
+    assert.doesNotMatch(result.stdout, /docker ps -a --filter label=charitypilot\.restore-proof=true/);
     assert.match(result.stdout, /docker run -d --rm --name charitypilot-isolated-restore-[^\n]+ --network none/);
     assert.match(result.stdout, /docker exec -e PGPASSWORD charitypilot-isolated-restore-[^\n]+ createdb/);
     assert.match(result.stdout, /--template template0/);

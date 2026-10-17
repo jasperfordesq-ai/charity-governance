@@ -234,6 +234,7 @@ Usage:
   node scripts/postgres-backup.mjs verify-restore --dump-file=<path> [options]
   node scripts/postgres-backup.mjs source-identity [options]
   node scripts/postgres-backup.mjs prove-restore [options]
+  node scripts/postgres-backup.mjs inspect-proof-residue [--job-id=<uuid>]
 
 Backup options:
   --database-container=<name>  Dump a local Docker Postgres container with docker exec.
@@ -277,11 +278,16 @@ Production-safe restore proof options:
   --report-file=<name>         Restore-proof JSON name. Default: <dump>.restore-proof.json.
   --temp-file-limit-mb=<mb>    Session temp-file cap (64-2048). Default: 1024.
   --dry-run                    Render commands without capturing or claiming evidence.
+
+Proof residue inspection:
+  --job-id=<uuid>             Optional label filter; never an ownership or cleanup grant.
+                             Read-only JSON observation, without environment or bind paths.
 `;
 }
 
 const BOOLEAN_OPTIONS = new Set(['dry-run', 'overwrite', 'help', 'expect-operational-sentinel', 'json']);
 const COMMAND_OPTIONS = new Map([
+  ['inspect-proof-residue', new Set(['job-id', 'help'])],
   ['backup', new Set([
     'database-container', 'database-url', 'docker-network', 'database-name', 'database-user',
     'output-dir', 'output-file', 'overwrite', 'dry-run', 'help',
@@ -2209,44 +2215,59 @@ function proofContainerLabelArgs(createdAtMs = Date.now()) {
   ];
 }
 
-export function shouldScavengeProofContainer({ createdAtMs, running, nowMs = Date.now() }) {
+export function classifyProofContainerAge({ createdAtMs, running, nowMs = Date.now() }) {
   if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0 || !Number.isSafeInteger(nowMs) || nowMs < 0) {
     throw new Error('Proof-container timestamps failed strict validation');
   }
   if (typeof running !== 'boolean') throw new Error('Proof-container running state failed strict validation');
   const ageMs = nowMs - createdAtMs;
-  return ageMs > PROOF_CONTAINER_STALE_AFTER_MS;
+  return ageMs < 0 ? 'FUTURE_TIMESTAMP' : ageMs > PROOF_CONTAINER_STALE_AFTER_MS ? 'OLDER_THAN_PROOF_TIMEOUT' : 'WITHIN_PROOF_TIMEOUT';
 }
 
-function scavengeStaleProofContainers(dryRun) {
-  const listArgs = [
-    'ps', '-a', '--filter', 'label=charitypilot.restore-proof=true', '--format', '{{.ID}}',
-  ];
-  if (dryRun) {
-    console.log(`${formatCommand('docker', listArgs)} # remove running or stopped crash residue only after ${PROOF_CONTAINER_STALE_AFTER_MS}ms`);
-    return;
-  }
-  const ids = runCommand('docker', listArgs, { timeout: 60_000 })
-    .split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+/** Observation after a crash is never an execution or cleanup lease. This stays
+ * inside the source-hashed helper; no saved PID, label or age grants mutation. */
+export function inspectProofContainerInventory({jobId, env = process.env, nowMs = Date.now()} = {}, {
+  run = args => runCommand('docker', args, {env, timeout: 15_000, maxBuffer: 65_536}),
+} = {}) {
+  const refuse = () => new Error('Proof residue inventory unavailable or changed; no cleanup authority inferred');
+  const read = args => {try {return run(args);} catch {throw refuse();}};
+  const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
+  if ((jobId !== undefined && (typeof jobId !== 'string' || !uuid.test(jobId))) || !Number.isSafeInteger(nowMs) || nowMs < 0) throw refuse();
+  const listArgs = ['ps','-a','--no-trunc','--filter','label=charitypilot.restore-proof=true',
+    ...(jobId === undefined ? [] : ['--filter','label=charitypilot.managed-proof-job='+jobId]), '--format','{{.ID}}'];
+  const list = () => {
+    const body = read(listArgs);
+    if (typeof body !== 'string' || body.length > 65_536) throw refuse();
+    const ids = body.trim() ? body.trim().split(/\r?\n/) : [];
+    if (ids.length > 64 || ids.some(id => !/^[a-f0-9]{64}$/.test(id)) || new Set(ids).size !== ids.length) throw refuse();
+    return ids.sort();
+  };
+  const ids = list(), containers = [];
+  const format = '{"id":{{json .Id}},"name":{{json .Name}},"running":{{json .State.Running}},"proofLabel":{{json (index .Config.Labels "charitypilot.restore-proof")}},"createdAtMs":{{json (index .Config.Labels "charitypilot.proof-created-at-ms")}},"jobId":{{json (index .Config.Labels "charitypilot.managed-proof-job")}},"mounts":{{json .Mounts}}}';
   for (const id of ids) {
-    if (!/^[a-f0-9]{12,64}$/i.test(id)) {
-      throw new Error('Docker returned an invalid labelled proof-container identifier');
+    const raw = read(['inspect','--format',format,id]);
+    if (typeof raw !== 'string' || raw.length > 65_536) throw refuse();
+    let value;try {value = JSON.parse(raw);} catch {throw refuse();}
+    if (!value || value.id !== id || value.proofLabel !== 'true' || typeof value.running !== 'boolean'
+      || !Array.isArray(value.mounts) || value.mounts.length > 64 || (jobId !== undefined && value.jobId !== jobId)) throw refuse();
+    const name = typeof value.name === 'string' && /^\/charitypilot-(source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8}$/.test(value.name) ? value.name : null;
+    const labelJobId = typeof value.jobId === 'string' && uuid.test(value.jobId) ? value.jobId : null;
+    const createdAtMs = typeof value.createdAtMs === 'string' && /^[0-9]{13}$/.test(value.createdAtMs) ? Number(value.createdAtMs) : null;
+    const storage = {bindMountCount:0,tmpfsMountCount:0,volumeNames:[]};
+    for (const mount of value.mounts) {
+      if (mount?.Type === 'bind') storage.bindMountCount++;
+      else if (mount?.Type === 'tmpfs') storage.tmpfsMountCount++;
+      else if (mount?.Type === 'volume' && typeof mount.Name === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,255}$/.test(mount.Name)) storage.volumeNames.push(mount.Name);
+      else throw refuse();
     }
-    const inspection = runCommand('docker', [
-      'inspect', '--format',
-      '{{index .Config.Labels "charitypilot.proof-created-at-ms"}}|{{.State.Running}}|{{.Name}}',
-      id,
-    ], { timeout: 60_000 }).trim();
-    const match = /^(\d{13})\|(true|false)\|\/?([A-Za-z0-9_.-]+)$/.exec(inspection);
-    if (!match) throw new Error('Labelled proof-container metadata failed strict validation');
-    const [, createdAtRaw, running, name] = match;
-    if (shouldScavengeProofContainer({
-      createdAtMs: Number.parseInt(createdAtRaw, 10),
-      running: running === 'true',
-    })) {
-      removeProofContainerStrict(name, false);
-    }
+    containers.push({id,name,jobId:labelJobId,running:value.running,createdAtMs,
+      metadataValid:name !== null && createdAtMs !== null && labelJobId !== null,
+      ageClass:createdAtMs === null ? 'UNKNOWN' : classifyProofContainerAge({createdAtMs,running:value.running,nowMs}),storage});
   }
+  if (JSON.stringify(ids) !== JSON.stringify(list())) throw refuse();
+  return {format:1,kind:'CHARITYPILOT_PROOF_RESIDUE_OBSERVATION_V1',jobFilter:jobId ?? null,observedAtMs:nowMs,containers,
+    stableContainerIdsObserved:true,pendingDaemonRequestsAccountedFor:false,unattachedVolumesAccountedFor:false,kernelCohortsAccountedFor:false,
+    completeResourceInventory:false,cleanupAuthorized:false,executionAuthorized:false,actionAuthorized:false};
 }
 
 function removeProofContainerStrict(containerName, dryRun) {
@@ -2999,7 +3020,6 @@ async function proveRestore(options, importedSnapshot) {
   let sourceHandle;
   let restoredHandle;
   let reportHandle;
-  scavengeStaleProofContainers(dryRun);
   try {
     assertProtectedDirectoryUnchanged(outputDir, outputDirIdentity, 'before source capture');
     captureDatabaseFingerprint({
@@ -4355,6 +4375,11 @@ async function runBackupCommand(args,env,importedSnapshot){
 
       if (command === 'prove-restore') {
         await proveRestore(options,importedSnapshot);
+        return;
+      }
+
+      if (command === 'inspect-proof-residue') {
+        console.log(JSON.stringify(inspectProofContainerInventory({jobId:optionString(options,'job-id')})));
         return;
       }
 
