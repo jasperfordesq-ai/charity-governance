@@ -1,5 +1,12 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October protocol6 signed integration:** The default coordinator now requires
+> encrypted original-token custody and exact signed-baseline pin/head/readback
+> before shutdown, then actual scoped refusal and retained report pin/digest.
+> Inspection reads saved signed artifacts without decrypting or active uploads.
+> Actual provider/issuer/release/global/capture/recovery proof remains open. See
+> [durable signed maintenance](durable-signed-upload-maintenance.md).
+
 > **17 October signed head barrier:** The installation head now supports exact
 > attempt/revision SIGNED_BASELINED CAS and requires signed/read/write report
 > dependencies at signed completion. Pure baseline checks bind configured issuer,

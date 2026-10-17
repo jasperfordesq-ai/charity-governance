@@ -11,7 +11,7 @@ const configuration=z.object({installationId:identity,bucket:z.string().regex(/^
  accountId:z.string().regex(/^\d{12}$/),
  kmsKeyArn:z.string().regex(/^arn:aws:kms:eu-west-1:\d{12}:key\/[a-f0-9-]{36}$/)}).strict()
  .refine(c=>c.kmsKeyArn.split(':')[4]===c.accountId);
-const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),writeProofDigest:digest.optional(),signedProofDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
+const observations=z.object({servicesDigest:digest,databaseDigest:digest,storageDigest:digest.optional(),readProofDigest:digest.optional(),writeProofDigest:digest.optional(),signedProofDigest:digest.optional(),signingDigest:digest.optional(),observedAt:z.string().datetime()}).strict();
 const control=z.object({format:z.literal(1),installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:digest,phase:z.enum(['READY','ATTEMPTED','BASELINED','WRITE_BASELINED','SIGNED_BASELINED','OBSERVED_CLOSED']),attemptId:z.string().uuid().nullable(),
  observations:observations.nullable(),readBaseline:z.unknown().transform(parseCredentialReadBaselineArtifact).optional(),
@@ -40,7 +40,7 @@ const control=z.object({format:z.literal(1),installationId:identity,maintenanceE
  if(!['SIGNED_BASELINED','OBSERVED_CLOSED'].includes(v.phase)&&(v.signedBaselinePin||v.signedObservationPin)
   ||v.phase==='SIGNED_BASELINED'&&(!v.signedBaselinePin||v.signedObservationPin)
   ||v.phase==='OBSERVED_CLOSED'&&(v.signedBaselinePin||v.signedObservationPin||v.observations?.signedProofDigest)
-   &&(!v.signedBaselinePin||!v.signedObservationPin||!v.readBaseline||!v.readObservation||!v.writeBaselinePin||!v.writeObservationPin||!v.observations?.signedProofDigest))
+   &&(!v.signedBaselinePin||!v.signedObservationPin||!v.readBaseline||!v.readObservation||!v.writeBaselinePin||!v.writeObservationPin||!v.observations?.signedProofDigest||!v.observations?.signingDigest))
   ctx.addIssue({code:'custom',message:'Invalid signed-upload evidence phase'});
  if(v.phase==='OBSERVED_CLOSED'&&(v.readBaseline||v.readObservation)){
   try{

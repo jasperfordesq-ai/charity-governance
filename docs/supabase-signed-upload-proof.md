@@ -2,8 +2,8 @@
 
 17 October 2026. `StorageSignedUploadIssuer` and `SupabaseSignedUploadProof`
 implement cryptographic association and an active positive/negative test of one
-issued synthetic signed-upload capability. They are internal components, not
-called by maintenance protocol5. No public command, route, job, real provider
+issued synthetic signed-upload capability. They are internal components required
+by [maintenance protocol6](durable-signed-upload-maintenance.md). No public command, route, job, real provider
 key operation or deployment activates them.
 
 ## Reviewed profile

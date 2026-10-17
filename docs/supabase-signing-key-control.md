@@ -2,9 +2,9 @@
 
 17 October 2026. `SupabaseSigningKeyControl` is an internal provider primitive
 for revoking an exact reviewed set of **previously used** signing keys. It is
-not called by current maintenance protocol5 and has no public route, command or
-job. Real activation requires durable attempt/capability-evidence integration
-and appropriate provider authority. No actual provider key was accessed or changed.
+called by [maintenance protocol6](durable-signed-upload-maintenance.md) and has
+no public route, command or job. Real activation requires actual provider/issuer
+association evidence and appropriate provider authority. No actual provider key was accessed or changed.
 
 ## Scope and decision
 

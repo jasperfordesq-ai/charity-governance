@@ -167,6 +167,10 @@ export class SupabaseSigningKeyControl {
       ...this.config,
     });
   }
+  signedUploadScope() {
+    return { installationId: this.config.installationId, projectRef: this.config.projectRef,
+      keys: this.config.keys.map(k => ({...k})) };
+  }
   private async work<T>(run: (budget: Budget) => Promise<T>) {
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), 180000);

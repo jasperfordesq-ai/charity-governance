@@ -63,6 +63,7 @@ const configuration = z
         (k) => k.split(':')[4] === c.accountId,
       ),
   );
+export const signedUploadVaultStorageSchema = configuration.innerType().omit({maintenance:true,probeDigest:true}).refine(c => c.dataKeyArn !== c.storageKeyArn && [c.dataKeyArn,c.storageKeyArn].every(k => k.split(':')[4] === c.accountId));
 const contextSchema = z
   .object({
     purpose: z.literal('charitypilot-signed-upload-credential-v1'),

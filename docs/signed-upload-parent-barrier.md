@@ -1,8 +1,9 @@
 # Signed-upload parent barrier contract
 
-17 October 2026. The independent installation head now supports a
+17 October 2026. [Default protocol6 integration](durable-signed-upload-maintenance.md)
+now requires this barrier before shutdown. The independent installation head supports a
 `SIGNED_BASELINED` transition. This is the required head primitive for signed
-workflow integration; default coordinator protocol5 does not enter it yet.
+workflow integration.
 There is no new route, job, provider dispatch, credential grant or deployment.
 
 ## State and retained evidence
@@ -48,10 +49,9 @@ and expected encrypted-credential target. It does not decrypt a token, validate
 a signature anew or make a provider request; active refusal verification retains
 those separate checks.
 
-Before activation, coordinator integration must bind signed factory/issuer
-configuration into a new plan version, require this barrier before shutdown,
-retain the actual report pin/digest at completion, and inspect only original
-signed evidence without issuing active signed uploads. Actual supplier
+Protocol6 now binds signed factory/issuer configuration into the plan, requires
+this barrier before shutdown, retains the actual report pin/digest at completion
+and inspects only original signed evidence without issuing active signed uploads. Actual supplier
 issuer/material/hosted-release association is still required: Auth metadata
 revocation is not sufficient evidence of Storage URL-token revocation.
 

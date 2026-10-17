@@ -4,7 +4,7 @@
 baseline and report as separate version-pinned artifacts. It composes with the
 [signed probe](supabase-signed-upload-proof.md) and
 [encrypted credential vault](signed-upload-credential-vault.md). It is an internal
-component; default maintenance protocol5 does not call it yet.
+component required by [default protocol6](durable-signed-upload-maintenance.md).
 
 ## Publication and inspection
 
@@ -76,8 +76,9 @@ original token, published baseline, saved-baseline refusal, published report,
 fresh read-only inspection. These are fresh component instances, not an OS-process
 restart, real cloud provider or physical-host-loss test.
 
-Next integration must add original signed artifact pins to the parent barriers
-and establish the actual supported issuer promotion/revocation mechanism. Auth
+Protocol6 now retains original signed artifact pins at the parent barriers and
+uses exact reviewed previous-key revocation; standby creation/promotion remains
+unsupported and actual supplier mechanism association still requires proof. Auth
 key metadata is not proof of the Storage URL-signing issuer. Actual issuer/key/
 hosted-release association, resumable/S3 and in-flight/control-plane exclusion,
 common capture, current preservation/disposal authority, full application restore

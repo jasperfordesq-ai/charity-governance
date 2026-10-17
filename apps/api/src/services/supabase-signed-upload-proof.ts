@@ -29,7 +29,7 @@ const sha = z
     .uuid()
     .refine((v) => v === v.toLowerCase());
 const record = z.object({ id: uuid, sha256: sha }).strict();
-const configuration = z
+const configurationObject = z
   .object({
     installationId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
     projectRef: z
@@ -49,7 +49,16 @@ const configuration = z
     previousIssuer: storageSignedUploadIssuerSchema,
     currentIssuer: storageSignedUploadIssuerSchema,
   })
-  .strict()
+  .strict();
+const configuration = configurationObject
+  .refine(
+    (c) =>
+      c.control.id !== c.gateway.id &&
+      c.previousIssuer.fingerprint !== c.currentIssuer.fingerprint &&
+      c.previousIssuer.providerKeyId !== c.currentIssuer.providerKeyId &&
+      c.previousIssuer.tokenKid !== c.currentIssuer.tokenKid,
+  );
+export const supabaseSignedUploadRegistrySchema = configurationObject.omit({maintenance:true})
   .refine(
     (c) =>
       c.control.id !== c.gateway.id &&

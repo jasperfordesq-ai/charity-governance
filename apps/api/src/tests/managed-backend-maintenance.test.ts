@@ -7,6 +7,7 @@ import {S3ManagedMaintenanceControl} from '../services/managed-maintenance-contr
 import {z} from 'zod';
 import {ManagedBackendMaintenance} from '../services/managed-backend-maintenance.js';
 import {S3ManagedWriteEvidence,type ManagedWriteEvidencePin} from '../services/managed-write-evidence.js';
+import {managedSignedFixture} from './fixtures/managed-signed-upload.js';
 import type {SignedUploadEvidencePin} from '../services/signed-upload-evidence.js';
 
 const config={installationId:'synthetic-installation',bucket:'synthetic-maintenance',accountId:'123456789012',
@@ -74,16 +75,17 @@ function fixture(){
   probe:{baseline:()=>writeOperations.baseline(maintenance),verifyWriteRefusal:writeOperations.verifyWriteRefusal,
    assertBaseline:(raw:unknown)=>raw as {body:string;sha256:string},assertObservation:(_raw:unknown,_pin:string)=>{}},
   evidence:new S3ManagedWriteEvidence({...config,maintenance,probeRegistryDigest:hash('write-registry')},credentials,client)})};
- const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never,write as never);
+ const signedFixture=managedSignedFixture(config,client,calls),signed=signedFixture.factory();
+ const coordinator=new ManagedBackendMaintenance(operation,provider as never,database as never,store,storage as never,proof as never,write as never,signed);
  value.planDigest=coordinator.planDigest();
- return{store,provider,database,storage,proof,write,writeOperations,artifacts,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
+ return{store,provider,database,storage,proof,write,signed,signedFixture,writeOperations,artifacts,coordinator,calls,metadata,get value(){return value;},set value(next){value=next;},
   get puts(){return puts;},get reads(){return reads;},setFault:(next:typeof fault)=>{fault=next;},
   commit:(command:PutObjectCommand)=>{value=JSON.parse(String(command.input.Body));version++;return metadata();}};
 }
 
 test('managed shutdown records an independent attempt before provider/database mutation and never repeats it',async()=>{
  const f=fixture();const result=await f.coordinator.close();
- assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,4);
+ assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,5);
  assert.equal(result.databasePasswordCredentialsInvalidated,true);
  assert.equal(result.storageAccessPathsObservedClosed,true);assert.ok(f.value.observations);
  assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(f.value.readBaseline);assert.ok(f.value.readObservation);
@@ -111,7 +113,7 @@ test('lost durable baseline acknowledgement blocks all shutdown mutations and pr
  assert.ok(f.value.readBaseline);assert.equal(f.value.observations,null);
  assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('storage-close'),false);
  f.setFault(undefined);const before=f.puts;
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never);
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory());
  await assert.rejects(fresh.close());assert.equal(f.puts,before);
  assert.equal(f.calls.filter(x=>x==='read-baseline').length,1);
 });
@@ -122,8 +124,9 @@ test('lost independent acquisition acknowledgement never dispatches, even after 
  });
  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'ATTEMPTED');
  f.setFault(undefined);
- const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never);
+ const fresh=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory());
  await assert.rejects(fresh.close());assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('database-close'),false);
+ f.signedFixture.forceRevoked(); // explicit fixture resolution, not inspection or a resumed command.
  const observed=await fresh.inspect();assert.equal(observed.phase,'ATTEMPTED');assert.equal(observed.recordedObservations,null);
 });
 
@@ -145,7 +148,7 @@ test('provider/database/recording failures retain attempt and forbid repeat or a
    }
   });
   await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE')&&error.cause===undefined);
-  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'WRITE_BASELINED');
+  assert.equal(f.value.phase,stage==='record'?'OBSERVED_CLOSED':'SIGNED_BASELINED');
   f.setFault(undefined);const mutations=f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length;
   await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(s=>['put','suspend','database-close','password-invalidate','storage-close'].includes(s)).length,mutations);
   if(stage==='suspend')assert.equal(f.calls.includes('database-close'),false);
@@ -164,10 +167,10 @@ test('maintenance plan binds copied installation/source/epoch and all component 
   if(stage==='storage')f.storage.configurationDigest=()=>hash('different-storage');
   if(stage==='proof')f.proof.configurationDigest=()=>hash('different-proof');
   if(stage==='write')f.write.configurationDigest=()=>hash('different-write');
-  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never).close());
+  await assert.rejects(new ManagedBackendMaintenance(changed,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory()).close());
   assert.equal(f.puts,0);assert.equal(f.calls.includes('suspend'),false);
  }
- const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never);
+ const f=fixture(),input={...operation},coordinator=new ManagedBackendMaintenance(input,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory());
  const before=coordinator.planDigest();input.sourceSha='2'.repeat(40);assert.equal(coordinator.planDigest(),before);
 });
 
@@ -214,7 +217,7 @@ test('maintenance SDK has no ambient endpoint/credential fallback and sanitises 
 });
 
 test('two concurrent maintenance callers cannot both dispatch from one READY record',async()=>{
- const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never);
+ const f=fixture(),other=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory());
  const outcomes=await Promise.allSettled([f.coordinator.close(),other.close()]);
  assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);
  assert.equal(f.calls.filter(c=>c==='suspend').length,1);assert.equal(f.calls.filter(c=>c==='database-close').length,1);
@@ -270,9 +273,9 @@ test('failed baseline never shuts writers; later inspection cannot invent a miss
  const first=fixture();first.proof.baseline=async()=>{throw new Error('synthetic baseline unavailable');};
  await assert.rejects(first.coordinator.close());assert.equal(first.value.phase,'ATTEMPTED');assert.equal(first.calls.includes('suspend'),false);
  const f=fixture(),verify=f.proof.verifyReadRefusal;f.proof.verifyReadRefusal=async()=>{throw new Error('synthetic refusal observation lost');};
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'WRITE_BASELINED');assert.equal(f.value.readObservation,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_BASELINED');assert.equal(f.value.readObservation,undefined);
  f.proof.verifyReadRefusal=verify;const before=f.puts,baseline=f.value.readBaseline?.sha256;
- const inspected=await f.coordinator.inspect();assert.equal(inspected.phase,'WRITE_BASELINED');assert.equal(inspected.recordedReadObservation,null);
+ const inspected=await f.coordinator.inspect();assert.equal(inspected.phase,'SIGNED_BASELINED');assert.equal(inspected.recordedReadObservation,null);
  assert.ok(inspected.freshReadObservation);assert.equal(f.puts,before);assert.equal(f.value.readBaseline?.sha256,baseline);
 });
 test('fifty read refusals fit the bounded independent head and oversized updates cannot corrupt the saved baseline',async()=>{
@@ -323,7 +326,7 @@ test('write publication or head ACK loss never dispatches shutdown and cannot be
   });
   await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,stage==='head'?'WRITE_BASELINED':'BASELINED');
   assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('storage-close'),false);
-  f.setFault(undefined);const before=f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length;
+  f.setFault(undefined);f.signedFixture.forceRevoked();const before=f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length;
   const observed=await f.coordinator.inspect();assert.equal(observed.recordedStandardWriteRefusalsObserved,false);
   assert.equal(observed.freshStandardWriteRefusalsObserved,false);await assert.rejects(f.coordinator.close());
   assert.equal(f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length,before);
@@ -336,7 +339,7 @@ test('write-report ACK loss stays consumed and inspection does not run active wr
    f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'committed-report'});throw new Error('PRIVATE report ACK lost');
   }
  });
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'WRITE_BASELINED');assert.equal(f.value.writeObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_BASELINED');assert.equal(f.value.writeObservationPin,undefined);
  f.setFault(undefined);const mutations=f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length;
  const observed=await f.coordinator.inspect();assert.equal(observed.recordedWriteObservation,null);assert.equal(observed.freshStandardWriteRefusalsObserved,false);
  assert.equal(f.calls.filter(c=>['write-baseline','write-proof','artifact-put','put'].includes(c)).length,mutations);
@@ -352,7 +355,7 @@ test('failed active write baseline or refusal cannot bypass its durable barrier'
  const first=fixture();first.writeOperations.baseline=async()=>{throw new Error('synthetic write baseline failure');};
  await assert.rejects(first.coordinator.close());assert.equal(first.value.phase,'BASELINED');assert.equal(first.calls.includes('suspend'),false);
  const f=fixture();f.writeOperations.verifyWriteRefusal=async()=>{throw new Error('synthetic refusal failure');};
- await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'WRITE_BASELINED');assert.ok(f.value.writeBaselinePin);assert.equal(f.value.writeObservationPin,undefined);
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_BASELINED');assert.ok(f.value.writeBaselinePin);assert.equal(f.value.writeObservationPin,undefined);
  const before=f.calls.filter(c=>c==='write-proof').length;const observed=await f.coordinator.inspect();assert.equal(observed.recordedWriteObservation,null);
  assert.equal(f.calls.filter(c=>c==='write-proof').length,before);
 });
@@ -365,7 +368,7 @@ async function prepareSignedHead(){
  const write=await f.store.recordWriteBaselinePin(binding.attemptId,read.revision,writePin);
  const signedPin={kind:'BASELINE' as const,versionId:'synthetic-signed-version',sha256:hash('signed-baseline'),byteLength:1024};
  const report=await f.proof.verifyReadRefusal(baseline.body,baseline.sha256);
- const observations={servicesDigest:hash('services'),databaseDigest:hash('database'),storageDigest:hash('storage'),readProofDigest:report.observationDigest,writeProofDigest:hash('write-report'),signedProofDigest:hash('signed-report'),observedAt:new Date().toISOString()};
+ const observations={servicesDigest:hash('services'),databaseDigest:hash('database'),storageDigest:hash('storage'),readProofDigest:report.observationDigest,writeProofDigest:hash('write-report'),signedProofDigest:hash('signed-report'),signingDigest:hash('signing-registry'),observedAt:new Date().toISOString()};
  const writeReportPin={...writePin,kind:'OBSERVATION' as const,sha256:hash('write-report')};
  const signedReportPin={...signedPin,kind:'OBSERVATION' as const,sha256:hash('signed-report')};
  return{f,binding,write,signedPin,report,observations,writeReportPin,signedReportPin};
@@ -420,4 +423,61 @@ test('signed evidence cannot appear in earlier phases or vanish from a completed
  const ready=await f.store.recordSignedBaselinePin(binding.attemptId,write.revision,signedPin);
  await f.store.recordObservedClosed(binding.attemptId,ready.revision,observations,report,writeReportPin,signedReportPin);
  f.value={...f.value,signedObservationPin:undefined};await assert.rejects(f.store.observe());
+});
+
+test('signed credential baseline and head ACK loss never starts shutdown or resumes the consumed attempt',async()=>{
+ for(const stage of ['credential','baseline','head'] as const){
+  const f=fixture();f.setFault(command=>{
+   if(!(command instanceof PutObjectCommand))return;
+   const suffix=stage==='credential'?'signed-upload-credential.json':'signed-baseline.json';
+   if(stage!=='head'&&command.input.Key!.endsWith(suffix)){
+    f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'committed-unknown-signed'});throw new Error('synthetic lost signed artifact ACK');
+   }
+   if(stage==='head'&&command.input.Key!.endsWith('/control.json')&&JSON.parse(String(command.input.Body)).phase==='SIGNED_BASELINED'){
+    f.commit(command);throw new Error('synthetic lost signed baseline head ACK');
+   }
+  });
+  await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,stage==='head'?'SIGNED_BASELINED':'WRITE_BASELINED');
+  assert.equal(f.calls.includes('suspend'),false);assert.equal(f.calls.includes('signed-management-PATCH'),false);
+  f.setFault(undefined);f.signedFixture.forceRevoked();
+  const before=f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length;
+  await assert.rejects(f.coordinator.close());const observed=await f.coordinator.inspect();
+  assert.equal(observed.recordedSignedObservation,null);assert.equal(observed.freshSignedUploadRefusalObserved,false);
+  assert.equal(f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length,before);
+ }
+});
+
+test('lost signed report acknowledgement remains missing and fresh inspection never decrypts or repeats active signed probes',async()=>{
+ const f=fixture();f.setFault(command=>{
+  if(command instanceof PutObjectCommand&&command.input.Key!.endsWith('signed-observation.json')){
+   f.artifacts.set(command.input.Key!,{body:String(command.input.Body),version:'signed-report-lost-ack'});throw new Error('synthetic lost signed report ACK');
+  }
+ });
+ await assert.rejects(f.coordinator.close());assert.equal(f.value.phase,'SIGNED_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ f.setFault(undefined);const before=f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length;
+ const observed=await f.coordinator.inspect();assert.equal(observed.recordedSignedObservation,null);assert.equal(observed.recordedTestedSignedUploadRefusalObserved,false);
+ assert.equal(f.calls.filter(c=>c==='put'||c==='artifact-put'||c.startsWith('signed-kms-')||c==='signed-storage-POST'||c==='signed-storage-PUT').length,before);
+});
+
+test('management key revocation cannot substitute for an actual original-token refusal',async()=>{
+ const f=fixture();f.signedFixture.acceptOld=true;await assert.rejects(f.coordinator.close());
+ assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'SIGNED_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ const mutations=f.calls.filter(c=>c==='signed-storage-PUT').length,observed=await f.coordinator.inspect();
+ assert.equal(observed.recordedSignedObservation,null);assert.equal(observed.signedCapabilitiesRevoked,false);
+ assert.equal(f.calls.filter(c=>c==='signed-storage-PUT').length,mutations);
+});
+
+test('protocol5 unsigned plan cannot dispatch the newly required signed workflow',async()=>{
+ const f=fixture();f.value={...f.value,planDigest:hash(JSON.stringify({format:5,...operation,
+  databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',readProofPolicy:'INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1',writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',
+  provider:f.provider.configurationDigest(),database:f.database.configurationDigest(),storage:f.storage.configurationDigest(),readProof:f.proof.configurationDigest(),writeProof:f.write.configurationDigest()}))};
+ await assert.rejects(f.coordinator.close());assert.equal(f.puts,0);assert.equal(f.calls.some(c=>c.startsWith('signed-storage-')),false);
+});
+
+test('lost signing-key acknowledgement cannot be promoted into a completed original-token test',async()=>{
+ const f=fixture();f.signedFixture.loseRevocationAck=true;
+ await assert.rejects(f.coordinator.close());assert.equal(f.signedFixture.revoked,true);assert.equal(f.value.phase,'SIGNED_BASELINED');assert.equal(f.value.signedObservationPin,undefined);
+ const mutations=f.calls.filter(c=>c==='signed-management-PATCH'||c==='signed-storage-PUT'||c.startsWith('signed-kms-')).length;
+ const observed=await f.coordinator.inspect();assert.equal(observed.recordedTestedSignedUploadRefusalObserved,false);
+ await assert.rejects(f.coordinator.close());assert.equal(f.calls.filter(c=>c==='signed-management-PATCH'||c==='signed-storage-PUT'||c.startsWith('signed-kms-')).length,mutations);
 });

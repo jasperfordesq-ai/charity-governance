@@ -2,8 +2,8 @@
 
 17 October 2026. `S3SignedUploadCredentialVault` implements encrypted retention
 and controlled use of the original token needed by the
-[signed-upload probe](supabase-signed-upload-proof.md). It is internal and not
-called by default maintenance protocol5. No real AWS resource, permission or
+[signed-upload probe](supabase-signed-upload-proof.md). It is internal and required by
+[default maintenance protocol6](durable-signed-upload-maintenance.md). No real AWS resource, permission or
 credential was provisioned or used for these model tests.
 
 ## Binding and encryption
@@ -96,9 +96,9 @@ const report = await freshVault.withCredential(
 ```
 
 The [signed evidence store](signed-upload-evidence-custody.md) now provides
-separate original baseline/report publication and exact-version readback. Parent
-head pin barriers and matching issuer promotion/revocation dispatch are still
-required. Actual management-key/release
+separate original baseline/report publication and exact-version readback. Protocol6 now requires parent
+head pin barriers and exact reviewed previous-key revocation. Standby creation/
+promotion remains unsupported; actual provider association still needs proof. Actual management-key/release
 association, resumable/S3/in-flight/control-plane/capture-key exclusion, common
 capture, current authority, full restore and provider/host-loss/reopening proof
 remain open. Encrypted retention does not authorise use, extend token expiry,
