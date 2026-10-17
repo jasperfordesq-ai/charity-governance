@@ -73,6 +73,9 @@ source-bound PostgreSQL dumps in authenticated chunks and opens them into
 quarantine. Its native local restore passes; the full-platform CI branch must
 be checked on its exact commit. Independent database/index publication and
 common database/object capture are still open.
+The [database S3 candidate adapter](database-backup-storage.md) now supplies
+multipart/full-readback transport under synthetic tests; independent index and
+complete-set publication remain open.
 
 Tests cover complete reconciliation, shared source objects, explicit empty
 inventories, limits, canonical ordering, mutation during async sealing, version

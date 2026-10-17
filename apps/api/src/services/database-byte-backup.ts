@@ -39,6 +39,15 @@ export function databaseBackupContext(raw: unknown): DatabaseBackupContext {
     throw refused();
   }
 }
+export function databaseBackupArchiveBounds(raw: unknown) {
+  const context = databaseBackupContext(raw);
+  const base =
+    context.byteLength +
+    MAGIC.length +
+    4 +
+    Math.ceil(context.byteLength / MAX_CHUNK_BYTES) * 20;
+  return { minimumBytes: base + 1, maximumBytes: base + MAX_HEADER_BYTES };
+}
 export interface DatabaseBackupKeys {
   generate(
     context: DatabaseBackupContext,
@@ -321,6 +330,97 @@ class ArchiveReader {
     }
   }
 }
+async function archiveHeader(
+  context: DatabaseBackupContext,
+  reader: ArchiveReader,
+) {
+  const magic = await reader.exact(MAGIC.length),
+    length = await reader.exact(4);
+  if (!magic.equals(MAGIC)) throw refused();
+  const headerLength = length.readUInt32BE();
+  if (headerLength < 1 || headerLength > MAX_HEADER_BYTES) throw refused();
+  const encoded = await reader.exact(headerLength);
+  const text = new TextDecoder('utf-8', {
+    fatal: true,
+    ignoreBOM: true,
+  }).decode(encoded);
+  const header = headerSchema.parse(JSON.parse(text));
+  if (
+    JSON.stringify(header) !== text ||
+    JSON.stringify(header.context) !== JSON.stringify(context)
+  )
+    throw refused();
+  return { header, prefix: Buffer.concat([magic, length, encoded]) };
+}
+/** Framing/scope and trusted external whole-archive digest only. No KMS unwrap,
+ * GCM verification, source-capture authentication or restoration permission.
+ * The encoded source must come from a successful sealer or trusted manifest. */
+export async function inspectDatabaseByteBackupArchive(
+  raw: unknown,
+  source: Readable,
+  destination: Writable,
+  expectedSha256: string,
+  expectedByteLength: number,
+  signal?: AbortSignal,
+) {
+  const io = transfer(source, destination, signal);
+  try {
+    io.check();
+    const context = databaseBackupContext(raw),
+      bounds = databaseBackupArchiveBounds(context);
+    sha.parse(expectedSha256);
+    if (
+      !Number.isSafeInteger(expectedByteLength) ||
+      expectedByteLength < bounds.minimumBytes ||
+      expectedByteLength > bounds.maximumBytes
+    )
+      throw refused();
+    const reader = new ArchiveReader(source, expectedByteLength, io.check),
+      { prefix } = await archiveHeader(context, reader);
+    if (
+      prefix.length +
+        context.byteLength +
+        Math.ceil(context.byteLength / MAX_CHUNK_BYTES) * 20 !==
+      expectedByteLength
+    )
+      throw refused();
+    const inspect = async function* () {
+      yield prefix;
+      let remaining = context.byteLength;
+      while (remaining) {
+        io.check();
+        const length = await reader.exact(4),
+          size = length.readUInt32BE();
+        if (size !== Math.min(MAX_CHUNK_BYTES, remaining)) throw refused();
+        yield length;
+        yield await reader.exact(size);
+        yield await reader.exact(16);
+        remaining -= size;
+      }
+      await reader.end();
+      if (
+        reader.count !== expectedByteLength ||
+        reader.hash.digest('hex') !== expectedSha256
+      )
+        throw refused();
+    };
+    await pipeline(
+      Readable.from(inspect(), { objectMode: false }),
+      destination,
+      { signal: io.signal },
+    );
+    io.check();
+    return {
+      sha256: expectedSha256,
+      byteLength: expectedByteLength,
+      databaseSha256: context.databaseSha256,
+    };
+  } catch {
+    throw refused();
+  } finally {
+    io.close();
+  }
+}
 /** Streams plaintext only into an owned isolated quarantine sink. Success needs
  * the trusted external archive SHA, exact header scope, GCM authentication and
  * plaintext SHA/length/custom-dump signature. Never pass it a live restore pipe. */
@@ -340,34 +440,14 @@ export async function openDatabaseByteBackupToQuarantine(
     sha.parse(expectedSha256);
     const reader = new ArchiveReader(
       source,
-      context.byteLength +
-        MAGIC.length +
-        4 +
-        MAX_HEADER_BYTES +
-        Math.ceil(context.byteLength / MAX_CHUNK_BYTES) * 20,
+      databaseBackupArchiveBounds(context).maximumBytes,
       io.check,
     );
-    const magic = await reader.exact(MAGIC.length),
-      length = await reader.exact(4);
-    if (!magic.equals(MAGIC)) throw refused();
-    const headerLength = length.readUInt32BE();
-    if (headerLength < 1 || headerLength > MAX_HEADER_BYTES) throw refused();
-    const encoded = await reader.exact(headerLength);
-    const text = new TextDecoder('utf-8', {
-      fatal: true,
-      ignoreBOM: true,
-    }).decode(encoded);
-    const header = headerSchema.parse(JSON.parse(text));
-    if (
-      JSON.stringify(header) !== text ||
-      JSON.stringify(header.context) !== JSON.stringify(context)
-    )
-      throw refused();
+    const { header, prefix } = await archiveHeader(context, reader);
     material = await keys.unwrap(header.wrappedKey, context);
     io.check();
     const key = ownedKey(material, context),
       noncePrefix = Buffer.from(header.noncePrefix, 'base64');
-    const prefix = Buffer.concat([magic, length, encoded]);
     const plaintext = createHash('sha256'),
       signature = dumpMagic();
     let count = 0;

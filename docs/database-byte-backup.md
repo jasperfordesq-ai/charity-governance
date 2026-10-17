@@ -100,6 +100,11 @@ run; inspect the exact commit's hosted step before claiming that result.
 
 ## Remaining integration
 
+The [S3 candidate adapter](database-backup-storage.md) now streams multipart
+archives with conditional completion and full exact-version readback. Its
+synthetic SDK tests cover unknown completion and fresh-client recovery. It is
+not activated against a real account or complete-set producer.
+
 No actual KMS account call, S3 database/index publication or complete managed
 capture job is activated. Database/object capture still needs verified writer
 closure and a common consistency boundary; the database snapshot alone cannot

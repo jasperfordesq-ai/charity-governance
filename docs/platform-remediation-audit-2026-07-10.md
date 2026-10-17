@@ -1,5 +1,14 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October database S3 candidates:** The new explicit-scope multipart adapter
+> checks part/composite/full hashes, conditionally completes one fixed key and
+> requires full exact-version readback. Signed synthetic SDK tests cover lost
+> completion/fresh-client recovery, substitution and deadlines. The prior637
+> hosted full source-bound encrypted PostgreSQL restore step passed. No actual
+> AWS storage or complete-set publication is activated; independent index/root,
+> common capture/current authority and provider/host-loss/reopening remain open.
+> See [database storage](database-backup-storage.md).
+
 > **17 October encrypted database archive:** The new bounded chunk codec and
 > purpose-specific KMS adapter preserve exact source/capture/dump scope and open
 > only to quarantine. A real synthetic PostgreSQL dump was encrypted, its local
