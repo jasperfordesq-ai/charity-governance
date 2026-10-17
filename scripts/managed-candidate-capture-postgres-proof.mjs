@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {PrismaClient} from '@prisma/client';
-import {S3Client,PutObjectCommand,GetObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client,PutObjectCommand,GetObjectCommand,ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {KMSClient,GenerateDataKeyCommand,DecryptCommand} from '@aws-sdk/client-kms';
 import {ManagedStorageMetadataWindow} from '../apps/api/dist/services/managed-storage-metadata-window.js';
 import {SupabaseRecoveryCapture} from '../apps/api/dist/services/supabase-recovery-capture.js';
@@ -27,12 +27,22 @@ export async function proveManagedCandidateCapture({coordinator,control,admin,co
   const bytes=Buffer.from(key);plaintext.push(bytes);
   return{Plaintext:bytes,KeyId:dataKeyArn,EncryptionAlgorithm:'SYMMETRIC_DEFAULT',CiphertextBlob:Buffer.from('synthetic-wrapped-key')};
  };
- const metadata=row=>({VersionId:row.version,ServerSideEncryption:'aws:kms',SSEKMSKeyId:row.kmsKeyArn,
+ const metadata=row=>({VersionId:row.version,ETag:'"'+row.version+'"',ServerSideEncryption:'aws:kms',SSEKMSKeyId:row.kmsKeyArn,
   ChecksumSHA256:Buffer.from(sha(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT'});
  s3.send=async command=>{
   assert.equal(command.input.ExpectedBucketOwner,'123456789012');
   const journal=command.input.Bucket===journalStorage.bucket;
   assert.ok(journal||command.input.Bucket==='synthetic-candidate-custody');
+  if(command instanceof ListObjectsV2Command){
+   assert.equal(journal,true);assert.equal(command.input.MaxKeys,1000);assert.equal(command.input.Delimiter,undefined);
+   const rows=[...objects].filter(([k])=>k.startsWith(journalStorage.bucket+'/'+command.input.Prefix))
+    .sort(([a],[b])=>a<b?-1:1);
+   const offset=command.input.ContinuationToken?Number(command.input.ContinuationToken):0,page=rows.slice(offset,offset+2);
+   return{Name:journalStorage.bucket,Prefix:command.input.Prefix,MaxKeys:1000,KeyCount:page.length,
+    ContinuationToken:command.input.ContinuationToken,IsTruncated:offset+2<rows.length,
+    ...(offset+2<rows.length?{NextContinuationToken:String(offset+2)}:{}),
+    Contents:page.map(([k,row])=>({Key:k.slice(journalStorage.bucket.length+1),Size:Buffer.byteLength(row.body),ETag:metadata(row).ETag}))};
+  }
   const keyName=command.input.Bucket+'/'+command.input.Key;
   if(command instanceof PutObjectCommand){
    assert.equal(command.input.IfNoneMatch,'*');if(objects.has(keyName))throw new Error('synthetic conditional conflict');puts++;
@@ -124,6 +134,20 @@ export async function proveManagedCandidateCapture({coordinator,control,admin,co
    assert.equal((await control.observe()).revision,original.revision);
   }
   assert.equal(dataPuts,4);assert.equal(journalPuts,7);assert.equal(puts,11);assert.equal(receipts.length,3);assert.ok(plaintext.every(p=>p.every(v=>v===0)));
+  await holder.$disconnect();
+  const readsOnly=new S3Client({region:'eu-west-1',credentials}),send=s3.send.bind(s3),beforeWrites=puts,beforeKeys=plaintext.length;
+  readsOnly.send=async(command,options)=>{assert.ok(command instanceof GetObjectCommand||command instanceof ListObjectsV2Command);return send(command,options);};
+  try{
+   const fresh=new ManagedCandidateCaptureJournal(journalStorage,credentials,readsOnly);
+   const catalogue=await fresh.discoverCandidates({attemptId:original.value.attemptId,planDigest:coordinator.planDigest(),
+    sourceSha:operation.sourceSha,maintenanceEpoch:operation.maintenanceEpoch,controlRevision:original.revision});
+   assert.equal(catalogue.records.length,5);assert.equal(catalogue.records.filter(r=>r.reportStatus==='SAVED_REPORT_OBSERVED').length,2);
+   assert.equal(catalogue.records.filter(r=>r.reportStatus==='NOT_LISTED_AT_BOUNDARY').length,3);
+   assert.equal(catalogue.historyCompletenessVerified,false);assert.equal(catalogue.savedObservationAuthorizesExecution,false);
+   assert.equal(catalogue.sourceHostLossProven,false);assert.equal(catalogue.actionAuthorized,false);
+   assert.equal(puts,beforeWrites);assert.equal(plaintext.length,beforeKeys);
+   console.log('PASS native candidate bootstrap: source DB holder disconnected, fresh GET/LIST-only client learns five unknown IDs and two reports without capture, KMS or writes');
+  }finally{readsOnly.destroy();}
   console.log('PASS native parent candidate composition: actual closed attempt + TLS metadata window + file capture + AES-GCM/KMS and conditional exact-version SDK custody; byte drift and lost data/request/report ACKs preserve quarantine; fresh discovery does not replay or admit');
  }finally{key.fill(0);await holder.$disconnect();kms.destroy();s3.destroy();}
 }

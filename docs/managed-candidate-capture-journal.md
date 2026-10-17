@@ -66,7 +66,8 @@ A new journal client with the separately trusted original binding can:
 - inspect an exact report pin paired with its original request pin, or discover
   the report and then validate that same exact version and request pairing.
 
-Discovery performs GETs only. It does not list, create keys, decrypt document
+Single-candidate discovery above performs GETs only; unknown-ID catalogue discovery
+now also uses scoped LIST through [the bootstrap catalogue](managed-candidate-catalogue.md). It does not list, create keys, decrypt document
 contents, repeat provider probes/capture, publish, or rewrite records. Missing,
 forbidden, malformed or ambiguous reads remain unresolved; an absent report never
 proves capture did not run. REQUESTED_ONLY describes the request record, not a
@@ -93,7 +94,7 @@ and S3 transports remain synthetic. No real IAM, independent manifest admission,
 actual database dump or source-host-off recovery is claimed.
 
 The full report and original request are now retained by the synthetic custody
-workflow. Still required: an independent bootstrap/catalogue when the original candidate binding is lost;
+workflow. Still required: real provider-backed discovery and a separately trusted multi-epoch/bootstrap catalogue;
 complete DB+file capture under the supported provider boundary; non-SQL/in-flight/issuer/control-plane writer accounting; file receipt
 and index/root linkage; independently current preservation/disposal authority;
 whole-application quarantine/replacement, identities/secrets/sessions/repeated

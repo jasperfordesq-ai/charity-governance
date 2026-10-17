@@ -1,3 +1,13 @@
+## 17 October: unknown-ID read-only candidate bootstrap
+
+The [candidate bootstrap catalogue](managed-candidate-catalogue.md) learns saved
+candidate IDs from the exact original attempt namespace using only trusted
+storage/source/epoch/head bootstrap. It checks pages, paths and exact record pins,
+repeats the listing and never turns a saved observation into execution/admission.
+Native source-holder-disconnected composition uses a fresh GET/LIST-only synthetic
+client. Real provider custody, full history, multi-epoch/current authority and
+actual source-host-off recovery remain unproven; full goal remains active.
+
 ## 17 October: mandatory durable candidate journal
 
 Read [candidate request/report custody](managed-candidate-capture-journal.md).

@@ -1,5 +1,6 @@
+import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.js';
 import {z} from 'zod';
-import type {S3Client,S3ClientConfig} from '@aws-sdk/client-s3';
+import {S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
 import {candidateBindingSchema,candidatePinSchema,candidateHash,candidateRequestArtifact,parseCandidateRequest,
  candidateReportArtifact,parseCandidateReport,assertCandidatePair} from './managed-candidate-capture-contract.js';
@@ -13,11 +14,18 @@ type Binding=z.infer<typeof candidateBindingSchema>;
  * retries a write, fills a missing result or makes a live recovery decision. */
 export class ManagedCandidateCaptureJournal {
  private readonly storage:z.infer<typeof storageSchema>;
+ private readonly client:S3Client;
  private readonly sessions=new Map<string,{bindingDigest:string,session:CandidateSession}>();
- constructor(raw:unknown,private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client?:S3Client){
+ constructor(raw:unknown,private readonly credentials:NonNullable<S3ClientConfig['credentials']>,client?:S3Client){
   this.storage=storageSchema.parse(raw);if(!credentials)throw failure();
+  this.client=client??new S3Client({region:'eu-west-1',endpoint:'https://s3.eu-west-1.amazonaws.com',credentials,
+   maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:15000,throwOnRequestTimeout:true}});
  }
  configurationDigest(){return candidateHash(JSON.stringify({format:1,policy:'IMMUTABLE_CANDIDATE_REQUEST_REPORT_V1',...this.storage}));}
+ discoverCandidates(raw:unknown,signal?:AbortSignal){
+  return discoverManagedCandidateCatalogue({storage:this.storage,configurationDigest:this.configurationDigest(),client:this.client,
+   forCandidate:binding=>this.forCandidate(binding)},raw,signal);
+ }
  forCandidate(raw:unknown){
   const binding=candidateBindingSchema.parse(raw),bindingDigest=candidateHash(JSON.stringify(binding));
   if(binding.installationId!==this.storage.installationId||binding.journalConfigurationDigest!==this.configurationDigest())throw failure();
