@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "test": "turbo test && npm run test:production-check && npm run test:personal-server && npm run test:local-docker",
+    "test": "npm run test:dependency-advisories && turbo test && npm run test:production-check && npm run test:personal-server && npm run test:local-docker",
     "test:production-linux-database-images": "node --test scripts/production-linux-database-images.test.mjs",
     "test:production-runtime-role": "npm run build -w @charitypilot/api && node --test apps/api/dist/tests/application-prisma-client.test.js apps/api/dist/tests/production-runtime-database-role.test.js apps/api/dist/tests/runtime-role-probe-job.test.js scripts/production-runtime-role-postgres.test.mjs scripts/managed-database-writer-fence-postgres.test.mjs scripts/prisma-database-url.test.mjs scripts/prisma-database-tls.test.mjs scripts/production-runtime-role-gate.test.mjs scripts/production-runtime-compose.test.mjs",
     "test:production-check": "node --test scripts/local-docker-command.test.mjs scripts/production-compose-project.test.mjs scripts/data-lifecycle-model-map.test.mjs scripts/check-production.test.mjs scripts/postgres-backup.test.mjs scripts/security-scan.test.mjs scripts/production-deploy-preflight.test.mjs scripts/production-runtime-credentials.test.mjs scripts/production-runtime-role-gate.test.mjs scripts/production-runtime-compose.test.mjs scripts/production-cutover-lock.test.mjs scripts/production-compose-deploy.test.mjs scripts/production-compose-rollback.test.mjs scripts/production-recover-p109-migration.test.mjs scripts/production-recover-p107a-migration.test.mjs scripts/init-production-launch-evidence.test.mjs scripts/production-launch-evidence.test.mjs scripts/production-launch-evidence-status.test.mjs scripts/production-release-run-evidence.test.mjs scripts/verify-document-recovery.test.mjs scripts/generate-document-recovery-manifest.test.mjs scripts/check-production-github-env.test.mjs scripts/check-production-github-secrets.test.mjs scripts/check-production-supabase.test.mjs scripts/check-production-providers.test.mjs scripts/check-production-hosting.test.mjs scripts/check-production-observability.test.mjs scripts/check-production-database.test.mjs scripts/check-deployed-browser-qa-env.test.mjs scripts/smoke-production-deploy.test.mjs scripts/start-ci-postgres.test.mjs scripts/verify-deadline-calendar-upgrade.test.mjs scripts/verify-team-lifecycle-upgrade.test.mjs scripts/verify-domain-invariants-upgrade.test.mjs scripts/verify-password-recovery-upgrade.test.mjs scripts/generate-production-env.test.mjs scripts/launch-status.test.mjs scripts/run-isolated-e2e.test.mjs scripts/isolated-e2e-runtime-attestation.test.mjs scripts/check-bluegreen-compose.test.mjs scripts/check-bluegreen-private-vm-compose.test.mjs scripts/bluegreen-nightly-backup.test.mjs scripts/bluegreen/lib.test.mjs scripts/bluegreen/migration-gate.test.mjs scripts/bluegreen/backup.test.mjs scripts/purge-restore-reconciliation.test.mjs scripts/bluegreen-deploy.test.mjs scripts/bluegreen-runtime-role-provision.test.mjs e2e/helpers/browser-origin-policy.test.cjs e2e/helpers/database-safety.test.cjs e2e/docker/tcp-gateway.test.mjs",
@@ -123,7 +123,8 @@
     "test:e2e:install": "cd e2e && npm install && npm run install:browsers",
     "reliability:report": "node scripts/reliability-report.mjs",
     "reliability:ledger": "node scripts/reliability-report.mjs --write",
-    "release:ready": "node scripts/release-ready.mjs"
+    "release:ready": "node scripts/release-ready.mjs",
+    "test:dependency-advisories": "node --test scripts/dependency-advisory-regressions.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.9.16",
@@ -137,6 +138,7 @@
     "@fastify/busboy": "3.2.2",
     "baseline-browser-mapping": "2.11.26",
     "deepmerge-ts": "8.0.2",
+    "fast-copy": "4.1.0",
     "fast-uri": "3.1.8",
     "find-my-way": "9.9.0",
     "form-data": "4.0.6",

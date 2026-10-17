@@ -1,5 +1,11 @@
 # CharityPilot Full-Platform Remediation Audit
 
+> **17 October development dependency follow-up:** fast-copy is pinned to
+> patched4.1.0 with actual logger/depth regressions. A new root test gate checks
+> every current lint target leaves Next rootDir unset. The unpatched braces
+> advisory remains OPEN; audit findings were not suppressed. See
+> [dependency follow-up](development-dependency-advisories-2026-10-17.md).
+
 > **17 October S3 capability probe:** Actual SDK signing, original presigned
 > PUT/multipart baseline and eight native FeatureNotEnabled refusals now have
 > synthetic HTTP tests for direct and gateway profiles. Generic errors do not
@@ -6871,7 +6877,7 @@ remaining external blockers and owners, and an explicit confirmation that no
 > or DPO/controller acceptance. No live metadata changed. See private
 > `three-september-adopted-pdfs-source-review-2026-09-30.md`.
 
-## 17 October dependency advisory follow-up (OPEN)
+## 17 October dependency advisory follow-up (PARTIAL; braces OPEN)
 
 A fresh npm audit reported pre-existing development-tool dependency advisories
 in the lint glob chain and pino-pretty/fast-copy chain. All affected versions
@@ -6881,3 +6887,12 @@ this dated snapshot. This is advisory triage, not demonstrated runtime
 exploitability or a permanent dependency-clean claim. Apply a dedicated bounded
 patch/override update and verify quality/CI before closing this follow-up; source
 SAST passes do not close it. Exact private receipts are in the ignored roadmap.
+
+The follow-up is now split: fast-copy is pinned to upstream-patched4.1.0 and
+verified through the actual pino-pretty consumer, normal logger output and deep
+copy rejection. The full audit now has five inherited high entries for the
+single unpatched braces advisory; omit-dev remains zero in the dated snapshot.
+Current Next lint settings do not enter the affected rootDir-glob path, and the
+new root regression gate checks all current lint targets plus the installed
+helper. Braces itself remains unpatched/OPEN. No advisory suppression or lint
+coverage reduction was made. See [evidence and limits](development-dependency-advisories-2026-10-17.md).

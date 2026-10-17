@@ -1,5 +1,11 @@
 # CharityPilot Agent Continuation Handoff
 
+> **17 October development dependency follow-up:** fast-copy is pinned to
+> patched4.1.0 with actual logger/depth regressions. A new root test gate checks
+> every current lint target leaves Next rootDir unset. The unpatched braces
+> advisory remains OPEN; audit findings were not suppressed. See
+> [dependency follow-up](development-dependency-advisories-2026-10-17.md).
+
 > **17 October S3 capability probe:** Actual SDK signing, original presigned
 > PUT/multipart baseline and eight native FeatureNotEnabled refusals now have
 > synthetic HTTP tests for direct and gateway profiles. Generic errors do not
