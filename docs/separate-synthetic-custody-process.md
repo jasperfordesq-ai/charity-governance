@@ -29,7 +29,9 @@ separate archive sessions retain one-shot fixture links to that original control
 session. After the source terminates, the recovery-only cold process runs the
 current recovery inspector against that retained control and each original
 candidate catalogue, using the actual archive crypto verifier. It must verify
-two available roots and retain four incomplete/unknown cases as unresolved.
+two available roots and retain four incomplete/unknown cases as unresolved. The
+genuinely killed caller also retains its original control and linked incomplete
+candidate, adding a seventh current inspection and a fifth unresolved outcome.
 The other fault scenarios still use their existing local control fixtures.
 The links/epoch floor remain test-owner trust, not authenticated real provider
 authority or physical-host independence. Exact native results belong privately.
