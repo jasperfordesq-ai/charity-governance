@@ -13,7 +13,7 @@ if(['--service','--systemd-socket'].includes(process.argv[2])&&process.argv.leng
  const receive=parent.receive;parent.receive=async()=>{const request=await receive();unresolvedRequests=request.env.CHARITYPILOT_SYNTHETIC_UNRESOLVED_REQUEST==='1';return{...request,env:{...request.env,CHARITYPILOT_SYNTHETIC_CHANNEL_SOCKET:process.argv[3]}};};
  await runManagedProofGuardian({parent,workerPath:fileURLToPath(new URL('./managed-proof-channel-worker-fixture.mjs',import.meta.url)),
   reconcile:()=>({removedCount:0,observedJobContainersAbsent:true,actionAuthorized:false}),
-  inspectRequests:()=>({mutatingRequestsObservedSuccessful:!unresolvedRequests}),
+  inspectRequests:()=>({mutatingRequestsObservedSuccessful:!unresolvedRequests,declaredImageVolumesCovered:true}),
   onTerminal:value=>writeFileSync(join(dirname(process.argv[3]),'guardian-result.json'),JSON.stringify(value),{flag:'wx',mode:0o600})});
 }else if(process.argv[2]==='--parent'&&process.argv.length===5){
  const jobId=process.argv[3],mode=process.argv[4];if(!['success','hold','deny'].includes(mode))throw new Error();

@@ -1,3 +1,12 @@
+## 17 October: approved storage plans before proof dispatch
+
+Read [storage plans](managed-proof-storage-plans.md). New request headers/intents
+record the pinned image volume declaration and pre-dispatch mount coverage.
+Unreviewed image storage, named/inherited volumes and uncovered PGDATA refuse
+before launch. Bind-source paths remain digests. Original success gates require
+coverage and settled requests; legacy catalogues gain no invented plan. Full
+historical storage inventory and independent request ownership remain open.
+
 ## 17 October: original daemon mutation accounting
 
 Read [daemon request accounting](managed-daemon-request-accounting.md). Managed

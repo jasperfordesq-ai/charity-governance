@@ -130,7 +130,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
-  let settled=false;try{settled=inspectManagedDaemonInvocation({args,snapshot,jobId}).mutatingRequestsObservedSuccessful===true;}catch{}
+  let settled=false;try{const r=inspectManagedDaemonInvocation({args,snapshot,jobId});settled=r.mutatingRequestsObservedSuccessful===true&&r.declaredImageVolumesCovered===true;}catch{}
   try{result=await job.observe(success&&settled&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',settled);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&(!settled||cleanup.removedCount!==0))throw unresolved();

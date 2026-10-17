@@ -2242,15 +2242,52 @@ function daemonOperation(args){
  if(typeof target!=='string'||!(/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/).test(target))throw daemonJournalFailure();
  return{operation:args[0],target};
 }
+export function planManagedProofStorage(args,jobId){
+ if(!Array.isArray(args)||args[0]!=='run'||args.some(v=>typeof v!=='string')||typeof jobId!=='string'||!/^[a-f0-9-]{36}$/.test(jobId))throw daemonJournalFailure();
+ const imageIndex=args.indexOf(DEFAULT_POSTGRES_IMAGE);if(imageIndex<1)throw daemonJournalFailure();
+ const mounts=[],seen=new Set();
+ const add=(target,type,readOnly,source)=>{
+  if(!['/var/lib/postgresql/data','/proof','/backup','/run/charitypilot/database-ca.pem'].includes(target)||seen.has(target))throw daemonJournalFailure();seen.add(target);
+  if(type==='bind'&&(target==='/var/lib/postgresql/data'||typeof source!=='string'||!isAbsolute(source)||/[\x00-\x1f\x7f]/.test(source)||source.length>4096))throw daemonJournalFailure();
+  if(type==='tmpfs'&&target!=='/var/lib/postgresql/data')throw daemonJournalFailure();
+  if(['/backup','/run/charitypilot/database-ca.pem'].includes(target)&&!readOnly)throw daemonJournalFailure();
+  mounts.push({target,type,readOnly,...(source?{sourceDigest:sha256Text('CHARITYPILOT_PROOF_BIND_SOURCE_V1\n'+jobId+'\n'+source)}:{})});
+ };
+ for(let i=1;i<imageIndex;i++){
+  const flag=args[i];
+  if(['-v','--volume','--tmpfs','--mount'].includes(flag)){
+   const value=args[++i];if(i>=imageIndex||!value)throw daemonJournalFailure();
+   if(flag==='--tmpfs'){
+    const [target,options,...rest]=value.split(':');if(rest.length||!['rw,noexec,nosuid,size=1m','rw,noexec,nosuid,size=4g'].includes(options))throw daemonJournalFailure();add(target,'tmpfs',false);
+   }else if(flag==='--mount'){
+    const fields=Object.create(null);for(const part of value.split(',')){const at=part.indexOf('='),key=at<0?part:part.slice(0,at),v=at<0?true:part.slice(at+1);if(!['type','source','target','readonly'].includes(key)||Object.hasOwn(fields,key))throw daemonJournalFailure();fields[key]=v;}
+    if(fields.type!=='bind'||(fields.readonly!==undefined&&fields.readonly!==true))throw daemonJournalFailure();add(fields.target,'bind',fields.readonly===true,fields.source);
+   }else{
+    const at=value.lastIndexOf(':/');if(at<1)throw daemonJournalFailure();const source=value.slice(0,at),target=value.slice(at+1).split(':');
+    if(target.length>2||(target[1]!==undefined&&!['ro','rw'].includes(target[1])))throw daemonJournalFailure();add(target[0],'bind',target[1]==='ro',source);
+   }
+  }else if(flag.startsWith('--volumes-from')||/^(?:-v.|--(?:volume|mount|tmpfs)=)/.test(flag))throw daemonJournalFailure();
+ }
+ if(!seen.has('/var/lib/postgresql/data'))throw daemonJournalFailure();
+ return{format:1,kind:'MANAGED_PROOF_STORAGE_PLAN_V1',image:DEFAULT_POSTGRES_IMAGE,mounts:mounts.sort((a,b)=>a.target.localeCompare(b.target)),declaredImageVolumesCovered:true};
+}
+function inspectDeclaredProofImageVolumes(){
+ const r=runLocalDockerSync(['image','inspect',DEFAULT_POSTGRES_IMAGE,'--format','{{json .Config.Volumes}}'],{encoding:'utf8',timeout:15000,maxBuffer:8192});
+ if(r.status!==0||r.error)throw daemonJournalFailure();const value=JSON.parse(r.stdout);
+ if(!value||Array.isArray(value)||Object.keys(value).sort().join(',')!=='/var/lib/postgresql/data')throw daemonJournalFailure();
+ return['/var/lib/postgresql/data'];
+}
 /** Original one-shot local intent custody. No command, environment, SQL or key
  * bodies are retained. A missing/nonzero response never becomes a retry lease. */
-export function createManagedDaemonRequestJournal(raw){
- const s=daemonScope(raw),header={format:1,kind:'MANAGED_DAEMON_REQUEST_HEADER_V1',jobId:s.jobId,inputDigest:s.inputDigest};
+export function createManagedDaemonRequestJournal(raw,{imageVolumes=inspectDeclaredProofImageVolumes}={}){
+ const s=daemonScope(raw),volumes=imageVolumes();if(JSON.stringify(volumes)!==JSON.stringify(['/var/lib/postgresql/data']))throw daemonJournalFailure();
+ const header={format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:s.jobId,inputDigest:s.inputDigest,image:DEFAULT_POSTGRES_IMAGE,imageVolumeTargets:volumes};
  const headerPin=daemonWrite(s.root,s.identity,daemonFile+'header.json',header);let sequence=0,previous=headerPin.sha256,finished=false;
  return{dispatch(args,run){
   if(finished)throw daemonJournalFailure();const request=daemonOperation(args);if(request===null)return run();const {operation,target}=request;
   if(sequence>=64)throw daemonJournalFailure();const ordinal=String(++sequence).padStart(3,'0');
-  const intent={format:1,kind:'MANAGED_DAEMON_REQUEST_INTENT_V1',jobId:s.jobId,sequence,previousDigest:previous,operation,target,
+  const storagePlan=operation==='run'?planManagedProofStorage(args,s.jobId):null;
+  const intent={format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:s.jobId,sequence,previousDigest:previous,operation,target,storagePlan,
    argumentsDigest:sha256Text('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+s.jobId+'\n'+JSON.stringify(args))};
   const intentPin=daemonWrite(s.root,s.identity,daemonFile+ordinal+'.intent.json',intent);previous=intentPin.sha256;
   const result=run();
@@ -2265,19 +2302,23 @@ export function createManagedDaemonRequestJournal(raw){
  }};
 }
 export function inspectManagedDaemonRequests(raw){
- const s=daemonScope(raw),result=(state,count=0)=>({format:1,kind:'MANAGED_DAEMON_REQUEST_OBSERVATION_V1',jobId:s.jobId,state,requestCount:count,
+ let storageCovered=false;
+ const s=daemonScope(raw),result=(state,count=0)=>({format:1,kind:'MANAGED_DAEMON_REQUEST_OBSERVATION_V1',jobId:s.jobId,state,requestCount:count,declaredImageVolumesCovered:storageCovered,
   mutatingRequestsObservedSuccessful:state==='RECORDED_CLIENT_RESPONSES',completeResourceInventory:false,cleanupAuthorized:false,executionAuthorized:false,actionAuthorized:false});
  assertProtectedDirectoryUnchanged(s.root,s.identity,'before daemon request inspection');
  const names=readdirSync(s.root).filter(n=>n.startsWith(daemonFile)).sort();
  if(!names.length)return result('NOT_RECORDED');
  if(names.length>130||names.some(n=>!/^proof-daemon\.(header|end|[0-9]{3}\.(intent|response))\.json$/.test(n)))throw daemonJournalFailure();
  const header=daemonRead(s.root,daemonFile+'header.json');
- if(JSON.stringify(header.value)!==JSON.stringify({format:1,kind:'MANAGED_DAEMON_REQUEST_HEADER_V1',jobId:s.jobId,inputDigest:s.inputDigest}))throw daemonJournalFailure();
+ const version2=header.value?.format===2;
+ const expectedHeader=version2?{format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:s.jobId,inputDigest:s.inputDigest,image:DEFAULT_POSTGRES_IMAGE,imageVolumeTargets:['/var/lib/postgresql/data']}:{format:1,kind:'MANAGED_DAEMON_REQUEST_HEADER_V1',jobId:s.jobId,inputDigest:s.inputDigest};
+ if(JSON.stringify(header.value)!==JSON.stringify(expectedHeader))throw daemonJournalFailure();storageCovered=version2;
  const intents=names.filter(n=>n.endsWith('.intent.json'));let previous=header.pin.sha256,unknown=false;
  for(let i=0;i<intents.length;i++){
   const ordinal=String(i+1).padStart(3,'0');if(intents[i]!==daemonFile+ordinal+'.intent.json')throw daemonJournalFailure();
   const intent=daemonRead(s.root,intents[i]),v=intent.value;
-  if(Object.keys(v).sort().join(',')!=='argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,target'||v.format!==1||v.kind!=='MANAGED_DAEMON_REQUEST_INTENT_V1'||v.jobId!==s.jobId||v.sequence!==i+1||v.previousDigest!==previous||!['run','exec','rm'].includes(v.operation)||typeof v.argumentsDigest!=='string'||!/^[a-f0-9]{64}$/.test(v.argumentsDigest)||typeof v.target!=='string'||!/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/.test(v.target))throw daemonJournalFailure();
+  if(Object.keys(v).sort().join(',')!==(version2?'argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,storagePlan,target':'argumentsDigest,format,jobId,kind,operation,previousDigest,sequence,target')||v.format!==(version2?2:1)||v.kind!==(version2?'MANAGED_DAEMON_REQUEST_INTENT_V2':'MANAGED_DAEMON_REQUEST_INTENT_V1')||v.jobId!==s.jobId||v.sequence!==i+1||v.previousDigest!==previous||!['run','exec','rm'].includes(v.operation)||typeof v.argumentsDigest!=='string'||!/^[a-f0-9]{64}$/.test(v.argumentsDigest)||typeof v.target!=='string'||!/^(?:[a-f0-9]{64}|charitypilot-(?:source-snapshot|dump-descriptor|isolated-restore|restore-loader|restored-snapshot)-[0-9]+-[0-9]+-[a-f0-9]{8})$/.test(v.target))throw daemonJournalFailure();
+  if(version2){if(v.operation==='run')validateRecordedProofStorage(v.storagePlan);else if(v.storagePlan!==null)throw daemonJournalFailure();}
   previous=intent.pin.sha256;const name=daemonFile+ordinal+'.response.json';if(!names.includes(name)){unknown=true;continue;}
   const response=daemonRead(s.root,name).value;
   if(Object.keys(response).sort().join(',')!=='format,intentPin,jobId,kind,removalAlreadyAbsent,sequence,signal,status,transportError'||response.format!==1||response.kind!=='MANAGED_DAEMON_CLIENT_RESPONSE_V1'||response.jobId!==s.jobId||response.sequence!==i+1||JSON.stringify(response.intentPin)!==JSON.stringify(intent.pin)||typeof response.transportError!=='boolean'||typeof response.signal!=='boolean'||typeof response.removalAlreadyAbsent!=='boolean'||(response.removalAlreadyAbsent&&v.operation!=='rm')||(response.status!==null&&!Number.isSafeInteger(response.status)))throw daemonJournalFailure();
@@ -2289,6 +2330,15 @@ export function inspectManagedDaemonRequests(raw){
   if(JSON.stringify(end)!==JSON.stringify({format:1,kind:'MANAGED_DAEMON_REQUEST_END_V1',jobId:s.jobId,headerPin:header.pin,requestCount:intents.length,lastIntentDigest:previous}))throw daemonJournalFailure();}
  if(JSON.stringify(names)!==JSON.stringify(readdirSync(s.root).filter(n=>n.startsWith(daemonFile)).sort()))throw daemonJournalFailure();
  assertProtectedDirectoryUnchanged(s.root,s.identity,'after daemon request inspection');return result(unknown?'UNRESOLVED_REQUESTS':'RECORDED_CLIENT_RESPONSES',intents.length);
+}
+function validateRecordedProofStorage(plan){
+ if(!plan||Object.keys(plan).sort().join(',')!=='declaredImageVolumesCovered,format,image,kind,mounts'||plan.format!==1||plan.kind!=='MANAGED_PROOF_STORAGE_PLAN_V1'||plan.image!==DEFAULT_POSTGRES_IMAGE||plan.declaredImageVolumesCovered!==true||!Array.isArray(plan.mounts)||plan.mounts.length>4)throw daemonJournalFailure();
+ const seen=new Set();for(const m of plan.mounts){
+  if(!m||!['/var/lib/postgresql/data','/proof','/backup','/run/charitypilot/database-ca.pem'].includes(m.target)||seen.has(m.target)||typeof m.readOnly!=='boolean')throw daemonJournalFailure();seen.add(m.target);
+  if(m.type==='tmpfs'){if(m.target!=='/var/lib/postgresql/data'||m.readOnly||Object.keys(m).sort().join(',')!=='readOnly,target,type')throw daemonJournalFailure();}
+  else if(m.type==='bind'){if(m.target==='/var/lib/postgresql/data'||Object.keys(m).sort().join(',')!=='readOnly,sourceDigest,target,type'||typeof m.sourceDigest!=='string'||!/^[a-f0-9]{64}$/.test(m.sourceDigest)||(['/backup','/run/charitypilot/database-ca.pem'].includes(m.target)&&!m.readOnly))throw daemonJournalFailure();}
+  else throw daemonJournalFailure();
+ }if(!seen.has('/var/lib/postgresql/data'))throw daemonJournalFailure();
 }
 export function inspectManagedDaemonInvocation(value){
  if(!value||!Array.isArray(value.args)||value.snapshot===undefined)throw daemonJournalFailure();
@@ -4438,7 +4488,7 @@ export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.
     managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest:sha256Text(JSON.stringify({args,snapshot,jobId}))});
    }
    const outcome=await runBackupCommand(args,env,snapshot),requests=managedDaemonJournal?.finish();
-   if(outcome.status===0&&requests&&!requests.mutatingRequestsObservedSuccessful)return result(1,'',daemonJournalFailure().message);
+   if(outcome.status===0&&requests&&(!requests.mutatingRequestsObservedSuccessful||!requests.declaredImageVolumesCovered))return result(1,'',daemonJournalFailure().message);
    return outcome;
   }catch{return result(1,'',daemonJournalFailure().message);}finally{managedDaemonJournal=undefined;managedProofJobId=undefined;}
 }
