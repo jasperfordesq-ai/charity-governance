@@ -1,3 +1,12 @@
+## 17 October: read-only recovery capability in separate custody test
+
+Read [separate custody process](separate-synthetic-custody-process.md). The cold
+verifier now gets a distinct recovery capability. Server-side protocol policy
+permits discovery/read/decrypt/verification and denies writes, new keys, signing
+and owner controls. Native same-request owner controls distinguish role refusal
+from malformed requests. This is fixture enforcement, not AWS IAM or host-user
+isolation; real provider/current-authority/host-loss gates remain open.
+
 ## 17 October: separate synthetic custody owner
 
 Read [separate custody process](separate-synthetic-custody-process.md). The
