@@ -32,7 +32,7 @@ function stop(id,identity){
  const unit=containmentUnit(id),r=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{env:env(),encoding:'utf8',timeout:15000});
  if(r.stdout.trim()==='not-found')return;assert.ok(identity);const current=inspectContainmentUnit(unit);assert.equal(current.InvocationID,identity.InvocationID);command(['stop',unit]);
 }
-test('original issuer SIGKILL leaves a kernel-verified receiver able to store one SDK outcome',{
+for(const mode of ['complete','readback-ack-lost','receiver-loss'])test('original issuer SIGKILL retains bounded SDK outcome custody: '+mode,{
  skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_OUTCOME_TRANSFER!=='1',timeout:90000
 },async()=>{
  assert.notEqual(process.getuid(),0);const sourceSha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();verifyContainedExecutorSource(sourceSha);
@@ -44,7 +44,7 @@ test('original issuer SIGKILL leaves a kernel-verified receiver able to store on
  try{
   keeper=fork(file('synthetic-custody-service.fixture.mjs'),[],{execArgv:[],env:env(),stdio:['ignore','pipe','pipe','ipc']});keeperDone=terminal(keeper);
   const descriptor=await new Promise((yes,no)=>{const timer=setTimeout(()=>no(Error('Synthetic keeper readiness expired')),15000);keeper.once('message',v=>{clearTimeout(timer);yes(v);});});
-  const {id}=await callSyntheticCustody(descriptor,{op:'open',config});const synthetic={descriptor,id,config};
+  const {id}=await callSyntheticCustody(descriptor,{op:'open',config});const synthetic={descriptor,id,config,...(mode==='readback-ack-lost'?{fault:mode}:{})};
   owner=start(ownerId,'--owner',{ownerId,sourceSha});const originalOwner=await owner.ready;ownerIdentity=inspectContainmentUnit(containmentUnit(ownerId));assert.equal(ownerIdentity.InvocationID,originalOwner.invocationId);
   issuer=start(jobId,'--issuer',{jobId,sourceSha,owner:originalOwner,synthetic});ready=await issuer.ready;issuerIdentity=inspectContainmentUnit(containmentUnit(jobId));assert.equal(issuerIdentity.InvocationID,ready.source.InvocationID);
   const before=await callSyntheticCustody(descriptor,{op:'stats',id});
@@ -52,14 +52,20 @@ test('original issuer SIGKILL leaves a kernel-verified receiver able to store on
   const receiver=inspectContainmentUnit(ready.receiver.identity.unit);assert.equal(receiver.ActiveState,'active');assert.equal(receiver.InvocationID,ready.receiver.identity.invocationId);
   assert.equal(receiver.MainPID,String(ready.receiver.identity.mainPid));assert.equal(currentContainmentBootId(),ready.receiver.identity.bootId);
   assert.equal(readFileSync('/proc/'+receiver.MainPID+'/cgroup','utf8').trim(),'0::'+ready.receiver.identity.controlGroup);
-  const ack=await requestOutcomeCustody({endpoint:ready.endpoint,receiver:ready.receiver,artifact:ready.outcome});assert.equal(ack.pendingRequestResolved,false);assert.equal(ack.originalAcknowledgementReconstructed,false);
-  const after=await callSyntheticCustody(descriptor,{op:'stats',id});assert.equal(after.writes,before.writes+1);assert.equal(after.generates,before.generates);
+  if(mode==='receiver-loss'){
+   command(['kill','--kill-who=main','--signal=SIGKILL',receiver.Id]);await waitEmpty(receiver);
+   await assert.rejects(requestOutcomeCustody({endpoint:ready.endpoint,receiver:ready.receiver,artifact:ready.outcome}));
+   console.log('Original killed receiver socket scope preserved: '+ready.endpoint.root);
+  }else if(mode==='readback-ack-lost')await assert.rejects(requestOutcomeCustody({endpoint:ready.endpoint,receiver:ready.receiver,artifact:ready.outcome}));
+  else{const ack=await requestOutcomeCustody({endpoint:ready.endpoint,receiver:ready.receiver,artifact:ready.outcome});assert.equal(ack.pendingRequestResolved,false);assert.equal(ack.originalAcknowledgementReconstructed,false);}
+  assert.equal(inspectContainmentUnit(ownerIdentity.Id).InvocationID,ownerIdentity.InvocationID);assert.equal(inspectContainmentUnit(ownerIdentity.Id).ActiveState,'active');
+  const after=await callSyntheticCustody(descriptor,{op:'stats',id});assert.equal(after.writes,before.writes+(mode==='receiver-loss'?0:1));assert.equal(after.generates,before.generates);
   await assert.rejects(requestOutcomeCustody({endpoint:ready.endpoint,receiver:ready.receiver,artifact:ready.outcome}));
   const readonlyDescriptor={...descriptor,capability:descriptor.recoveryCapability};client=connectSyntheticCustody(readonlyDescriptor,id,config).s3();
   const cold=new ManagedProofJobCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},ready.binding,credentials,client,()=>false);
-  const saved=await cold.discover(ready.original);assert.equal(saved.daemon.ownerOutcomeCount,1);assert.equal(saved.daemon.independentOwnerDispatchVerified,false);assert.equal(saved.originalAcknowledgementReconstructed,false);
+  const saved=await cold.discover(ready.original);assert.equal(saved.daemon.ownerOutcomeCount,mode==='receiver-loss'?0:1);assert.equal(saved.daemon.independentOwnerDispatchVerified,false);assert.equal(saved.originalAcknowledgementReconstructed,false);
   assert.equal((await callSyntheticCustody(descriptor,{op:'stats',id})).writes,after.writes);
-  console.log('Actual issuer SIGKILL; retained original SDK outcome and read-only cold discovery passed; synthetic backend, no daemon dispatch or provider/host-loss claim');
+  console.log('Actual issuer SIGKILL: '+mode+'; original SDK write count and read-only cold discovery passed; no retry, daemon dispatch or provider/host-loss claim');
  }finally{
   client?.destroy();if(issuer)stop(jobId,issuerIdentity);if(owner)stop(ownerId,ownerIdentity);
   if(ready){const r=spawnSync('systemctl',['--user','show',ready.receiver.identity.unit,'--property=LoadState','--value'],{env:env(),encoding:'utf8',timeout:15000});
