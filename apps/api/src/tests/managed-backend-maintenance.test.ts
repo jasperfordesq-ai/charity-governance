@@ -82,6 +82,7 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
  const provider={configurationDigest:()=>hash('provider-registry'),suspend:async()=>{calls.push('suspend');},
   observeSuspended:async()=>{calls.push('services-observe');return{observationDigest:hash('services')};}};
  const database={configurationDigest:()=>hash('db-registry'),close:async()=>{calls.push('database-close');},
+  observeCompatibility:async()=>{calls.push('database-preflight');return{requiredCataloguePredicatesObserved:true,configurationDigest:hash('db-registry')};},
   invalidatePasswords:async()=>{calls.push('password-invalidate');},
   observePasswordsInvalidated:async()=>{calls.push('database-observe');return{observationDigest:hash('database'),passwordCredentialsInvalidated:true};}};
  const s3MetadataConfig={installationId:operation.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:retired.map(k=>({id:k.id,type:'secret'}))};
@@ -127,6 +128,16 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
   commit:(command:PutObjectCommand)=>{value=JSON.parse(String(command.input.Body));version++;return metadata();}};
 }
 
+test('database preflight refusal leaves control READY and performs no provider or credential actions',async()=>{
+ for(const mode of ['missing','wrong-config','error']){
+  const f=fixture();
+  f.database.observeCompatibility=async()=>{if(mode==='error')throw new Error('PRIVATE preflight detail');return {
+   requiredCataloguePredicatesObserved:mode!=='missing',configurationDigest:hash(mode==='wrong-config'?'wrong':'db-registry')};};
+  await assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE'));
+  assert.equal(f.value.phase,'READY');assert.equal(f.puts,0);assert.deepEqual(f.calls,[]);
+ }
+});
+
 test('managed shutdown records an independent attempt before provider/database mutation and never repeats it',async()=>{
  const f=fixture();const result=await f.coordinator.close();
  assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(f.puts,8);
@@ -134,6 +145,7 @@ test('managed shutdown records an independent attempt before provider/database m
  assert.equal(result.storageAccessPathsObservedClosed,true);assert.ok(f.value.observations);
  assert.equal(result.credentialReadRefusalsObserved,true);assert.ok(f.value.readBaseline);assert.ok(f.value.readObservation);
  assert.ok(f.calls.indexOf('read-baseline')<f.calls.indexOf('suspend'));
+ assert.equal(f.calls[0],'database-preflight');
  assert.ok(f.calls.indexOf('put')<f.calls.indexOf('suspend'));
  assert.ok(f.calls.indexOf('suspend')<f.calls.indexOf('database-close'));
  assert.ok(f.calls.indexOf('database-close')<f.calls.indexOf('password-invalidate'));
@@ -257,6 +269,7 @@ test('maintenance SDK has no ambient endpoint/credential fallback and sanitises 
  t.mock.timers.enable({apis:['setTimeout']});
  const f=fixture();f.setFault(()=>new Promise((_resolve,reject)=>setTimeout(()=>reject(new Error('PRIVATE deadline')),16000)));
  const result=assert.rejects(f.coordinator.close(),error=>error instanceof Error&&!error.message.includes('PRIVATE'));
+ await new Promise<void>(resolve=>setImmediate(resolve)); // Let the read-only preflight finish before advancing the provider deadline.
  t.mock.timers.tick(16001);await result;assert.equal(f.calls.includes('suspend'),false);
 });
 
@@ -1227,7 +1240,7 @@ test('unsupported capture catalogue permissions refuse before maintenance acquis
  const f=fixture(),profile={configurationDigest:()=>hash('unsupported-read-role'),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:false})};
  const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
  f.value.planDigest=coordinator.planDigest();const before=f.calls.length,reads=f.reads;
- await assert.rejects(coordinator.close());assert.equal(f.puts,0);assert.equal(f.reads,reads);assert.equal(f.calls.length,before);assert.equal(f.value.phase,'READY');
+ await assert.rejects(coordinator.close());assert.equal(f.puts,0);assert.equal(f.reads,reads);assert.deepEqual(f.calls.slice(before),['database-preflight']);assert.equal(f.value.phase,'READY');
  const x=await readRoleCommonParentFixture(),count=x.f.artifacts.size;x.profile.observeCompatibility=async()=>({catalogueLockAclPredicatesObserved:false});
  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
 });

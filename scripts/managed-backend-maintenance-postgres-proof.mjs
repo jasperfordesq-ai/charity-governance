@@ -150,7 +150,10 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   };
   const store=new S3ManagedMaintenanceControl(storage,credentials,sdk);
   const driver=['database-ack-lost','password-ack-lost'].includes(scenario)?{$transaction:async(fn,options)=>{
-   const result=await admin.$transaction(fn,options);transactions++;
+   let readOnly=false;const result=await admin.$transaction(tx=>fn(new Proxy(tx,{get(target,key){
+    if(key==='$executeRaw')return(...args)=>{if(Array.isArray(args[0])&&args[0].join('')==='SET TRANSACTION READ ONLY')readOnly=true;return target.$executeRaw(...args);};
+    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+   }})),options);if(readOnly)return result;transactions++;
    if((scenario==='database-ack-lost'&&transactions===1)||(scenario==='password-ack-lost'&&transactions===4))throw new Error('synthetic real role transaction commit acknowledgement lost');
    return result;
   }}:admin;

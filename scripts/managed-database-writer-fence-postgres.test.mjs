@@ -82,6 +82,13 @@ test('managed database fence closes real stale credentials and sessions while re
   writerA=client('managed_writer_a');writerB=client('managed_writer_b');
   await writerA.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('before-a')`;
   await writerB.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('before-b')`;
+  const preflight=await service.observeCompatibility();
+  assert.equal(preflight.requiredCataloguePredicatesObserved,true);
+  assert.equal(preflight.passwordStateReadVerified,true);
+  assert.equal(preflight.rolesChanged,false);
+  // A passing advisory read must leave both original writer sessions usable.
+  await writerA.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-a')`;
+  await writerB.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-b')`;
   await assert.rejects(service.observeClosed());
   const plainUrl=new URL(url);plainUrl.searchParams.set('sslmode','disable');plainUrl.searchParams.delete('sslcert');plainUrl.searchParams.delete('sslaccept');
   const plain=new PrismaClient({datasources:{db:{url:plainUrl.href}}});
@@ -135,7 +142,7 @@ test('managed database fence closes real stale credentials and sessions while re
   const mutable=structuredClone(configuration),snapshot=new ManagedDatabaseWriterFence(admin,mutable);mutable.writers[0].name='postgres';
   assert.equal((await snapshot.observeClosed()).databaseWriterPrincipalsClosed,true);
   const [count]=await admin.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_managed_writer`;
-  assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
+  assert.equal(count.total,6); // Includes both post-preflight writes; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
   if(!epochOnly)await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'});
   if(process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE&&!process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE)await proveManagedEpochLifecycle({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:'KERNEL_CONTAINED'});

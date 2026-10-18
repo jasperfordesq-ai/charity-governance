@@ -18,6 +18,8 @@ const identity=z.object({database:name,databaseOid:oid,currentRole:name,sessionR
  observedAt:z.string().min(1).max(80)}).strict();
 const session=z.object({pid:z.number().int().positive(),roleOid:oid,databaseOid:oid.nullable(),backendStart:z.string().min(1).max(80)}).strict();
 const passwordState=z.object({name,oid,invalidated:z.boolean()}).strict();
+const capabilities=z.object({maintenanceOid:oid,serverVersion:z.number().int(),readOnly:z.literal(true),
+ maintenanceLogin:z.boolean(),alterConfiguredRoles:z.boolean(),inspectAllSessions:z.boolean(),terminateConfiguredSessions:z.boolean(),readPasswordState:z.boolean()}).strict();
 /** Internal privileged maintenance primitive, never an application route. Caller
  * supplies a separately trusted database/principal registry and verified TLS
  * connection. Closing roles is cluster-wide. Custodians remain trusted writers.
@@ -27,15 +29,17 @@ export class ManagedDatabaseWriterFence {
  private readonly config:Configuration;
  constructor(private readonly prisma:PrismaClient,raw:unknown){this.config=configuration.parse(raw);}
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
- private async transaction<T>(fn:(tx:Prisma.TransactionClient)=>Promise<T>) {
+ private async transaction<T>(fn:(tx:Prisma.TransactionClient)=>Promise<T>,readOnly=false) {
   return this.prisma.$transaction(async tx=>{
+   if(readOnly)await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+   await tx.$executeRaw`SET LOCAL search_path=pg_catalog`;
    await tx.$executeRaw`SET LOCAL synchronous_commit=on`;
    await tx.$executeRaw`SET LOCAL statement_timeout='1500ms'`;
    await tx.$executeRaw`SET LOCAL lock_timeout='1000ms'`;
    return fn(tx);
   },{isolationLevel:'ReadCommitted',maxWait:5000,timeout:30000});
  }
- private async read(tx:Prisma.TransactionClient) {
+ private async databaseIdentity(tx:Prisma.TransactionClient){
   const c=this.config;
   const result=await tx.$queryRaw<Array<unknown>>`SELECT current_database()::text AS database,d.oid::text AS "databaseOid",
    current_user::text AS "currentRole",session_user::text AS "sessionRole",pg_is_in_recovery() AS recovery,
@@ -45,6 +49,10 @@ export class ManagedDatabaseWriterFence {
   if(result.length!==1)throw new Error();const actual=identity.parse(result[0]);
   if(actual.database!==c.database||actual.databaseOid!==c.databaseOid||actual.currentRole!==c.maintenance.name
    ||actual.sessionRole!==c.maintenance.name||actual.recovery||!actual.durable||!actual.encrypted)throw new Error();
+  return actual;
+ }
+ private async read(tx:Prisma.TransactionClient) {
+  const c=this.config,actual=await this.databaseIdentity(tx);
   const configured=[...c.writers,...c.custodians],names=configured.map(p=>p.name),writers=c.writers.map(p=>p.oid);
   const roles=z.array(role).parse(await tx.$queryRaw`SELECT rolname::text AS name,oid::text AS oid,rolcanlogin AS "canLogin",
    rolsuper AS superuser,rolcreaterole AS "createRole",rolcreatedb AS "createDb",rolreplication AS replication,rolbypassrls AS "bypassRls"
@@ -83,13 +91,52 @@ export class ManagedDatabaseWriterFence {
    observedAt:state.actual.observedAt,sourceHostFenced:false as const,providerJobsFenced:false as const,
    wholeBackendQuiesced:false as const,reopeningAuthorised:false as const,actionAuthorized:false as const};
  }
- private async passwords(tx:Prisma.TransactionClient,state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>){
-  this.proof(state); // Never clear a password while any target can log in or has a session.
+ private async passwordRows(tx:Prisma.TransactionClient,state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>){
   // Only booleans leave the catalogue: never fetch passwords or their verifiers.
   const rows=z.array(passwordState).parse(await tx.$queryRaw`SELECT rolname::text AS name,oid::text AS oid,
    rolpassword IS NULL AS invalidated FROM pg_authid WHERE oid::text IN (${Prisma.join(this.config.writers.map(p=>p.oid))}) ORDER BY rolname`);
   if(rows.length!==state.targets.length||rows.some(p=>!state.targets.some(r=>r.name===p.name&&r.oid===p.oid)))throw new Error();
   return rows;
+ }
+ private async passwords(tx:Prisma.TransactionClient,state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>){
+  this.proof(state); // Never clear a password while any target can log in or has a session.
+  return this.passwordRows(tx,state);
+ }
+ private async capabilityPredicates(tx:Prisma.TransactionClient){
+  const c=this.config,writers=c.writers.map(p=>p.oid);
+  const rows=z.array(capabilities).length(1).parse(await tx.$queryRaw`SELECT r.oid::text AS "maintenanceOid",
+   current_setting('server_version_num')::integer AS "serverVersion",current_setting('transaction_read_only')='on' AS "readOnly",
+   r.rolcanlogin AS "maintenanceLogin",
+   (r.rolsuper OR (r.rolcreaterole AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_roles target
+    WHERE target.oid::text IN (${Prisma.join(writers)}) AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m
+     WHERE m.roleid=target.oid AND m.member=r.oid AND m.admin_option)))) AS "alterConfiguredRoles",
+   (r.rolsuper OR pg_has_role(r.oid,'pg_read_all_stats','USAGE')) AS "inspectAllSessions",
+   (has_function_privilege(r.oid,'pg_catalog.pg_terminate_backend(integer,bigint)','EXECUTE') AND
+    (r.rolsuper OR pg_has_role(r.oid,'pg_signal_backend','USAGE') OR NOT EXISTS(SELECT 1 FROM pg_catalog.pg_roles target
+     WHERE target.oid::text IN (${Prisma.join(writers)}) AND NOT pg_has_role(r.oid,target.oid,'MEMBER')))) AS "terminateConfiguredSessions",
+   (has_column_privilege(r.oid,'pg_catalog.pg_authid','oid','SELECT') AND has_column_privilege(r.oid,'pg_catalog.pg_authid','rolname','SELECT')
+    AND has_column_privilege(r.oid,'pg_catalog.pg_authid','rolpassword','SELECT')) AS "readPasswordState"
+   FROM pg_catalog.pg_roles r WHERE r.oid::text=${c.maintenance.oid} AND r.rolname=${c.maintenance.name}`);
+  const result=rows[0]!;if(result.serverVersion<160000||result.serverVersion>=190000)throw new Error();return result;
+ }
+ /** Advisory read-only provider fit before acquiring control or changing any
+  * service, credential, role or session. No grant, lock or permission lease. */
+ async observeCompatibility(){
+  try{return await this.transaction(async tx=>{
+   const before=await this.databaseIdentity(tx),predicates=await this.capabilityPredicates(tx);
+   const required=['maintenanceLogin','alterConfiguredRoles','inspectAllSessions','terminateConfiguredSessions','readPasswordState'] as const;
+   const missingPredicates=required.filter(key=>!predicates[key]);
+   let passwordStateReadVerified=false;
+   if(!missingPredicates.length){const state=await this.read(tx);await this.passwordRows(tx,state);passwordStateReadVerified=true;}
+   const after=await this.capabilityPredicates(tx);if(JSON.stringify(after)!==JSON.stringify(predicates))throw new Error();
+   const facts={format:1,kind:'MANAGED_DATABASE_MAINTENANCE_PREFLIGHT_V1' as const,configurationDigest:this.configurationDigest(),
+    observedAt:before.observedAt,predicates,missingPredicates,passwordStateReadVerified};
+   return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
+    requiredCataloguePredicatesObserved:missingPredicates.length===0&&passwordStateReadVerified,
+    scope:'READ_ONLY_CONFIGURED_PRINCIPAL_CATALOGUE_PREFLIGHT' as const,grantsChanged:false as const,rolesChanged:false as const,sessionsTerminated:false as const,
+    providerMutationCapabilityVerified:false as const,directEndpointVerified:false as const,ongoingPermissionVerified:false as const,
+    allWritersInventoried:false as const,wholeBackendQuiesced:false as const,executionAuthorized:false as const,actionAuthorized:false as const};
+  },true);}catch{throw new Error('Managed database maintenance preflight is unverified; no grants or maintenance actions are authorised');}
  }
  private passwordProof(state:Awaited<ReturnType<ManagedDatabaseWriterFence['read']>>,passwords:z.infer<typeof passwordState>[]){
   const closed=this.proof(state);if(passwords.some(p=>!p.invalidated))throw new Error();

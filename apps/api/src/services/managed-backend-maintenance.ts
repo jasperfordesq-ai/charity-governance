@@ -73,6 +73,8 @@ export class ManagedBackendMaintenance {
  }
  async close(){
   try{
+   const databaseFit=await this.database.observeCompatibility();
+   if(databaseFit.requiredCataloguePredicatesObserved!==true||databaseFit.configurationDigest!==this.database.configurationDigest())throw new Error();
    if(this.readRole&&(await this.readRole.observeCompatibility()).catalogueLockAclPredicatesObserved!==true)throw new Error();
    const attempt=await this.control.acquire(this.config.installationId,this.planDigest(),this.config.maintenanceEpoch);
    if(attempt.value.installationId!==this.config.installationId||attempt.value.phase!=='ATTEMPTED'||!attempt.value.attemptId)throw new Error();

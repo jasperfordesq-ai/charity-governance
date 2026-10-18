@@ -144,3 +144,28 @@ The [document byte archive](document-byte-backup.md) supplies encrypted object
 candidates outside the intent journal. It does not complete a database/object
 recovery set or authorise reopening. Full capture, manifest, current-authority,
 provider/custody and host-loss integration gates above remain open.
+
+## Read-only database maintenance preflight
+
+Before control acquisition or shutdown, `ManagedDatabaseWriterFence.observeCompatibility()`
+checks the pinned database/maintenance identity and TLS/durability, then PostgreSQL
+16–18 catalogue predicates for role administration, full session visibility,
+configured-session termination and column-level password-state access. The actual
+password query returns only `rolpassword IS NULL`, names and OIDs. It runs with
+`SET TRANSACTION READ ONLY` and a catalogue-only search path, rereads predicates,
+and returns missing privileges without granting anything. Full registry, alias,
+cross-database and prepared-transaction checks run when the predicates pass.
+
+This is an advisory prerequisite, not a saved execution permit or a substitute for
+fresh mutation checks. It neither proves that a provider permits ALTER ROLE in
+practice nor certifies all writers, endpoint directness or ongoing permissions.
+The role predicate conservatively requires direct ADMIN OPTION for every configured
+target unless the maintenance role is a superuser.
+
+PostgreSQL documents these boundaries in [ALTER ROLE](https://www.postgresql.org/docs/17/sql-alterrole.html),
+[signalling functions](https://www.postgresql.org/docs/17/functions-admin.html)
+and [pg_authid](https://www.postgresql.org/docs/17/catalog-pg-authid.html).
+Supabase documents that its customer [postgres role is not a superuser](https://supabase.com/docs/guides/database/postgres/roles-superuser).
+That fact alone does not determine a project's complete permissions. Check the
+actual configured account; do not grant hosted privileges to force this prototype
+to pass, or infer hosted-provider compatibility from synthetic PostgreSQL results.

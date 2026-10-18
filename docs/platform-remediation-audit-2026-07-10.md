@@ -1,3 +1,17 @@
+## 18 October: database maintenance preflight before shutdown
+
+Managed maintenance now checks the configured database identity, verified TLS,
+PostgreSQL 16–18 role-administration predicates, session visibility/termination
+privileges and boolean password-state catalogue access in a read-only transaction
+before acquiring control, writing probes or suspending services. Missing privileges
+or a mismatched registry refuse shutdown. The observation grants no privileges,
+leases no permission and does not prove provider mutation capability, direct
+endpoint identity, global writer exclusion or physical-host recovery.
+
+The existing mutation checks remain mandatory. Native commit-acknowledgement-loss
+fixtures exclude the new read-only transaction from their mutation counters.
+Tests check refusal before control writes and continued writer use after preflight.
+Actual hosted-provider compatibility remains unproved.
 ## 18 October: genuine shared epoch-2 caller loss passed
 
 Exact source `4703d5ef` passed genuine SIGKILL during observed epoch2 work in
