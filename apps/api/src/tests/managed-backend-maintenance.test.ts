@@ -1,6 +1,7 @@
 import {managedReadRoleConfigurationSchema} from '../services/managed-read-role-configuration.js';
 import {ManagedCaptureControlRetirement} from '../services/managed-capture-control-retirement.js';
 import {managedPlanSchema} from '../services/managed-plan-bootstrap.js';
+import {retiredControlReadFixture} from './fixtures/retired-control-read.js';
 import {backend as archivedSdkBackend,config as archivedSdkConfig} from './fixtures/archived-custody.js';
 import {readRoleCommonCandidateReportSchema} from '../services/managed-common-candidate-contract.js';
 import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
@@ -61,7 +62,7 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
   if(path.Key!==`managed-maintenance/${config.installationId}/control.json`){
    if(command instanceof PutObjectCommand){calls.push('artifact-put');assert.equal(command.input.IfNoneMatch,'*');if(artifacts.has(path.Key!))throw new Error('synthetic existing artifact');
     const row={body:String(command.input.Body),version:'artifact-'+(artifacts.size+1)};artifacts.set(path.Key!,row);return{...metadata(),VersionId:row.version};}
-   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.includes('/capture-job/')||path.Key?.endsWith('/plan-bootstrap.json')||path.Key?.endsWith('/capture-control-baseline.json')||path.Key?.endsWith('/capture-control-observation.json'));
+   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.includes('/capture-job/')||path.Key?.endsWith('/plan-bootstrap.json')||path.Key?.endsWith('/capture-control-baseline.json')||path.Key?.endsWith('/capture-control-observation.json')||path.Key?.endsWith('/capture-control-read-baseline.json'));
    return{...metadata(),VersionId:row.version,ETag:'"'+row.version+'"',ContentLength:Buffer.byteLength(row.body),ChecksumSHA256:Buffer.from(hash(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT',Body:Readable.from([Buffer.from(row.body)])};
   }
   if(command instanceof GetObjectCommand){reads++;calls.push('get');assert.equal(command.input.VersionId,undefined);
@@ -1220,14 +1221,16 @@ test('unsupported capture catalogue permissions refuse before maintenance acquis
  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
 });
 
-async function captureControlRetirementFixture(integrated=false){
+async function captureControlRetirementFixture(integrated=false,withComparison=false){
  const f=fixture();let deleted=false,deleteCalls=0,lostDelete=false,extraKey=false;
+ const readFixture=withComparison?retiredControlReadFixture({installationId:config.installationId,controlId:'11111111-1111-4111-8111-111111111111'}):undefined;
+ const readProbe=readFixture?.create(),readDescriptor=readProbe?.configurationDescriptor();
  const registry={installationId:config.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
  const provider=new SupabaseStorageWriterControl(registry,'synthetic-management',async(input,init)=>{
   const url=new URL(String(input));assert.equal(url.origin,'https://api.supabase.com');
   if(init?.method==='DELETE'){
    assert.equal(url.pathname,'/v1/projects/'+registry.projectRef+'/api-keys/'+registry.captureKeyId);assert.equal(url.searchParams.get('reveal'),'false');
-   deleteCalls++;deleted=true;if(lostDelete)throw new Error('synthetic accepted DELETE without ACK');return Response.json({id:registry.captureKeyId,type:'secret',api_key:'discard-provider-secret-field'});
+   deleteCalls++;deleted=true;if(readFixture)readFixture.state.retired=true;if(lostDelete)throw new Error('synthetic accepted DELETE without ACK');return Response.json({id:registry.captureKeyId,type:'secret',api_key:'discard-provider-secret-field'});
   }
   assert.equal(init?.method,'GET');
   if(url.pathname.endsWith('/config/storage'))return Response.json({features:{s3Protocol:{enabled:false}}});
@@ -1235,7 +1238,8 @@ async function captureControlRetirementFixture(integrated=false){
   if(url.pathname.endsWith('/api-keys')){assert.equal(url.searchParams.get('reveal'),'false');return Response.json([...(deleted?[]:[{id:registry.captureKeyId,type:'secret'}]),...(extraKey?[{id:'33333333-3333-4333-8333-333333333333',type:'secret'}]:[])]);}
   return Response.json({ref:registry.projectRef,organization_id:registry.organisationId,region:registry.region,status:'ACTIVE_HEALTHY'});
  });
- const create=(selectedClient?:S3Client)=>new ManagedCaptureControlRetirement(config,provider,f.store,credentials,selectedClient??f.client),retirement=create();
+ const create=(selectedClient?:S3Client,execution=true)=>new ManagedCaptureControlRetirement(config,provider,f.store,credentials,selectedClient??f.client,
+  readDescriptor?{descriptor:JSON.parse(JSON.stringify(readDescriptor)),...(execution?{probe:readProbe}:{})}:undefined),retirement=create();
  const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('synthetic-read-role'),
   assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
  // This fixture's existing legacy proof transports share the original closure
@@ -1251,7 +1255,7 @@ async function captureControlRetirementFixture(integrated=false){
  f.value.planDigest=hash(JSON.stringify(plan));const closed=await coordinator.close();
  const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);
  if(integrated)await journal.publishPlanBootstrap(plan,await f.store.observe());else await f.coordinator.publishCaptureBootstrap(journal);
- return{f,provider,retirement,create,plan,coordinator,profile,closed,get deletes(){return deleteCalls;},get deleted(){return deleted;},set lostDelete(v:boolean){lostDelete=v;},set extraKey(v:boolean){extraKey=v;}};
+ return{f,provider,retirement,create,plan,coordinator,profile,closed,readProbe,readDescriptor,readFixture,get deletes(){return deleteCalls;},get deleted(){return deleted;},set lostDelete(v:boolean){lostDelete=v;},set extraKey(v:boolean){extraKey=v;}};
 }
 
 test('format11 retirement records original intent before exact key deletion; cold inspection is read-only',async()=>{
@@ -1366,5 +1370,80 @@ test('coordinator retirement refuses missing original artifacts or unknown reque
   }else x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-baseline.json'))throw new Error('synthetic unknown original ACK');});
   await assert.rejects(x.coordinator.retireCaptureControl());assert.equal(x.deletes,0);assert.equal(x.f.calls.filter(v=>v==='read-proof').length,readProofs);
   await assert.rejects(x.coordinator.inspect());assert.equal(x.deletes,0);
+ }
+});
+
+test('format12 acknowledges intent before canary reads and exact baseline before DELETE; cold inspection needs no capture credential',async t=>{
+ const x=await captureControlRetirementFixture(true,true);assert.equal(x.plan.format,12);assert.equal(x.readFixture!.state.requests.length,0);
+ let intentAcknowledged=false,readBaselineAcknowledged=false;
+ x.f.setFault(command=>{if(command instanceof GetObjectCommand){if(command.input.Key?.endsWith('/capture-control-baseline.json'))intentAcknowledged=true;
+  if(command.input.Key?.endsWith('/capture-control-read-baseline.json'))readBaselineAcknowledged=true;}});
+ const baseline=x.readProbe!.baseline.bind(x.readProbe!);x.readProbe!.baseline=async signal=>{assert.equal(intentAcknowledged,true);return baseline(signal);};
+ const remove=x.provider.retireCaptureControl.bind(x.provider);x.provider.retireCaptureControl=async signal=>{assert.equal(readBaselineAcknowledged,true);return remove(signal);};
+ const result=await x.coordinator.retireCaptureControl();assert.equal(result.report.format,2);assert.equal(x.deletes,1);assert.equal(x.readFixture!.state.requests.length,11);
+ if(result.report.format!==2)throw new Error('missing comparison report');
+ assert.equal(result.report.originalReadBaselineAcknowledgementObserved,true);assert.equal(result.report.readRefusal.retiredControlCanaryGetRefusalObserved,true);
+ const inspection=await x.coordinator.inspect();assert.ok('recordedRetiredControlCanaryGetRefusalObserved' in inspection);
+ assert.equal(inspection.recordedRetiredControlCanaryGetRefusalObserved,true);assert.equal(inspection.freshRetiredControlDataPlaneRefusalVerified,false);
+ assert.equal(x.readFixture!.state.requests.length,11);
+ const lists=x.f.calls.filter(v=>v==='candidate-list').length;
+ await assert.rejects(new ManagedCandidateCaptureJournal(config,credentials,x.f.client).discoverCurrentCandidates(x.f.store,1));
+ assert.equal(x.f.calls.filter(v=>v==='candidate-list').length,lists);
+ const before=x.readFixture!.state.requests.length,writes=x.f.artifacts.size,now=Date.now();
+ t.mock.method(Date,'now',()=>now+600000);assert.throws(()=>x.readFixture!.positive.readRoleVerificationEvidence());
+ x.readProbe!.configurationDescriptor=()=>{throw new Error('cold reader must not use original execution object');};
+ const cold=x.create(undefined,false),saved=await cold.inspect(x.plan);
+ assert.equal(saved.report.format,2);assert.equal(saved.originalAcknowledgementReconstructed,false);assert.equal(x.readFixture!.state.requests.length,before);
+ await assert.rejects(cold.retire(x.plan));assert.equal(x.f.artifacts.size,writes);assert.equal(x.deletes,1);
+});
+
+test('format12 keeps intent, baseline, DELETE, refusal and report ACK loss distinct with no probe or deletion replay',async()=>{
+ for(const stage of ['intent','read-baseline','delete','refusal','report']){
+  const x=await captureControlRetirementFixture(true,true);let lose=true;
+  if(stage==='delete')x.lostDelete=true;
+  if(stage==='refusal')x.readFixture!.state.afterFault='hash';
+  x.f.setFault(command=>{if(!lose||!(command instanceof GetObjectCommand))return;
+   const suffix=stage==='intent'?'/capture-control-baseline.json':stage==='read-baseline'?'/capture-control-read-baseline.json':stage==='report'?'/capture-control-observation.json':null;
+   if(suffix&&command.input.Key?.endsWith(suffix))throw new Error('synthetic lost '+stage+' ACK');});
+  await assert.rejects(x.coordinator.retireCaptureControl());assert.equal(x.deletes,['delete','refusal','report'].includes(stage)?1:0,stage);
+  assert.equal(x.readFixture!.state.requests.length,stage==='intent'?0:stage==='read-baseline'||stage==='delete'?6:11,stage);
+  const before=x.readFixture!.state.requests.length;lose=false;
+  await assert.rejects(x.create().retire(x.plan));assert.equal(x.readFixture!.state.requests.length,before,stage);
+  if(stage==='report')assert.equal((await x.create(undefined,false).inspect(x.plan)).report.format,2);
+  else await assert.rejects(x.create(undefined,false).inspect(x.plan));
+  assert.equal(x.readFixture!.state.requests.length,before,stage);
+ }
+});
+
+test('format12 SDK custody preserves all three original records and refuses pin or public descriptor substitution',async()=>{
+ const x=await captureControlRetirementFixture(true,true),sdk=archivedSdkBackend({...archivedSdkConfig,installationId:config.installationId,bucket:config.bucket,storageKeyArn:config.kmsKeyArn}),client=sdk.s3();
+ try{
+  const result=await x.create(client).retire(x.plan);assert.equal(result.report.format,2);assert.equal(sdk.writes,3);assert.equal(sdk.objects.size,3);assert.equal(sdk.generates,0);
+  const before=x.readFixture!.state.requests.length;assert.equal((await x.create(client,false).inspect(x.plan)).report.format,2);assert.equal(sdk.writes,3);
+  await assert.rejects(x.create(client).retire(x.plan));assert.equal(sdk.objects.size,3);assert.equal(x.readFixture!.state.requests.length,before);
+ }finally{sdk.close();client.destroy();}
+ const y=await captureControlRetirementFixture(true,true);await y.coordinator.retireCaptureControl();
+ const row=[...y.f.artifacts].find(([key])=>key.endsWith('/capture-control-observation.json'))![1],report=JSON.parse(row.body);
+ const original=row.body;
+ report.readBaselinePin.versionId='substituted-version';row.body=JSON.stringify(report);await assert.rejects(y.create(undefined,false).inspect(y.plan));assert.equal(y.deletes,1);
+ const inverted=JSON.parse(original),o=inverted.observation;
+ o.observedAt=new Date(Date.parse(inverted.readRefusal.startedAt)-60000).toISOString();
+ o.observationDigest=hash(JSON.stringify({format:o.format,kind:o.kind,installationId:o.installationId,projectRef:o.projectRef,bucket:o.bucket,
+  captureKeyId:o.captureKeyId,storageConfigurationDigest:o.storageConfigurationDigest,observedAt:o.observedAt,stateSha256:o.stateSha256}));
+ row.body=JSON.stringify(inverted);await assert.rejects(y.create(undefined,false).inspect(y.plan));
+ const wrong=JSON.parse(JSON.stringify(y.readDescriptor));wrong.positiveReader.credential.sha256='0'.repeat(64);
+ assert.throws(()=>new ManagedCaptureControlRetirement(config,y.provider,y.f.store,credentials,y.f.client,{descriptor:wrong}));
+});
+
+test('format12 rechecks the original head and cancellation around the new baseline ACK before DELETE',async()=>{
+ for(const mode of ['head-after-read','head-after-ack','cancel-after-ack']){
+  const x=await captureControlRetirementFixture(true,true),controller=new AbortController();
+  if(mode==='head-after-read'){
+   const original=x.readProbe!.baseline.bind(x.readProbe!);x.readProbe!.baseline=async signal=>{const result=await original(signal);x.f.value={...x.f.value,publicationId:randomUUID()};return result;};
+  }else x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('/capture-control-read-baseline.json')){
+   if(mode==='head-after-ack')x.f.value={...x.f.value,publicationId:randomUUID()};else controller.abort();
+  }});
+  await assert.rejects(x.coordinator.retireCaptureControl(controller.signal));assert.equal(x.deletes,0,mode);
+  assert.equal([...x.f.artifacts.keys()].some(k=>k.endsWith('/capture-control-observation.json')),false);
  }
 });

@@ -34,29 +34,37 @@ in-flight request drainage, whole-Storage quiescence or action authority.
 Those flags remain false. Baseline acknowledgement verification also remains
 false: caller-supplied JSON/hash alone cannot establish original durable custody.
 
-## Integration still required
+## Format-12 custody integration
 
-The component is not wired into format-11 retirement, current coordinator
-inspection or capture. Their current metadata-only refusal flags stay false.
-Before that integration:
+An explicitly configured format-12 coordinator now pins the public comparison
+descriptor and version-2 retirement configuration. Formats 9–11 keep their
+existing behaviour. The sequence is:
 
-1. Version and pin the probe's public configuration in the retirement policy.
-2. A fresh original conditional retirement intent ACK must precede any baseline
-   credential GET. Do not run baseline first on a fresh caller: after a prior
-   retirement that would replay the old secret's positive-control probe.
-3. Retain the resulting canary baseline in a separate immutable, exact-version
-   artifact and obtain its original ACK before DELETE. The existing request and
-   report guard cannot substitute for that additional evidence.
-4. After the original DELETE ACK, verify the bracketing comparison and retain
-   its report together with the exact original baseline pin. Unknown intent,
-   baseline, DELETE or report ACK must retain distinct unresolved outcomes.
-5. Provide strict public-data-only baseline/report validators for cold readers.
-   Historical inspection must not instantiate an expired original JWT, require
-   the retired secret, refresh credentials or reconstruct an original ACK.
-6. Carry the resulting retirement/credential evidence into the new capture,
-   source-job, archive and cold-reader binding. Existing capture formats cannot
-   silently imply that coverage.
+1. Obtain the original conditional retirement-intent ACK before any baseline
+   credential GET. A fresh caller conflicts on that same intent before probing.
+2. Read the canary baseline with both configured credentials and persist it in
+   the separate immutable `capture-control-read-baseline.json` object. Its exact
+   version, checksum and original ACK must be known before DELETE.
+3. Perform the one original named-key DELETE, verify the bracketing canary GET
+   refusal, and retain a version-2 retirement report pinning both original
+   intent and canary-baseline records.
+4. Preserve distinct unresolved outcomes for unknown intent, baseline, DELETE
+   and report ACKs, or failed comparison. Saved reads never permit replay.
 
+Public-data-only validators now check the exact configuration/reader digest,
+canary, baseline, declared role, signing-key fingerprint, times and observation
+hash. Historical inspection can use the public descriptor and saved records
+without the retired secret or an active/expired original JWT object. It checks
+the saved signature-verification record; it does not reverify a discarded token's
+signature or recover an original ACK. Current key absence is a separate metadata
+observation; current canary comparison is not replayed by cold inspection.
+
+Still required: carry these retirement, baseline and comparison pins through a
+new common-candidate/request/report, canonical source, job, archive and current
+cold-reader binding. Existing capture formats and current candidate discovery
+explicitly refuse formats 11 and 12. Actual provider propagation/current signing
+keys, role/project authority, independent IAM and physical-host-loss proof also
+remain open. No route or tenant automatically opts into format 12.
 Synthetic tests use real asymmetric JWT signatures and the actual capture
 reader implementation, with modelled HTTP transports. They are not live
 Supabase permission, propagation, signer-currency, independent-IAM or physical

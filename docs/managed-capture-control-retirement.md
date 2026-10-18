@@ -83,4 +83,15 @@ fresh credential-read refusal and retired-control data-plane refusal remain
 false. Missing retirement evidence or recreated keys fail closed. No route,
 provider credential or tenant installation opts into the policy automatically.
 
-A separate [read comparison component](retired-control-read-comparison.md) now exists. Its original intent/baseline custody and public-data-only historical validators must be integrated before retirement or capture can claim its result.
+The [read comparison component](retired-control-read-comparison.md) is integrated under explicit format 12, with original intent and separate baseline ACKs before DELETE. Public-data-only historical validation is implemented. Capture/candidate/archive propagation and actual provider acceptance remain open.
+## Format 12 — retained comparison evidence
+
+Supplying the public comparison descriptor and live probe to the retirement
+component selects a new configuration digest; the coordinator pins it in format
+12 with `REVOKE_KEYS_RETIRE_CONTROL_WITH_CANARY_READ_COMPARISON_V2`. Execution
+requires the live probe, while saved inspection needs only its public descriptor.
+The intent ACK precedes all new credential probes; a separate exact-version
+baseline ACK precedes DELETE. The version-2 report includes the original baseline
+pin and saved GET-refusal comparison. The coordinator distinguishes a verified
+recorded canary refusal from a fresh refusal, which inspection does not perform.
+All global writer exclusion, provider currency and action-authority limits remain.

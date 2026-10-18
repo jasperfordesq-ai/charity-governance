@@ -43,7 +43,7 @@ export class ManagedCandidateCaptureJournal {
    const before=await head(),saved=await this.bootstrap.observe(before,signal);
    // Retirement plans need a new candidate binding and current retirement
    // evidence. Neither legacy nor format-4 discovery may imply that coverage.
-   if(saved.plan.format===11)throw failure();
+   if(saved.plan.format===11||saved.plan.format===12)throw failure();
    const catalogue=await this.discoverCandidates({attemptId:before.value.attemptId,planDigest:before.value.planDigest,
     sourceSha:saved.plan.sourceSha,maintenanceEpoch:before.value.maintenanceEpoch,controlRevision:before.revision},signal);
    for(const row of catalogue.records){

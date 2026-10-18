@@ -1,3 +1,13 @@
+## 18 October: intent, canary baseline and retirement result custody
+
+Explicit format 12 now binds the original intent ACK before credential reads,
+a separate immutable baseline ACK before DELETE, and a version-2 report linking
+both records with the canary GET-refusal comparison. Cold inspection validates
+public evidence without the old secret or an original JWT object; it reconstructs
+no ACK. Formats 9–11 remain unchanged. Capture/discovery 11/12 still refuse until
+the new source/archive binding exists. See [sequence and limits](retired-control-read-comparison.md).
+Exact synthetic SDK/loss/head/cancellation tests and source state are private;
+provider IAM/current authority/physical-host-loss acceptance remains open.
 ## 18 October: bounded retired-key read comparison component
 
 A new internal synthetic-canary probe requires successful reads by both original

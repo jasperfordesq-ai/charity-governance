@@ -15,7 +15,9 @@ const readRolePlan=legacyManagedPlanSchema.extend({format:z.literal(10),
  capturePolicy:z.literal('EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1'),captureAuthorization:sha}).strict();
 export const managedPlanSchema=z.discriminatedUnion('format',[legacyManagedPlanSchema,readRolePlan,
  readRolePlan.extend({format:z.literal(11),storageCredentialPolicy:z.literal('REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1'),
- captureControlRetirement:sha}).strict()]);
+ captureControlRetirement:sha}).strict(),
+ readRolePlan.extend({format:z.literal(12),storageCredentialPolicy:z.literal('REVOKE_KEYS_RETIRE_CONTROL_WITH_CANARY_READ_COMPARISON_V2'),
+ captureControlRetirement:sha,captureControlReadComparison:sha}).strict()]);
 const closed=z.object({revision:sha,value:z.object({installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:sha,phase:z.literal('OBSERVED_CLOSED'),attemptId:z.string().uuid()})});
 export type ManagedClosedHead=z.infer<typeof closed>;

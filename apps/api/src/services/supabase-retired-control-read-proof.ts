@@ -1,20 +1,10 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
-import {supabaseCaptureJwtConfiguration} from './supabase-capture-jwt.js';
+import {retiredControlReadConfigurationSchema as configuration,retiredControlReadBaselineSchema as baselineSchema,retiredControlReadDescriptorSchema,assertRetiredControlReadBaseline} from './retired-control-read-evidence.js';
 
-const sha=z.string().regex(/^[a-f0-9]{64}$/),uuid=z.string().uuid().refine(v=>v===v.toLowerCase());
+const uuid=z.string().uuid().refine(v=>v===v.toLowerCase());
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
-const canarySchema=z.object({fileUrl:z.string().min(1).max(2048),bytes:z.number().int().min(1).max(1024),sha256:sha}).strict();
-const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),projectRef:z.string().regex(/^[a-z0-9]{20}$/),
- bucket:z.literal('charitypilot-recovery-canaries'),canary:canarySchema,retiredControl:z.object({id:uuid,sha256:sha}).strict(),
- readRole:z.object({subject:uuid,sqlRole:supabaseCaptureJwtConfiguration.shape.sqlRole,configurationDigest:sha}).strict()}).strict()
- .refine(v=>v.canary.fileUrl.startsWith('charitypilot-recovery-canary/'+v.installationId+'/')&&v.canary.fileUrl.split('/').length<=32
-  &&v.canary.fileUrl.split('/').every(p=>p.length>0&&p.length<=255&&p!=='.'&&p!=='..'&&!/[\x00-\x1f\x7f\\%]/.test(p)));
-const baselineSchema=z.object({format:z.literal(1),kind:z.literal('SUPABASE_RETIRED_CONTROL_READ_BASELINE_V1'),configurationDigest:sha,
- capturedAt:z.string().datetime(),canarySha256:sha,bytes:z.number().int().min(1).max(1024),retiredControlId:uuid,
- positiveControl:z.literal('VERIFIED_CUSTOM_ROLE_JWT'),bothConfiguredCredentialsReadCanary:z.literal(true),
- originalBaselineAcknowledgementVerified:z.literal(false),actionAuthorized:z.literal(false)}).strict();
 const artifact=(value:unknown)=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
 const failure=()=>new Error('Retired control read comparison is unverified');
 
@@ -40,6 +30,8 @@ export class SupabaseRetiredControlReadProof {
    subject:c.readRole.subject,sqlRole:c.readRole.sqlRole});
  }
  configurationDigest(){this.assertComponents();return hash(JSON.stringify({format:1,policy:'RETIRED_CONTROL_CANARY_GET_WITH_CUSTOM_JWT_POSITIVE_V1',...this.#config}));}
+ configurationDescriptor(){this.assertComponents();return retiredControlReadDescriptorSchema.parse({format:1,kind:'RETIRED_CONTROL_READ_DESCRIPTOR_V1',
+  configuration:this.#config,positiveReader:this.#positive.readRoleConfigurationDescriptor()});}
  assertRetirementKeyScope(raw:unknown){const v=z.object({installationId:z.string(),projectRef:z.string(),captureKeyId:uuid}).strict().parse(raw);
   if(v.installationId!==this.#config.installationId||v.projectRef!==this.#config.projectRef||v.captureKeyId!==this.#config.retiredControl.id)throw failure();this.assertComponents();}
  private async work<T>(run:(signal:AbortSignal)=>Promise<T>,caller?:AbortSignal){
@@ -65,10 +57,7 @@ export class SupabaseRetiredControlReadProof {
  },caller);}
  assertBaseline(body:string,expectedSha256:string){
   try{
-   if(typeof body!=='string'||Buffer.byteLength(body)>4096||!sha.safeParse(expectedSha256).success||hash(body)!==expectedSha256)throw failure();
-   const v=baselineSchema.parse(JSON.parse(body)),c=this.#config;
-   if(JSON.stringify(v)!==body||v.configurationDigest!==this.configurationDigest()||v.canarySha256!==c.canary.sha256
-    ||v.bytes!==c.canary.bytes||v.retiredControlId!==c.retiredControl.id||Date.parse(v.capturedAt)>Date.now()+60000)throw failure();return v;
+   return assertRetiredControlReadBaseline(this.configurationDescriptor(),{body,sha256:expectedSha256}).value;
   }catch{throw failure();}
  }
  private async denied(signal:AbortSignal){

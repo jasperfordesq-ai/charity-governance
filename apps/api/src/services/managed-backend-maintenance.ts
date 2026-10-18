@@ -59,6 +59,8 @@ export class ManagedBackendMaintenance {
   if(!this.readRole)return descriptor;this.readRole.assertMaintenanceScope(this.config);this.readRole.assertStorageScope(this.storage.candidateCaptureScope());
   const readRolePlan={...descriptor,format:10,capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:this.readRole.configurationDigest()};
   if(!this.retirement)return readRolePlan;this.retirement.assertCoordinatorScope(this.config.installationId,this.storage,this.control);
+  const comparison=this.retirement.readComparisonConfigurationDigest();
+  if(comparison)return{...readRolePlan,format:12,storageCredentialPolicy:'REVOKE_KEYS_RETIRE_CONTROL_WITH_CANARY_READ_COMPARISON_V2',captureControlRetirement:this.retirement.configurationDigest(),captureControlReadComparison:comparison};
   return{...readRolePlan,format:11,storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1',captureControlRetirement:this.retirement.configurationDigest()};}
  planDigest(){return createHash('sha256').update(JSON.stringify(this.planDescriptor())).digest('hex');}
  private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string,retiredStorageDigest?:string){
@@ -353,7 +355,8 @@ export class ManagedBackendMaintenance {
    // missing command/database completion receipt after an uncertain outcome.
    return{phase:after.value.phase,attemptId:after.value.attemptId,observations,
     ...(retirement?{captureControlRetirement:retirement,captureControlRetirementRequired:true as const,originalCaptureControlRetirementAcknowledgementReconstructed:false as const,
-     recordedCaptureControlRetirementReportVerified:true as const,currentListedControlKeyAbsenceObserved:true as const,freshRetiredControlDataPlaneRefusalVerified:false as const}:{}),
+     recordedCaptureControlRetirementReportVerified:true as const,currentListedControlKeyAbsenceObserved:true as const,freshRetiredControlDataPlaneRefusalVerified:false as const,
+     recordedRetiredControlCanaryGetRefusalObserved:retirement.report.format===2}:{}),
     credentialReadRefusalsObserved:freshReadObservation!==null,readBaselineSha256:retained?.sha256??null,
     recordedReadObservation:after.value.readObservation??null,freshReadObservation,
     recordedS3Observation,recordedS3CoverageObserved:recordedS3Observation!==null,freshS3CoverageObserved:false as const,s3Mode:s3.mode,

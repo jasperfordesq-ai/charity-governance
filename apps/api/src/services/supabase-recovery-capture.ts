@@ -30,6 +30,7 @@ const configSchema = z
   })
   .strict();
 const jwtConfigSchema=configSchema.extend({authentication:supabaseCaptureJwtConfiguration}).strict();
+export const supabaseReadRoleCaptureConfigurationSchema=jwtConfigSchema;
 const captureConfiguration=z.union([configSchema,jwtConfigSchema]);
 const timestamp = z.string().max(64).datetime({ offset: true });
 const fileSchema = z.object({
@@ -120,6 +121,7 @@ export class SupabaseRecoveryCapture {
   }
   readRoleRemainingMs(){if(!this.#jwt)throw failure();return this.#jwt.remainingMs();}
   readRoleVerificationEvidence(){if(!this.#jwt)throw failure();return this.#jwt.evidence();}
+  readRoleConfigurationDescriptor(){if(!this.#jwt)throw failure();return jwtConfigSchema.parse(this.config);}
   private timeout(maximum:number){return this.#jwt?Math.min(maximum,this.#jwt.remainingMs()):maximum;}
   private segment(raw: string) {
     if (
