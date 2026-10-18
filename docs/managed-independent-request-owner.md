@@ -6,7 +6,9 @@ The existing private channel supports a nonce-bound OUTCOME after the original
 OWNER acknowledgement and before the source response. It checks the original
 local owner byte pin and input digest, and accepts only one outcome for that
 ordinal. The original parent may require an acknowledged outcome before source
-response accounting; packets cannot choose or downgrade this requirement.
+response accounting; packets cannot choose or downgrade this requirement. In
+that mode the response must match the acknowledged outcome's exact intent pin,
+status, signal, transport-error and already-absent fields before its callback.
 The callback must return an observation pin with no dispatch, queue-resolution
 or action authority. Failed or unknown ACK consumes the channel. Fresh saved
 reads do not recreate it.

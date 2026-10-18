@@ -21,7 +21,7 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
  const unchanged=()=>{const current=requireDaemonGateDirectory(root);if(current.dev!==originalRoot.dev||current.ino!==originalRoot.ino)throw refuse();};
  const path=join(root,'gate.sock'),descriptorPath=join(root,'gate.json'),capability=randomBytes(32).toString('hex');
  let open=true,failed=false,headerAcknowledged=false,intentCount=0,responseCount=0,ownerCount=0,ownerOutcomeCount=0,endAcknowledged=false,busy=false;
- const sockets=new Set(),pending=new Set(),nonces=new Set(),owners=new Map(),outcomes=new Set();
+ const sockets=new Set(),pending=new Set(),nonces=new Set(),owners=new Map(),outcomes=new Map();
  const server=createServer(socket=>{
   sockets.add(socket);let bytes=Buffer.alloc(0),received=false;
   const fail=()=>{failed=true;socket.destroy();};socket.setTimeout(20000,fail);socket.on('error',fail);
@@ -46,10 +46,17 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
      if(v.kind==='OUTCOME'){
       const original=owners.get(ordinal);
       if(!onOwnerOutcome||!headerAcknowledged||local.kind!=='MANAGED_DAEMON_OWNER_OUTCOME_V1'||ordinal!==intentCount||ordinal!==responseCount+1||!original||outcomes.has(ordinal)
-       ||local.ownerPin?.sha256!==original.sha256||local.ownerPin?.byteLength!==original.byteLength||!hex(local.ownerInputDigest)||local.ownerInputDigest!==original.inputDigest)throw refuse();
+       ||local.ownerPin?.sha256!==original.sha256||local.ownerPin?.byteLength!==original.byteLength||!hex(local.ownerInputDigest)||local.ownerInputDigest!==original.inputDigest
+       ||!hex(local.intentPin?.sha256)||!Number.isSafeInteger(local.intentPin?.byteLength)||local.intentPin.byteLength<1
+       ||local.status!==null&&!Number.isSafeInteger(local.status)||['transportError','signal','removalAlreadyAbsent'].some(k=>typeof local[k]!=='boolean'))throw refuse();
      }
      if(v.kind==='RESPONSE'&&(!headerAcknowledged||local.kind!=='MANAGED_DAEMON_CLIENT_RESPONSE_V1'||ordinal!==intentCount||ordinal!==responseCount+1
       ||requireIndependentOwner&&!owners.has(ordinal)||requireIndependentOutcome&&!outcomes.has(ordinal)))throw refuse();
+     if(v.kind==='RESPONSE'&&requireIndependentOutcome){
+      const original=outcomes.get(ordinal);
+      for(const key of ['status','transportError','signal','removalAlreadyAbsent'])if(local[key]!==original[key])throw refuse();
+      if(local.intentPin?.sha256!==original.intentPin.sha256||local.intentPin?.byteLength!==original.intentPin.byteLength)throw refuse();
+     }
      if(v.kind==='END'&&(!headerAcknowledged||local.kind!=='MANAGED_DAEMON_REQUEST_END_V1'||local.requestCount!==intentCount||responseCount!==intentCount))throw refuse();
      nonces.add(v.nonce);const saved=await({HEADER:onHeader,INTENT:onIntent,RESPONSE:onResponse,END:onEnd,OWNER:onOwner,OUTCOME:onOwnerOutcome}[v.kind](a));
      const completion=v.kind==='RESPONSE'||v.kind==='END'||v.kind==='OUTCOME';
@@ -59,7 +66,8 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
       ||typeof saved.pin.versionId!=='string'||saved.pin.versionId==='null'||!(/^[\x21-\x7e]{1,1024}$/).test(saved.pin.versionId))throw refuse();
      if(v.kind==='HEADER')headerAcknowledged=true;else if(v.kind==='INTENT')intentCount=ordinal;
      else if(v.kind==='OWNER'){owners.set(ordinal,{sha256:a.sha256,byteLength:a.byteLength,inputDigest:local.identity?.inputDigest});ownerCount++;}
-     else if(v.kind==='OUTCOME'){outcomes.add(ordinal);ownerOutcomeCount++;}else if(v.kind==='RESPONSE')responseCount=ordinal;else endAcknowledged=true;
+     else if(v.kind==='OUTCOME'){outcomes.set(ordinal,{intentPin:local.intentPin,status:local.status,transportError:local.transportError,signal:local.signal,removalAlreadyAbsent:local.removalAlreadyAbsent});ownerOutcomeCount++;}
+     else if(v.kind==='RESPONSE')responseCount=ordinal;else endAcknowledged=true;
      socket.end(JSON.stringify({kind:'MANAGED_DAEMON_CUSTODY_ACK_V2',recordKind:v.kind,jobId,inputDigest,sourceSha,nonce:v.nonce,ordinal,localRecordPin:{sha256:a.sha256,byteLength:a.byteLength},savedEvidenceAuthorizesDispatch:false})+'\n');
     }catch{fail();}finally{busy=false;}
    })();pending.add(task);void task.finally(()=>pending.delete(task));

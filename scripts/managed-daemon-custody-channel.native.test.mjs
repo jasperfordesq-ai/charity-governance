@@ -77,11 +77,11 @@ test('owner-required accounting refuses a client response without an original OW
  }finally{await gate.close();}
 });
 test('OUTCOME is original-owner-bound, once-only and required before opted-in response accounting',{skip:!enabled,timeout:30000},async()=>{
- for(const mode of ['success','no-owner','wrong-owner','wrong-input','response-first','duplicate','refused','ACK-lost','wrong-ack-pin']){
+ for(const mode of ['success','no-owner','wrong-owner','wrong-input','response-first','duplicate','refused','ACK-lost','wrong-ack-pin','response-status','response-intent','response-signal','response-transport','response-absence']){
   const jobId=randomUUID(),inputDigest='b'.repeat(64),sourceSha='1'.repeat(40),ownerInputDigest='c'.repeat(64);let calls=0,responses=0,gate;
   const record=value=>{const body=JSON.stringify(value);return{body,sha256:createHash('sha256').update(body).digest('hex'),byteLength:Buffer.byteLength(body)};};
   const owner=record({kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId,sequence:1,identity:{inputDigest:ownerInputDigest}});
-  const outcome=record({kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId,sequence:1,
+  const outcome=record({kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId,sequence:1,intentPin:{sha256:'d'.repeat(64),byteLength:100},status:0,transportError:false,signal:false,removalAlreadyAbsent:false,
    ownerPin:{sha256:mode==='wrong-owner'?'0'.repeat(64):owner.sha256,byteLength:owner.byteLength},ownerInputDigest:mode==='wrong-input'?'0'.repeat(64):ownerInputDigest});
   gate=await createManagedDaemonCustodyChannel({jobId,inputDigest,sourceSha,requireIndependentOwner:true,requireIndependentOutcome:true,
    onHeader:async()=>saved(),onIntent:async()=>saved(),onOwner:async()=>({...saved(),independentOwnerDispatchVerified:false}),
@@ -89,18 +89,20 @@ test('OUTCOME is original-owner-bound, once-only and required before opted-in re
     return{...saved(mode==='wrong-ack-pin'?'BASELINE':'OBSERVATION'),independentOwnerDispatchVerified:false};},
    onResponse:async()=>{responses++;return saved('OBSERVATION');},onEnd:async()=>saved('OBSERVATION')});
   const send=(kind,artifact)=>requestManagedDaemonCustody({descriptorPath:gate.descriptorPath,kind,jobId,inputDigest,sourceSha,artifact});
-  const response=record({kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId,sequence:1});
+  const response=record({kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId,sequence:1,intentPin:{sha256:mode==='response-intent'?'e'.repeat(64):'d'.repeat(64),byteLength:100},
+   status:mode==='response-status'?1:0,transportError:mode==='response-transport',signal:mode==='response-signal',removalAlreadyAbsent:mode==='response-absence'});
   try{
    await send('HEADER',record({kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId,inputDigest}));
    await send('INTENT',record({kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId,sequence:1}));
    if(mode!=='no-owner')await send('OWNER',owner);
    if(mode==='response-first')await assert.rejects(send('RESPONSE',response));
-   else if(['success','duplicate'].includes(mode)){
+   else if(mode==='success'||mode==='duplicate'||mode.startsWith('response-')){
     await send('OUTCOME',outcome);assert.equal(gate.snapshot().ownerOutcomeCount,1);
     if(mode==='duplicate')await assert.rejects(send('OUTCOME',outcome));
+    else if(mode.startsWith('response-')){await assert.rejects(send('RESPONSE',response));assert.equal(responses,0);}
     else{await send('RESPONSE',response);assert.equal(responses,1);}
    }else await assert.rejects(send('OUTCOME',outcome));
-   assert.equal(calls,['success','duplicate','refused','ACK-lost','wrong-ack-pin'].includes(mode)?1:0);
+   assert.equal(calls,['success','duplicate','refused','ACK-lost','wrong-ack-pin'].includes(mode)||mode.startsWith('response-')&&mode!=='response-first'?1:0);
    assert.equal(gate.snapshot().requireIndependentOutcome,true);assert.equal(gate.snapshot().failed,mode!=='success');
   }finally{await gate.close();}
  }
