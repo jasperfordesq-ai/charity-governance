@@ -128,3 +128,13 @@ is deliberately denied; native results and exact revisions are recorded privatel
 This adapter is not activated by the default source runner. Successful provider
 activation, original-issuer death, outcome delivery and source integration remain
 required, along with the independent provider and host-loss gates.
+
+### Native receiver refusal verified
+
+The opt-in native probe now launches the actual fixed stdin receiver and reaches
+its original claim callback only after the real kernel/source/input verifier.
+An intentionally denied claim prevents SDK reads, an outcome endpoint and daemon
+dispatch. The new service uses `--collect`; cleanup observes exact original unit
+absence across collection races without adopting a recovered identity. Earlier
+failed runs and the repair are retained privately. This is a negative live
+handshake proof, not successful SDK activation or original-issuer-death proof.
