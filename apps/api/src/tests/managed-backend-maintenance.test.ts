@@ -1220,7 +1220,7 @@ test('unsupported capture catalogue permissions refuse before maintenance acquis
  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
 });
 
-async function captureControlRetirementFixture(){
+async function captureControlRetirementFixture(integrated=false){
  const f=fixture();let deleted=false,deleteCalls=0,lostDelete=false,extraKey=false;
  const registry={installationId:config.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
  const provider=new SupabaseStorageWriterControl(registry,'synthetic-management',async(input,init)=>{
@@ -1236,14 +1236,22 @@ async function captureControlRetirementFixture(){
   return Response.json({ref:registry.projectRef,organization_id:registry.organisationId,region:registry.region,status:'ACTIVE_HEALTHY'});
  });
  const create=(selectedClient?:S3Client)=>new ManagedCaptureControlRetirement(config,provider,f.store,credentials,selectedClient??f.client),retirement=create();
- const plan=managedPlanSchema.parse({...f.coordinator.planDescriptor(),format:11,storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1',
+ const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('synthetic-read-role'),
+  assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
+ // This fixture's existing legacy proof transports share the original closure
+ // flag. Keep that model while using the real retirement provider instance.
+ if(integrated)provider.close=async()=>{await f.storage.close();return provider.observeClosed();};
+ const coordinator=integrated?new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,provider,
+  f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never,retirement):f.coordinator;
+ const plan=managedPlanSchema.parse(integrated?coordinator.planDescriptor():{...f.coordinator.planDescriptor(),format:11,storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1',
   capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:hash('synthetic-read-role'),captureControlRetirement:retirement.configurationDigest()});
- // Only this unit fixture supplies a protocol11 coordinator. Production has no
- // constructor/route activation for the new policy yet.
- Object.defineProperty(f.coordinator,'planDescriptor',{value:()=>structuredClone(plan)});f.value.planDigest=hash(JSON.stringify(plan));
- await f.coordinator.close();
- await f.coordinator.publishCaptureBootstrap(new ManagedCandidateCaptureJournal(config,credentials,f.client));
- return{f,provider,retirement,create,plan,get deletes(){return deleteCalls;},get deleted(){return deleted;},set lostDelete(v:boolean){lostDelete=v;},set extraKey(v:boolean){extraKey=v;}};
+ // Component-only tests pin the plan directly; integrated tests above use
+ // the explicit production coordinator constructor, with synthetic transports.
+ if(!integrated)Object.defineProperty(f.coordinator,'planDescriptor',{value:()=>structuredClone(plan)});
+ f.value.planDigest=hash(JSON.stringify(plan));const closed=await coordinator.close();
+ const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);
+ if(integrated)await journal.publishPlanBootstrap(plan,await f.store.observe());else await f.coordinator.publishCaptureBootstrap(journal);
+ return{f,provider,retirement,create,plan,coordinator,profile,closed,get deletes(){return deleteCalls;},get deleted(){return deleted;},set lostDelete(v:boolean){lostDelete=v;},set extraKey(v:boolean){extraKey=v;}};
 }
 
 test('format11 retirement records original intent before exact key deletion; cold inspection is read-only',async()=>{
@@ -1320,5 +1328,43 @@ test('retirement inspection refuses internally altered reports even when latest 
   if(change==='claim')report.observation.wholeStorageQuiesced=true;
   if(change==='binding')report.binding.sourceSha='9'.repeat(40);
   row.body=JSON.stringify(report);await assert.rejects(x.create().inspect(x.plan));assert.equal(x.deletes,1);
+ }
+});
+
+test('explicit coordinator format11 preserves positive controls before retirement and never replays them afterwards',async()=>{
+ const x=await captureControlRetirementFixture(true);assert.equal(x.coordinator.planDescriptor().format,11);assert.equal(x.plan.format,11);
+ assert.equal('captureControlRetirementRequired' in x.closed&&x.closed.captureControlRetirementRequired,true);
+ assert.equal('captureControlRetirementAcknowledged' in x.closed&&x.closed.captureControlRetirementAcknowledged,false);assert.equal(x.deletes,0);
+ const before=x.f.calls.filter(v=>v==='read-proof').length;await assert.rejects(x.coordinator.inspect());
+ assert.equal(x.f.calls.filter(v=>v==='read-proof').length,before);
+ const result=await x.coordinator.retireCaptureControl();assert.equal(result.report.originalDeleteAcknowledgementObserved,true);assert.equal(x.deletes,1);
+ assert.equal(x.f.calls.filter(v=>v==='read-proof').length,before);
+ x.provider.observeClosed=async()=>{throw new Error('retired-key positive control must never run');};
+ x.f.proof.verifyReadRefusal=async()=>{throw new Error('legacy credential read proof must never rerun');};
+ const writes=x.f.artifacts.size,reads=x.f.calls.filter(v=>v==='read-proof').length;
+ const inspected=await x.coordinator.inspect();assert.equal(inspected.credentialReadRefusalsObserved,false);assert.equal(inspected.freshReadObservation,null);
+ assert.ok('captureControlRetirement' in inspected);assert.equal('freshRetiredControlDataPlaneRefusalVerified' in inspected&&inspected.freshRetiredControlDataPlaneRefusalVerified,false);
+ assert.equal(inspected.wholeBackendQuiesced,false);assert.equal(x.f.artifacts.size,writes);assert.equal(x.f.calls.filter(v=>v==='read-proof').length,reads);
+ await assert.rejects(x.coordinator.retireCaptureControl());assert.equal(x.deletes,1);
+});
+
+test('retirement coordinator requires matching original component instances and read-role policy',async()=>{
+ const x=await captureControlRetirementFixture(true);
+ const build=(readRole:unknown,retirement:ManagedCaptureControlRetirement,storage=x.provider,control=x.f.store)=>new ManagedBackendMaintenance(operation,x.f.provider as never,x.f.database as never,control,storage,
+  x.f.proof as never,x.f.write as never,x.f.signedFixture.factory(),x.f.resumableFixture.factory(),x.f.signedTusFixture.factory(),x.f.s3Fixture.factory(),readRole as never,retirement);
+ assert.throws(()=>build(undefined,x.retirement));assert.throws(()=>build(x.profile,x.retirement,x.f.s3Metadata));
+ const other=fixture();assert.throws(()=>build(x.profile,x.retirement,x.provider,other.store));
+ assert.throws(()=>x.retirement.assertCoordinatorScope('different-installation',x.provider,x.f.store));assert.equal(x.deletes,0);
+ const legacy=fixture();await assert.rejects(legacy.coordinator.retireCaptureControl());assert.equal(legacy.puts,0);assert.equal(legacy.calls.length,0);
+});
+
+test('coordinator retirement refuses missing original artifacts or unknown request ACK before key mutation',async()=>{
+ for(const mode of ['missing-original','lost-request']){
+  const x=await captureControlRetirementFixture(true),readProofs=x.f.calls.filter(v=>v==='read-proof').length;
+  if(mode==='missing-original'){
+   const key=[...x.f.artifacts.keys()].find(k=>k.endsWith('/write-baseline.json'));assert.ok(key);x.f.artifacts.delete(key);
+  }else x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-baseline.json'))throw new Error('synthetic unknown original ACK');});
+  await assert.rejects(x.coordinator.retireCaptureControl());assert.equal(x.deletes,0);assert.equal(x.f.calls.filter(v=>v==='read-proof').length,readProofs);
+  await assert.rejects(x.coordinator.inspect());assert.equal(x.deletes,0);
  }
 });

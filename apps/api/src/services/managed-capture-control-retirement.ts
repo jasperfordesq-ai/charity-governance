@@ -48,6 +48,10 @@ export class ManagedCaptureControlRetirement {
  }
  configurationDigest(){return candidateHash(JSON.stringify({format:1,policy:'ORIGINAL_REQUEST_ACK_BEFORE_CAPTURE_CONTROL_RETIREMENT_V1',
   storage:this.storage,scope:this.scope}));}
+ assertCoordinatorScope(installationId:string,provider:SupabaseStorageWriterControl,control:S3ManagedMaintenanceControl){
+  if(installationId!==this.storage.installationId||provider!==this.provider||control!==this.control
+   ||JSON.stringify(scopeSchema.parse(provider.captureControlRetirementScope()))!==JSON.stringify(this.scope))throw failure();
+ }
  private async context(rawPlan:unknown,signal?:AbortSignal){
   signal?.throwIfAborted();const plan=managedPlanSchema.parse(rawPlan);
   if(plan.format!==11||plan.captureControlRetirement!==this.configurationDigest()||plan.storage!==this.scope.storageConfigurationDigest

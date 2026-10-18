@@ -22,6 +22,7 @@ import type {ManagedSignedUploadEvidence} from './managed-signed-upload-evidence
 import {signedUploadBaselineSchema,signedUploadObservationSchema} from './signed-upload-evidence-contract.js';
 import {credentialWriteObservationSchema} from './credential-write-evidence.js';
 import type {ManagedReadRoleCapture} from './managed-read-role-capture.js';
+import type {ManagedCaptureControlRetirement} from './managed-capture-control-retirement.js';
 import {readRoleSupabaseCaptureSchema,type ManagedReadRoleCapturedFiles} from './managed-read-role-capture-contract.js';
 
 const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
@@ -36,7 +37,7 @@ export class ManagedBackendMaintenance {
  private readonly config:z.infer<typeof configuration>;
  constructor(raw:unknown,private readonly provider:RenderMaintenanceControl,
   private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl,
-  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence,private readonly s3:ManagedS3MaintenanceEvidence,private readonly readRole?:ManagedReadRoleCapture){
+  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence,private readonly s3:ManagedS3MaintenanceEvidence,private readonly readRole?:ManagedReadRoleCapture,private readonly retirement?:ManagedCaptureControlRetirement){
   this.config=configuration.parse(raw);
   this.s3.assertStorageScope(this.storage.s3FeatureProofScope(),this.storage.configurationDigest(this.config.installationId));
   this.proof.assertStorageScope(this.storage.readProofScope());
@@ -46,6 +47,7 @@ export class ManagedBackendMaintenance {
   this.signedResumable.assertStorageScope(this.storage.readProofScope());
   this.signedResumable.assertSignedScope(this.signed.configurationDigest(this.config.installationId));
   this.readRole?.assertMaintenanceScope(this.config);this.readRole?.assertStorageScope(this.storage.candidateCaptureScope());
+  if(this.retirement){if(!this.readRole)throw new Error(failure);this.retirement.assertCoordinatorScope(this.config.installationId,this.storage,this.control);}
  }
  planDescriptor(){const descriptor={format:9,...this.config,
   databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
@@ -55,12 +57,16 @@ export class ManagedBackendMaintenance {
   provider:this.provider.configurationDigest(),database:this.database.configurationDigest(),storage:this.storage.configurationDigest(this.config.installationId),
   readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)};
   if(!this.readRole)return descriptor;this.readRole.assertMaintenanceScope(this.config);this.readRole.assertStorageScope(this.storage.candidateCaptureScope());
-  return{...descriptor,format:10,capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:this.readRole.configurationDigest()};}
+  const readRolePlan={...descriptor,format:10,capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:this.readRole.configurationDigest()};
+  if(!this.retirement)return readRolePlan;this.retirement.assertCoordinatorScope(this.config.installationId,this.storage,this.control);
+  return{...readRolePlan,format:11,storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1',captureControlRetirement:this.retirement.configurationDigest()};}
  planDigest(){return createHash('sha256').update(JSON.stringify(this.planDescriptor())).digest('hex');}
- private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string){
-  const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated(),storage=await this.storage.observeClosed(),signing=await this.signed.observeRevoked();
-  if(storage.configuredAccessPathsObservedClosed!==true)throw new Error(failure);
-  return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,storageDigest:storage.observationDigest,signingDigest:signing.observationDigest,
+ private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string,retiredStorageDigest?:string){
+  const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated();
+  let storageDigest=retiredStorageDigest;
+  if(!storageDigest){const storage=await this.storage.observeClosed();if(storage.configuredAccessPathsObservedClosed!==true)throw new Error(failure);storageDigest=storage.observationDigest;}
+  const signing=await this.signed.observeRevoked();
+  return{servicesDigest:services.observationDigest,databaseDigest:database.observationDigest,storageDigest,signingDigest:signing.observationDigest,
    ...(readProofDigest?{readProofDigest}:{}),...(writeProofDigest?{writeProofDigest}:{}),...(signedProofDigest?{signedProofDigest}:{}),...(resumableProofDigest?{resumableProofDigest}:{}),...(signedResumableProofDigest?{signedResumableProofDigest}:{}),...(s3ProofDigest?{s3ProofDigest}:{}),observedAt:new Date().toISOString()};
  }
  async close(){
@@ -119,6 +125,7 @@ export class ManagedBackendMaintenance {
    if(checkedS3.observationDigest!==s3Observation.observationDigest||Math.abs(Date.now()-Date.parse(checkedS3.observedAt))>180000)throw new Error();
    const recorded=await this.control.recordObservedClosed(attempt.value.attemptId,ready.revision,observations,readObservation,writeObservationPin,signedObservationPin,resumableObservation.pin,signedTusObservation.pin,s3Observation.pin);
    return{phase:recorded.value.phase,attemptId:recorded.value.attemptId,observations,
+    ...(this.retirement?{captureControlRetirementRequired:true as const,captureControlRetirementAcknowledged:false as const}:{}),
     configuredS3CoverageObserved:true as const,s3Mode:s3Observation.mode,s3Coverage:s3Observation.coverage,s3BaselinePin:recorded.value.s3BaselinePin,s3ObservationPin:recorded.value.s3ObservationPin,
     credentialReadRefusalsObserved:true as const,readBaselineSha256:retained.sha256,readObservationSha256:recorded.value.readObservation?.sha256,
     testedSignedResumablePatchRefusalObserved:true as const,signedResumableBaselinePin:recorded.value.signedResumableBaselinePin,signedResumableObservationPin:recorded.value.signedResumableObservationPin,
@@ -295,7 +302,17 @@ export class ManagedBackendMaintenance {
       observe:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.observeSourceJob(artifact,requestPin,signal);await check();return saved;}
      })});
  }
- async inspect(){
+ /** Explicit second step, after all original positive-control evidence is saved.
+  * An uncertain retirement is never resumed through this method. */
+ async retireCaptureControl(caller?:AbortSignal){
+  try{
+   if(!this.retirement||!this.readRole)throw new Error();caller?.throwIfAborted();
+   await this.inspectEvidence('RETIREMENT_PREFLIGHT');caller?.throwIfAborted();
+   return await this.retirement.retire(this.planDescriptor(),caller);
+  }catch{throw new Error(failure);}
+ }
+ async inspect(){return this.inspectEvidence(this.retirement?'RETIRED_CONTROL':'LIVE_CONTROL');}
+ private async inspectEvidence(mode:'LIVE_CONTROL'|'RETIREMENT_PREFLIGHT'|'RETIRED_CONTROL'){
   try{
    const before=await this.control.observe();
    if(before.value.installationId!==this.config.installationId||before.value.planDigest!==this.planDigest()
@@ -325,13 +342,18 @@ export class ManagedBackendMaintenance {
    if(before.value.s3BaselinePin)await s3.observeBaseline(before.value.s3BaselinePin);
    const recordedS3Observation=before.value.s3ObservationPin?await s3.observeObservation(before.value.s3ObservationPin,before.value.s3BaselinePin):null;
    if(recordedS3Observation&&recordedS3Observation.observationDigest!==before.value.observations?.s3ProofDigest)throw new Error();
-   const metadata=await this.readback();
-   const freshReadObservation=retained?await this.proof.verifyReadRefusal(retained.body,retained.sha256):null;
+   const retirement=mode==='RETIRED_CONTROL'?await this.retirement!.inspect(this.planDescriptor()):null;
+   const metadata=await this.readback(undefined,undefined,undefined,undefined,undefined,undefined,retirement?.current.observationDigest);
+   // The original privileged control is deliberately unusable after retirement.
+   // Its saved proof stays historical; never replay the old positive-control GET.
+   const freshReadObservation=mode==='LIVE_CONTROL'&&retained?await this.proof.verifyReadRefusal(retained.body,retained.sha256):null;
    const observations={...metadata,...(freshReadObservation?{readProofDigest:freshReadObservation.observationDigest}:{})},after=await this.control.observe();
    if(after.revision!==before.revision)throw new Error();
    // Fresh observations never rewrite the original attempt or fabricate a
    // missing command/database completion receipt after an uncertain outcome.
    return{phase:after.value.phase,attemptId:after.value.attemptId,observations,
+    ...(retirement?{captureControlRetirement:retirement,captureControlRetirementRequired:true as const,originalCaptureControlRetirementAcknowledgementReconstructed:false as const,
+     recordedCaptureControlRetirementReportVerified:true as const,currentListedControlKeyAbsenceObserved:true as const,freshRetiredControlDataPlaneRefusalVerified:false as const}:{}),
     credentialReadRefusalsObserved:freshReadObservation!==null,readBaselineSha256:retained?.sha256??null,
     recordedReadObservation:after.value.readObservation??null,freshReadObservation,
     recordedS3Observation,recordedS3CoverageObserved:recordedS3Observation!==null,freshS3CoverageObserved:false as const,s3Mode:s3.mode,

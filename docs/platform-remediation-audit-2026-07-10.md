@@ -1,3 +1,12 @@
+## 18 October: explicit retirement coordinator and current inspection
+
+Supplying matching read-role and retirement components now selects format 11.
+Original closure explicitly leaves retirement required; a separate method checks
+saved evidence before the guarded retirement request. Subsequent inspection
+requires saved retirement evidence and current key absence, without replaying
+the retired secret's positive-control reads. Fresh data-plane rejection remains
+unproven and capture/discovery format 11 stays closed pending its new binding.
+See [the sequence and limits](managed-capture-control-retirement.md).
 ## 18 October: retained control-key retirement component
 
 An explicit format-11 component now binds an original conditional retirement
