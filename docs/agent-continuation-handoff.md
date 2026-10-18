@@ -1,3 +1,21 @@
+## 18 October: read-only capture compatibility preflight
+
+The explicit read-role coordinator now checks the configured observer's ACL
+predicates for the eight required PostgreSQL catalogues before maintenance
+acquisition and again before an original capture request. Missing privileges
+refuse before provider mutation or source work. This check acquires no catalogue
+locks and grants no permissions; successful observation is not provider support,
+ongoing authority or permission to capture. Actual bounded locks and all existing
+identity, transaction and archive checks remain required.
+
+PostgreSQL SHARE locks require an UPDATE, DELETE or TRUNCATE ACL predicate.
+Hosted Supabase's default postgres role is not a true superuser, so native
+superuser tests cannot establish hosted compatibility. Never broaden catalogue
+privileges merely to enable capture. Actual approved-provider observation and
+independent authority/host-loss evidence remain open.
+
+Sources: [PostgreSQL lock implementation](https://github.com/postgres/postgres/blob/REL_16_STABLE/src/backend/commands/lockcmds.c),
+[Supabase role limits](https://supabase.com/docs/guides/database/postgres/roles-superuser).
 ## 18 October: format-4 canonical source and separate custody passed
 
 The native read-role path passed canonical dump/import/isolated restore, SDK

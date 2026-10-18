@@ -7,6 +7,19 @@ import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed
 export async function proveCaptureRoleWindow({admin,fencer,actor,capture,config,readerRole,prepareCatalogueTransaction}){
  assert.match(config.database,/^managed_writer_[a-f0-9]{32}$/);
  const service=new ManagedStorageDatabaseInventory(fencer,{...config,capture:readerRole});
+ const compatibility=await service.observeCaptureWindowCompatibility();
+ assert.equal(compatibility.catalogueLockAclPredicatesObserved,true);
+ assert.equal(compatibility.catalogueLocksAcquired,false);
+ assert.equal(compatibility.providerCompatibilityVerified,false);
+ const limited=new ManagedStorageDatabaseInventory(capture,{...config,observer:config.capture,capture:readerRole});
+ const deniedCompatibility=await limited.observeCaptureWindowCompatibility();
+ assert.equal(deniedCompatibility.catalogueLockAclPredicatesObserved,false);
+ assert.equal(deniedCompatibility.missingCatalogueLockAclPredicates.length,8);
+ assert.equal(deniedCompatibility.grantsChanged,false);
+ const [observationLocks]=await admin.$queryRaw`SELECT count(*)::integer AS total FROM pg_locks l JOIN pg_class c ON c.oid=l.relation
+  JOIN pg_namespace n ON n.oid=c.relnamespace WHERE l.mode='ShareLock' AND l.granted AND n.nspname='pg_catalog'
+  AND c.relname IN ('pg_attribute','pg_proc','pg_class','pg_authid','pg_auth_members','pg_database','pg_namespace','pg_policy')`;
+ assert.equal(observationLocks.total,0);
  const options={maxWindowMs:5000};
  let deniedCalls=0;await assert.rejects(new ManagedStorageDatabaseInventory(capture,{...config,observer:config.capture,capture:readerRole})
   .runCaptureRoleWindow(async()=>{deniedCalls++;},options));assert.equal(deniedCalls,0);

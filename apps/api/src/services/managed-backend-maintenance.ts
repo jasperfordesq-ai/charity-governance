@@ -65,6 +65,7 @@ export class ManagedBackendMaintenance {
  }
  async close(){
   try{
+   if(this.readRole&&(await this.readRole.observeCompatibility()).catalogueLockAclPredicatesObserved!==true)throw new Error();
    const attempt=await this.control.acquire(this.config.installationId,this.planDigest(),this.config.maintenanceEpoch);
    if(attempt.value.installationId!==this.config.installationId||attempt.value.phase!=='ATTEMPTED'||!attempt.value.attemptId)throw new Error();
    const binding={attemptId:attempt.value.attemptId,planDigest:this.planDigest(),sourceSha:this.config.sourceSha,maintenanceEpoch:this.config.maintenanceEpoch};
@@ -243,6 +244,7 @@ export class ManagedBackendMaintenance {
    const check=async()=>{caller?.throwIfAborted();const head=requireProtocol9ClosedHead(await this.control.observe(caller));
     if(head.revision!==request.controlRevision||head.value.attemptId!==request.attemptId||head.value.planDigest!==this.planDigest()
      ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();return head;};
+   await check();if((await this.readRole.observeCompatibility(caller)).catalogueLockAclPredicatesObserved!==true)throw new Error();
    await check();await this.inspect();const bootstrap=await journal.observePlanBootstrap(await check(),caller);await check();
    if(bootstrap.plan.format!==10||bootstrap.plan.captureAuthorization!==request.captureAuthorizationDigest)throw new Error();
    const binding=readRoleCommonCandidateBindingSchema.parse({format:4,kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CAPTURE_V4',...this.config,...request,planDigest:this.planDigest()});

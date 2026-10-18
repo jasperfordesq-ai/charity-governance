@@ -1087,7 +1087,7 @@ test('cold recovery refuses moving head/catalogue after archive read and cancell
 
 test('explicit read-role policy uses a distinct protocol10 plan and refuses legacy capture paths before I/O',async()=>{
  const f=fixture();let checks=0;
- const profile={configurationDigest:()=>hash('read-role-authorization'),assertMaintenanceScope:(raw:unknown)=>{assert.deepEqual(raw,operation);checks++;},assertStorageScope:(raw:unknown)=>{assert.deepEqual(raw,f.storage.candidateCaptureScope());checks++;}};
+ const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('read-role-authorization'),assertMaintenanceScope:(raw:unknown)=>{assert.deepEqual(raw,operation);checks++;},assertStorageScope:(raw:unknown)=>{assert.deepEqual(raw,f.storage.candidateCaptureScope());checks++;}};
  const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
  const plan=coordinator.planDescriptor();assert.equal(plan.format,10);assert.notEqual(coordinator.planDigest(),f.coordinator.planDigest());assert.ok(checks>=4);
  assert.equal('captureAuthorization' in plan&&plan.captureAuthorization,profile.configurationDigest());
@@ -1100,7 +1100,7 @@ test('explicit read-role policy uses a distinct protocol10 plan and refuses lega
 });
 
 test('protocol10 original closure and bootstrap preserve the capture authorization in fresh read-only discovery',async()=>{
- const f=fixture(),profile={configurationDigest:()=>hash('reviewed-read-role-registry'),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
+ const f=fixture(),profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('reviewed-read-role-registry'),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
  const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
  // Provision only this synthetic fixture's READY head for the distinct plan.
  f.value.planDigest=coordinator.planDigest();assert.equal((await coordinator.close()).phase,'OBSERVED_CLOSED');
@@ -1129,7 +1129,7 @@ async function readRoleCommonParentFixture(){
   catalogues:catalogueNames.map((name,i)=>({name,oid:String(1200+i),shared:['pg_authid','pg_auth_members','pg_database'].includes(name),held:true})),startedAt:w.startedAt,finishedAt:w.finishedAt,maxWindowMs:5000};
  const sqlPrivilegeWindow={...facts,observationDigest:hash(JSON.stringify(facts)),scope:'LISTED_SQL_CATALOGUES_DURING_CALLBACK_ONLY',configuredCaptureSqlReadOnlyObserved:true,preexistingAssignedTransactionsExcludedAtEntry:true,listedCatalogueChangesExcludedDuringCallback:true,windowStillHeld:false,
   providerTokenRoleVerified:false,providerManagementActorsExcluded:false,unfilteredBucketVisibilityVerified:false,captureCredentialReadOnlyVerified:false,allWritersInventoried:false,wholeBackendQuiesced:false,actionAuthorized:false};
- const profile={configurationDescriptor:()=>structuredClone(authorization),configurationDigest:()=>hash(JSON.stringify(authorization)),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},
+ const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDescriptor:()=>structuredClone(authorization),configurationDigest:()=>hash(JSON.stringify(authorization)),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},
   runWithSnapshot:async(fn:(snapshot:unknown,signal:AbortSignal)=>Promise<{visit:unknown;value:unknown}>)=>{events.push('windows');const prepared=await fn({snapshotId:'00000001-00000002-1',database:w.database,databaseOid:w.databaseOid,observerOid:w.observer.oid,backendPid:w.backendPid},new AbortController().signal);
    return{configurationDigest:hash(JSON.stringify(authorization)),captured:capture,snapshotInterval:{metadataWindow:w,databaseSnapshot:snapshot},sqlPrivilegeWindow,sourceValue:prepared.value};}};
  const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
@@ -1206,4 +1206,13 @@ test('format10 current discovery refuses format4 authorization substitution or a
   const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),before=x.f.artifacts.size;
   await assert.rejects(cold.discoverCurrentCandidates(x.f.store,1));assert.equal(x.f.artifacts.size,before);assert.equal(x.sourceCalls(),1);
  }
+});
+
+test('unsupported capture catalogue permissions refuse before maintenance acquisition or provider mutation',async()=>{
+ const f=fixture(),profile={configurationDigest:()=>hash('unsupported-read-role'),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:false})};
+ const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
+ f.value.planDigest=coordinator.planDigest();const before=f.calls.length,reads=f.reads;
+ await assert.rejects(coordinator.close());assert.equal(f.puts,0);assert.equal(f.reads,reads);assert.equal(f.calls.length,before);assert.equal(f.value.phase,'READY');
+ const x=await readRoleCommonParentFixture(),count=x.f.artifacts.size;x.profile.observeCompatibility=async()=>({catalogueLockAclPredicatesObserved:false});
+ await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
 });

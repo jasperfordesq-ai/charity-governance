@@ -47,12 +47,14 @@ function roleBoundaryFixture(){
  const grants=roles.map(r=>({...privileges,roleOid:r.oid,relationOid:'16386'}));
  const authority={ownsDatabase:false,ownsSchema:false,ownsRelation:false,ownsRoutine:false,databaseCreate:false,schemaCreate:false,systemDefinerExecute:false};
  const catalogues=['pg_attribute','pg_proc','pg_class','pg_authid','pg_auth_members','pg_database','pg_namespace','pg_policy'].map((name,i)=>({name,oid:String(1200+i),shared:['pg_authid','pg_auth_members','pg_database'].includes(name),held:true}));
- const state={identity,roles,relations,memberships:[] as unknown[],grants,definers:[] as unknown[],authority,catalogues,lockDenied:false,pendingTransaction:false,commitDelay:0};let queries=0;
+ const cataloguePermissions=catalogues.map(({name,oid,shared})=>({name,oid,shared,update:true,delete:false,truncate:false}));
+ const state={cataloguePermissions,identity,roles,relations,memberships:[] as unknown[],grants,definers:[] as unknown[],authority,catalogues,lockDenied:false,pendingTransaction:false,commitDelay:0};let queries=0;
  const operations:string[]=[];
  const prisma={$transaction:async<T>(fn:(tx:unknown)=>Promise<T>)=>{const result=await fn({$executeRaw:async(parts:TemplateStringsArray)=>{
   const sql=parts.join('');operations.push(sql);if(state.lockDenied&&sql.startsWith('LOCK TABLE'))throw new Error('private permission detail');return 0;
  },$queryRaw:async(parts:TemplateStringsArray)=>{
   queries++;const sql=parts.join('');
+  if(sql.includes("has_table_privilege(current_user,c.oid,'UPDATE')"))return state.cataloguePermissions;
   if(sql.includes("locktype='transactionid'"))return[{pending:state.pendingTransaction}];
   if(sql.includes('transaction_isolation'))return[{pid:101,isolation:'read committed'}];
   if(sql.includes("l.mode='ShareLock'"))return state.catalogues;
@@ -128,4 +130,31 @@ test('SQL privilege window refuses callback failure, concurrent use and late tra
  const result=await service.runCaptureRoleWindow(async()=>{await assert.rejects(service.runCaptureRoleWindow(async()=>{}, {maxWindowMs:1000}));return true;},{maxWindowMs:1000});assert.equal(result.value,true);
  f.state.commitDelay=1100;await assert.rejects(service.runCaptureRoleWindow(async()=>true,{maxWindowMs:1000}));
  for(const options of [{maxWindowMs:0},{maxWindowMs:30001},{maxWindowMs:1000,unknown:true}])await assert.rejects(service.runCaptureRoleWindow(async()=>{},options));
+});
+
+test('capture compatibility observes catalogue ACLs without acquiring locks, changing grants or granting activation',async()=>{
+ const f=roleBoundaryFixture(),service=f.service(),positive=await service.observeCaptureWindowCompatibility();
+ assert.equal(f.queries(),2);assert.equal(positive.catalogueLockAclPredicatesObserved,true);assert.equal(positive.status,'ACL_PREDICATES_PRESENT');
+ assert.equal(positive.catalogues.length,8);assert.deepEqual(positive.missingCatalogueLockAclPredicates,[]);
+ for(const key of ['catalogueLocksAcquired','privilegeWindowHeld','grantsChanged','ongoingPermissionVerified','providerCompatibilityVerified','captureActivated','actionAuthorized'] as const)assert.equal(positive[key],false);
+ assert.ok(f.operations.every(v=>v.startsWith('SET ')));assert.match(positive.observationDigest,/^[a-f0-9]{64}$/);
+ for(const row of f.state.cataloguePermissions)row.update=false;
+ const negative=await service.observeCaptureWindowCompatibility();assert.equal(negative.catalogueLockAclPredicatesObserved,false);assert.equal(negative.status,'ACL_PREDICATES_MISSING');
+ assert.equal(negative.missingCatalogueLockAclPredicates.length,8);assert.equal(positive.catalogues[0]!.update,true);assert.notEqual(positive.observationDigest,negative.observationDigest);
+});
+
+test('capture compatibility accepts the exact SHARE-lock privilege alternatives but refuses missing/malformed identity',async()=>{
+ for(const mode of ['delete','truncate']){const f=roleBoundaryFixture();for(const row of f.state.cataloguePermissions){row.update=false;if(mode==='delete')row.delete=true;else row.truncate=true;}
+  assert.equal((await f.service().observeCaptureWindowCompatibility()).catalogueLockAclPredicatesObserved,true);
+ }
+ for(const mode of ['one-missing','duplicate-oid','wrong-shared','wrong-database','unencrypted']){
+  const f=roleBoundaryFixture();
+  if(mode==='one-missing')f.state.cataloguePermissions[0]!.update=false;
+  if(mode==='duplicate-oid')f.state.cataloguePermissions[1]!.oid=f.state.cataloguePermissions[0]!.oid;
+  if(mode==='wrong-shared')f.state.cataloguePermissions[0]!.shared=true;
+  if(mode==='wrong-database')f.state.identity.databaseOid='1';if(mode==='unencrypted')f.state.identity.encrypted=false;
+  if(mode==='one-missing')assert.deepEqual((await f.service().observeCaptureWindowCompatibility()).missingCatalogueLockAclPredicates,['pg_attribute']);
+  else await assert.rejects(f.service().observeCaptureWindowCompatibility(),/^Error: Managed capture window compatibility is unverified$/);
+ }
+ const f=roleBoundaryFixture(),controller=new AbortController();controller.abort();await assert.rejects(f.service().observeCaptureWindowCompatibility(controller.signal));assert.equal(f.queries(),0);
 });

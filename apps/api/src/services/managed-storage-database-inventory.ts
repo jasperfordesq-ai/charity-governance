@@ -39,6 +39,36 @@ export class ManagedStorageDatabaseInventory {
   if(JSON.stringify(ordered(value))!==JSON.stringify(ordered(this.config)))throw windowFailure();
  }
  observe(){return this.inspect(false);}
+ /** Read-only provider-fit observation. ACL predicates are not a lock, a
+  * guarantee of future permission or proof that a hosted provider is supported. */
+ async observeCaptureWindowCompatibility(caller?:AbortSignal){
+  try{
+   if(caller!==undefined&&!(caller instanceof AbortSignal))throw new Error();caller?.throwIfAborted();
+   const result=await this.prisma.$transaction(async tx=>{
+    await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+    await tx.$executeRaw`SET LOCAL search_path=pg_catalog`;
+    await tx.$executeRaw`SET LOCAL statement_timeout='2500ms'`;
+    const identity=await this.inspectIdentity(tx);caller?.throwIfAborted();
+    const catalogues=z.array(z.object({name:z.string(),oid,shared:z.boolean(),update:z.boolean(),delete:z.boolean(),truncate:z.boolean()}).strict()).length(8).parse(
+     await tx.$queryRaw`SELECT c.relname::text AS name,c.oid::text AS oid,c.relisshared AS shared,
+      has_table_privilege(current_user,c.oid,'UPDATE') AS update,has_table_privilege(current_user,c.oid,'DELETE') AS delete,
+      has_table_privilege(current_user,c.oid,'TRUNCATE') AS truncate FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='pg_catalog' AND c.relname IN (${Prisma.join([...privilegeCatalogues])}) ORDER BY c.oid`);
+    if(catalogues.some((c,i)=>c.name!==privilegeCatalogues[i]||c.shared!==['pg_authid','pg_auth_members','pg_database'].includes(c.name))
+     ||new Set(catalogues.map(c=>c.oid)).size!==8)throw new Error();
+    const missing=catalogues.filter(c=>!c.update&&!c.delete&&!c.truncate).map(c=>c.name),present=missing.length===0;
+    const facts={format:1,kind:'MANAGED_CAPTURE_WINDOW_COMPATIBILITY_V1' as const,configurationDigest:this.configurationDigest(),
+     database:identity.database,databaseOid:identity.databaseOid,observer:{name:identity.currentRole,oid:identity.observerOid},
+     observedAt:identity.observedAt,catalogues,missingCatalogueLockAclPredicates:missing};
+    return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
+     status:present?'ACL_PREDICATES_PRESENT' as const:'ACL_PREDICATES_MISSING' as const,catalogueLockAclPredicatesObserved:present,
+     scope:'OBSERVED_CATALOGUE_LOCK_ACL_PREDICATES_ONLY' as const,catalogueLocksAcquired:false as const,privilegeWindowHeld:false as const,
+     grantsChanged:false as const,ongoingPermissionVerified:false as const,providerCompatibilityVerified:false as const,
+     captureActivated:false as const,actionAuthorized:false as const};
+   },{isolationLevel:'ReadCommitted',maxWait:5000,timeout:10000});
+   caller?.throwIfAborted();return result;
+  }catch{throw new Error('Managed capture window compatibility is unverified');}
+ }
  async observeCaptureRoleBoundary(){
   try{const observed=await this.inspect(true);if(!observed.captureRoleBoundary)throw new Error();
    const facts={format:1,kind:'MANAGED_CAPTURE_SQL_ROLE_BOUNDARY_V1' as const,configurationDigest:this.configurationDigest(),
@@ -118,14 +148,8 @@ export class ManagedStorageDatabaseInventory {
   if(caller?.aborted||performance.now()>=deadline)throw windowFailure();return result;}
   catch{throw windowFailure();}finally{controller.abort();this.windowRunning=false;}
  }
- private async inspect(requireCaptureBoundary:boolean,within?:Prisma.TransactionClient){
-  try{const read=async(tx:Prisma.TransactionClient)=>{
-   if(!within){
-   await tx.$executeRaw`SET TRANSACTION READ ONLY`;
-   await tx.$executeRaw`SET LOCAL search_path=pg_catalog`;
-   await tx.$executeRaw`SET LOCAL statement_timeout='2500ms'`;
-   }
-   const c=this.config;
+ private async inspectIdentity(tx:Prisma.TransactionClient){
+  const c=this.config;
    const [identity]=z.array(z.object({database:name,databaseOid:oid,currentRole:name,sessionRole:name,
     observerOid:oid,encrypted:z.boolean(),readOnly:z.boolean(),version:z.number().int(),observedAt:z.string()}).strict()).length(1)
     .parse(await tx.$queryRaw`SELECT current_database()::text AS database,d.oid::text AS "databaseOid",
@@ -137,6 +161,17 @@ export class ManagedStorageDatabaseInventory {
    if(identity.database!==c.database||identity.databaseOid!==c.databaseOid||identity.currentRole!==c.observer.name
     ||identity.sessionRole!==c.observer.name||identity.observerOid!==c.observer.oid||!identity.encrypted
     ||!identity.readOnly||identity.version<160000||identity.version>=170000)throw new Error();
+  return identity;
+ }
+ private async inspect(requireCaptureBoundary:boolean,within?:Prisma.TransactionClient){
+  try{const read=async(tx:Prisma.TransactionClient)=>{
+   if(!within){
+   await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+   await tx.$executeRaw`SET LOCAL search_path=pg_catalog`;
+   await tx.$executeRaw`SET LOCAL statement_timeout='2500ms'`;
+   }
+   const c=this.config;
+   const identity=await this.inspectIdentity(tx);
    const roles=z.array(role).max(256).parse(await tx.$queryRaw`SELECT oid::text AS oid,rolname::text AS name,
     rolcanlogin AS login,rolsuper AS superuser,rolcreaterole AS "createRole",rolcreatedb AS "createDb",
     rolreplication AS replication,rolbypassrls AS "bypassRls",rolinherit AS inherit FROM pg_roles ORDER BY oid LIMIT 257`);

@@ -27,6 +27,7 @@ export class ManagedReadRoleCapture {
  }
  configurationDescriptor(){return configuration.parse(this.#config);}
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.#config)).digest('hex');}
+ async observeCompatibility(caller?:AbortSignal){this.assertComponents();const result=await this.#catalogue.observeCaptureWindowCompatibility(caller);this.assertComponents();return result;}
  assertMaintenanceScope(raw:unknown){const value=operation.parse(raw);for(const key of ['installationId','sourceSha','maintenanceEpoch'] as const)if(value[key]!==this.#config[key])throw failure();this.assertComponents();}
  assertStorageScope(raw:unknown){
   const value=z.object({installationId:operation.shape.installationId,projectRef:z.string(),bucket:z.string(),captureKeyId:z.string().uuid()}).strict().parse(raw);
