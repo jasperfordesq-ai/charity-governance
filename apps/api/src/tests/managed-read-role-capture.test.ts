@@ -57,3 +57,17 @@ test('already-cancelled callers refuse before SQL/source and private SQL errors 
  await assert.rejects(f.service().runWithSnapshot(async()=>{calls++;throw new Error();}),e=>{assert.ok(e instanceof Error);assert.equal(e.message,'Managed read-role capture is unresolved; discard the candidate without retry or admission');assert.equal(e.cause,undefined);return true;});
  assert.equal(calls,0);assert.equal(f.queries(),1);
 });
+
+test('composition waits for bounded metadata rollback after outer cancellation',async(t)=>{
+ const f=fixture(),controller=new AbortController();let entered:()=>void=()=>{},closed=false;
+ const ready=new Promise<void>(r=>{entered=r;});
+ t.mock.method(f.catalogue,'runCaptureRoleWindow',async(callback:(boundary:Readonly<{capture:Readonly<{name:string;oid:string}>;configurationDigest:string}>,signal:AbortSignal)=>Promise<unknown>,_options:unknown,signal?:AbortSignal)=>{
+  assert.ok(signal);void callback({capture:f.config.sqlRole,configurationDigest:f.catalogue.configurationDigest()},signal).catch(()=>{});
+  await new Promise<never>((_r,reject)=>signal.addEventListener('abort',()=>reject(new Error('synthetic outer abort')),{once:true}));throw new Error();
+ });
+ t.mock.method(f.metadata,'runWithSnapshot',async(_callback:unknown,signal?:AbortSignal)=>{
+  assert.ok(signal);entered();await new Promise<void>(r=>signal.addEventListener('abort',()=>setTimeout(()=>{closed=true;r();},80),{once:true}));throw new Error('synthetic inner rollback finished');
+ });
+ const running=f.service().runWithSnapshot(async()=>{throw new Error('must not prepare source');},controller.signal);void running.catch(()=>{});
+ await ready;controller.abort();await assert.rejects(running);assert.equal(closed,true);
+});

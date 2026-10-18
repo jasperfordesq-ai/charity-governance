@@ -48,12 +48,13 @@ export class ManagedReadRoleCapture {
   if(this.running||typeof source!=='function')throw failure();this.running=true;
   const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
   let timeout:ReturnType<typeof setTimeout>|undefined;
+  let metadataCompletion:Promise<unknown>|undefined;
   try{
    this.assertComponents();signal.throwIfAborted();const c=this.#config;
    timeout=setTimeout(()=>controller.abort(),Math.min(c.maxWindowMs,this.#capture.readRoleRemainingMs()));
    const privileged=await this.#catalogue.runCaptureRoleWindow(async(boundary,privilegeSignal)=>{
     if(boundary.capture.name!==c.sqlRole.name||boundary.capture.oid!==c.sqlRole.oid)throw failure();this.assertComponents();
-    return this.#metadata.runWithSnapshot(async(snapshot,metadataSignal)=>{
+    const completed=this.#metadata.runWithSnapshot(async(snapshot,metadataSignal)=>{
      const signal=AbortSignal.any([privilegeSignal,metadataSignal]);signal.throwIfAborted();
      if(snapshot.database!==c.database.name||snapshot.databaseOid!==c.database.oid||snapshot.observerOid!==c.snapshotObserver.oid)throw failure();
      const prepared=await source(snapshot,signal);signal.throwIfAborted();this.assertComponents();
@@ -62,7 +63,7 @@ export class ManagedReadRoleCapture {
      if(captured.kind!=='SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1'||captured.credentialCapability!=='ASYMMETRIC_CUSTOM_ROLE_JWT'
       ||captured.configurationDigest!==c.captureConfigurationDigest||captured.jwtVerification?.signatureVerified!==true)throw failure();
      return{captured,value:prepared.value};
-    },privilegeSignal);
+    },privilegeSignal);metadataCompletion=completed;return completed;
    },{maxWindowMs:c.maxWindowMs},signal);
    signal.throwIfAborted();this.#capture.readRoleRemainingMs();this.assertComponents();
    const interval=managedSnapshotInterval({metadataWindow:privileged.value.evidence,databaseSnapshot:privileged.value.databaseSnapshot});
@@ -72,6 +73,11 @@ export class ManagedReadRoleCapture {
     sourceValue:privileged.value.value.value,snapshotInterval:interval,sqlPrivilegeWindow:privileged.evidence,configuredJwtSqlRoleMatched:true as const,
     providerTokenRoleVerified:false as const,providerProjectDatabaseVerified:false as const,unfilteredBucketVisibilityVerified:false as const,
     retainedPrivilegedCredentialsExcluded:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
-  }catch{throw failure();}finally{clearTimeout(timeout);controller.abort();this.running=false;}
+  }catch{throw failure();}finally{
+   clearTimeout(timeout);controller.abort();
+   // Await the bounded inner transaction's rollback, never the arbitrary source
+   // callback. Outer cancellation can win its race before inner cleanup ends.
+   await metadataCompletion?.catch(()=>{});this.running=false;
+  }
  }
 }
