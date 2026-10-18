@@ -1,3 +1,13 @@
+## 18 October: format-4 canonical source and separate custody passed
+
+The native read-role path passed canonical dump/import/isolated restore, SDK
+archive custody and original request/report/root ACK-loss cases. A separate
+contained-source/retained-outcome cohort and cold reader verified five read-role
+captures: two quarantined roots and three unresolved outcomes, with no replay
+or new writes/data keys. Existing legacy caller SIGKILL coverage was retained.
+See [the exact scope and limits](managed-read-role-common-candidate.md).
+Real provider IAM/current authority and physical-host-loss acceptance remain open.
+
 ## 18 October: versioned read-role common-candidate path
 
 A format-4 original request/report now carries the configured read-role capture

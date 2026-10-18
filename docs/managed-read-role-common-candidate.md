@@ -51,3 +51,27 @@ unfiltered RLS visibility, retained privileged canary/control credentials,
 issuer/session/in-flight/control-plane fencing and independent physical-host-loss
 recovery remain separate requirements. Their flags stay false. No route, provider
 grant, tenant policy, real purge or reopening is enabled by this protocol.
+
+## Executed synthetic verification — 18 October 2026
+
+The exact native cohort passed the format-4 path with the canonical committed
+source helper, real TLS PostgreSQL snapshot import/dump/isolated restore,
+SDK encryption/MAC/exact-version archive custody, original prepared-root
+reference, and fresh read-only source-job/root discovery. Success, root ACK
+loss, report ACK loss, request ACK loss and job ACK loss were exercised. A
+missing request ACK never entered the source; unknown later ACKs did not grant
+repair or replay.
+
+The separate-process cohort also passed with actual contained source services
+and retained SDK outcome receivers. The five read-role captures were then
+inspected by a fresh read-only process: two verified quarantined roots and three
+unresolved outcomes, with no new writes or data keys. Existing legacy caller
+SIGKILL coverage was retained; this does not claim a separate format-4 caller
+SIGKILL test or physical host-loss demonstration. Selected fixture containers
+and containment units were absent at the final gate.
+
+These observations use synthetic HTTP and SDK provider transports. They prove
+the bounded engineering path, not actual supplier IAM, current independent
+authority, hosted token/key/release identity or usable independent host recovery.
+Exact revisions, durations, logs, CI and deployed-state distinctions are recorded
+in the ignored private handoff.
