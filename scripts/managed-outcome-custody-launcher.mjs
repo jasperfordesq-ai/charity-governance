@@ -44,14 +44,14 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
  if(source?.Id!==containmentUnit(jobId))throw no();
  const receiverId=randomUUID(),unit=containmentUnit(receiverId),environment=safeEnvironment(process.env);
  requireAbsent(unit,environment);
- let endpoint,channel,prepared,child,receiver,terminal,ended=false,failed=false,closing;
+ let endpoint,channel,prepared,child,receiver,terminal,ended=false,failed=false,closing,cleanupPhase;
  const check=()=>{if(signal?.aborted||failed||ended)throw no();};
  const options={jobId,sourceSha,receiverId,source};
  const verify=value=>{const checked=verifyOutcomeCustodyReceiver(value,options);receiver=structuredClone(value);return checked;};
  const close=async()=>{
-  let error=false;try{await channel?.close();}catch{error=true;}
+  let error=false;try{await channel?.close();}catch{error=true;cleanupPhase='claim-channel';}
   // Unknown launch/claim identities are deliberately not adopted for cleanup.
-  if(child){if(receiver){try{stopOriginal(receiver,environment);}catch{error=true;}}else if(!ended)error=true;}
+  if(child){if(receiver){try{stopOriginal(receiver,environment);}catch{error=true;cleanupPhase='original-unit';}}else if(!ended)error=true;}
   if(terminal&&!ended){let timer;try{await Promise.race([terminal,new Promise((_,reject)=>{timer=setTimeout(()=>reject(no()),5000);})]);}catch{error=true;}finally{clearTimeout(timer);}}
   try{endpoint?.close();}catch{error=true;}if(error)throw no();
  };
@@ -78,6 +78,6 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
   return Object.freeze({receiver:structuredClone(receiver),binding:()=>endpoint.binding(),terminal,
    async publish(artifact){if(publishing)throw no();publishing=true;check();verify(receiver);
     return requestOutcomeCustody({endpoint:endpoint.binding(),receiver,artifact});},close:closeOnce});
- }catch{try{transfer.abandon();}catch{}try{await closeOnce();}catch{}throw no();}
+ }catch{try{transfer.abandon();}catch{}try{await closeOnce();}catch{}const error=no();error.custodyDiagnostic={receiverVerified:!!receiver,cleanupPhase:cleanupPhase??null,unit};throw error;}
  finally{prepared?.input.fill(0);}
 }

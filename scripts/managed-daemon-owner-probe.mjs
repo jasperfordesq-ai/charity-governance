@@ -195,7 +195,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
     const saved=await custody.session.bindDaemonOwner(a,custody.original);verifyIndependentDaemonOwner(value,options);if(mode==='custody-claim-denied'){
      const transfer=await custody.outcomeTransfer();
      try{await launchOriginalOutcomeCustody({jobId,sourceSha,source:caller,transfer:{take:()=>transfer.take(),abandon:()=>transfer.abandon(),claim:()=>{deniedCustodyClaims++;return false;}}});throw new Error('Unexpected custody launch success');}
-     catch{if(deniedCustodyClaims!==1)throw no();throw no();}
+     catch(error){process.stderr.write('Custody launch diagnostic='+JSON.stringify(error.custodyDiagnostic??{})+'\n');if(deniedCustodyClaims!==1)throw no();throw no();}
     }
     writer=custody.outcomeWriter();
     if(mode==='owner-ack-lost')void gate.close();return saved;},
