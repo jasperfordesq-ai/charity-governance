@@ -1,3 +1,10 @@
+## 18 October: preparatory native epoch fixture plumbing
+
+The native synthetic proof helpers accept an explicit shared custody backend and
+an opt-in two-epoch fixture. Ordinary test callers keep their existing behaviour.
+This is preparatory plumbing only: the supervisor, original-acknowledgement
+checkpoint handoff and fresh two-epoch reader are not implemented or executed.
+It is not native multi-epoch acceptance, provider activation or tenant authority.
 ## 18 October: S3 epoch custody uses append-only head slots
 
 Separate reader/writer adapters now bind real S3 version IDs, owner/KMS/checksum

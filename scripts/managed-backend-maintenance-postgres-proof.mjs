@@ -73,15 +73,17 @@ export async function proveManagedPasswordInvalidation({admin,configuration,url}
 
 // Actual TLS PostgreSQL fencing composed with synthetic provider HTTP and SDK
 // transport. This is not live Render/S3 custody or physical host-loss evidence.
-export async function proveManagedBackendMaintenance({admin,configuration,url,id,database:databaseName,certificate,sourceExecutionMode='INTERNAL_IPC_PROOF'}){
+export async function proveManagedBackendMaintenance({admin,configuration,url,id,database:databaseName,certificate,sourceExecutionMode='INTERNAL_IPC_PROOF',epochFixture}){
  assert.ok(['KERNEL_CONTAINED','INTERNAL_IPC_PROOF'].includes(sourceExecutionMode));
+ if(epochFixture)assert.ok(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE&&[1,2].includes(epochFixture.epoch)&&typeof epochFixture.recordClosed==='function');
  const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const localStorage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
  for(const scenario of ['legacy-three-service-plan','success','read-role-success','retired-control-success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','resumable-child-report-ack-lost','resumable-manifest-report-ack-lost','resumable-still-writable','signed-tus-credential-ack-lost','signed-tus-baseline-ack-lost','signed-tus-readback-ack-lost','signed-tus-head-ack-lost','signed-tus-report-ack-lost','signed-tus-still-writable','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost','s3-canary-ack-lost','s3-baseline-ack-lost','s3-readback-ack-lost','s3-head-ack-lost','s3-head-readback-ack-lost','s3-report-ack-lost','s3-report-readback-ack-lost','s3-post-stale-gateway','s3-enabled-metadata','working-s3-success']){
+  if(epochFixture&&scenario!=='retired-control-success')continue;
   if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE==='1'&&scenario!==(process.env.CHARITYPILOT_TEST_PARENT_CAPTURE_FORMAT==='5'?'retired-control-success':'success'))continue;
-  const independentControl=(['success','read-role-success'].includes(scenario)&&process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE||scenario==='retired-control-success')?managedCommonCustodyBackend(localStorage.installationId):undefined;
+  const independentControl=epochFixture?.custody??((['success','read-role-success'].includes(scenario)&&process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE||scenario==='retired-control-success')?managedCommonCustodyBackend(localStorage.installationId):undefined);
   const storage=independentControl?{installationId:independentControl.config.installationId,bucket:independentControl.config.bucket,accountId:independentControl.config.accountId,kmsKeyArn:independentControl.config.storageKeyArn}:localStorage;
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
@@ -156,10 +158,10 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   database.close=async()=>{events.push('database-close');const result=await originalClose();databaseClosed=true;return result;};
   const originalInvalidate=database.invalidatePasswords.bind(database);
   database.invalidatePasswords=async()=>{events.push('password-invalidate');return originalInvalidate();};
-  const operation={installationId:storage.installationId,sourceSha:captureHelperImplementationBinding().commitSha,maintenanceEpoch:1};
+  const operation={installationId:storage.installationId,sourceSha:captureHelperImplementationBinding().commitSha,maintenanceEpoch:epochFixture?.epoch??1};
   const storageConfig={installationId:storage.installationId,projectRef:'abcdefghijklmnopqrst',bucket:'documents',
-   organisationId:'org-synthetic',region:'eu-central-1',captureKeyId:'11111111-1111-4111-8111-111111111111',
-   writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
+   organisationId:'org-synthetic',region:'eu-central-1',captureKeyId:epochFixture?.epoch===2?'33333333-3333-4333-8333-333333333333':'11111111-1111-4111-8111-111111111111',
+   writerKeys:[{id:epochFixture?.epoch===2?'44444444-4444-4444-8444-444444444444':'22222222-2222-4222-8222-222222222222',type:'secret'}]};
   let legacyEnabled=true,s3Enabled=['s3-enabled-metadata','working-s3-success'].includes(scenario),writerKeyPresent=true,controlKeyPresent=true,storageCommands=0;
   const storageTransport=async(input,options)=>{
    const endpoint=new URL(String(input)),path=endpoint.pathname;
@@ -184,8 +186,8 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    return Response.json({ref:storageConfig.projectRef,organization_id:storageConfig.organisationId,region:storageConfig.region,status:'ACTIVE_HEALTHY'});
   };
   const newStorageControl=()=>new SupabaseStorageWriterControl(storageConfig,'synthetic-supabase-management',storageTransport);
-  const controlCredential={id:storageConfig.captureKeyId,secret:'sb_secret_'+ 'a'.repeat(40)},
-   retiredCredential={id:storageConfig.writerKeys[0].id,secret:'sb_secret_'+ 'b'.repeat(40)},canary='synthetic native recovery canary';
+  const controlCredential={id:storageConfig.captureKeyId,secret:'sb_secret_'+ (epochFixture?.epoch===2?'c':'a').repeat(40)},
+   retiredCredential={id:storageConfig.writerKeys[0].id,secret:'sb_secret_'+ (epochFixture?.epoch===2?'d':'b').repeat(40)},canary='synthetic native recovery canary';
   const fingerprint=text=>createHash('sha256').update(text).digest('hex');
   const newReadProof=()=>new SupabaseCredentialReadProof({installationId:storage.installationId,projectRef:storageConfig.projectRef,
    bucket:'charitypilot-recovery-canaries',canary:{fileUrl:'charitypilot-recovery-canary/'+storage.installationId+'/native.txt',bytes:Buffer.byteLength(canary),sha256:fingerprint(canary)},
@@ -227,13 +229,18 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    ...(scenario==='retired-control-success'?{retiredControl:{credential:controlCredential,isPresent:()=>controlKeyPresent,events}}:{})}):undefined;
   const retirementFor=control=>readRoleFixture?.comparison?new ManagedCaptureControlRetirement(storage,control,store,credentials,sdk,readRoleFixture.comparison):undefined;
   const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,actualStorage,newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile,retirementFor(actualStorage));
-  value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
+  value={format:1,installationId:storage.installationId,maintenanceEpoch:operation.maintenanceEpoch,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
    if(independentControl){
     const body=JSON.stringify(value);
+    // Dedicated synthetic epoch fixture only: after original epoch-1 custody,
+    // the test operator starts a distinct epoch using the exact closed head.
+    // This is not a supported production reopening or an authority inference.
+    let condition={IfNoneMatch:'*'};
+    if(epochFixture?.epoch===2){const previous=await store.observe();assert.equal(previous.value.phase,'OBSERVED_CLOSED');assert.equal(previous.value.maintenanceEpoch,1);condition={IfMatch:previous.etag};}
     await sdk.send(new PutObjectCommand({Bucket:storage.bucket,ExpectedBucketOwner:storage.accountId,Key:`managed-maintenance/${storage.installationId}/control.json`,
-     Body:body,IfNoneMatch:'*',ChecksumSHA256:createHash('sha256').update(body).digest('base64'),ServerSideEncryption:'aws:kms',SSEKMSKeyId:storage.kmsKeyArn}));
+     Body:body,...condition,ChecksumSHA256:createHash('sha256').update(body).digest('base64'),ServerSideEncryption:'aws:kms',SSEKMSKeyId:storage.kmsKeyArn}));
    }
    await writer.$queryRaw`SELECT 1`;
    if(scenario==='legacy-three-service-plan'){
@@ -311,12 +318,14 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),controlStorage:storage,controlClient:sdk,url});
    if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack',...(sourceExecutionMode==='KERNEL_CONTAINED'?['service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack']:[])])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode}});
-   if(['read-role-success','retired-control-success'].includes(scenario))for(const mode of ['success','root-ack','report-ack','request-ack','job-ack'])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode,readRole:readRoleFixture.profile,
+   if(epochFixture){await fresh.publishCaptureBootstrap(independentControl.journal);await epochFixture.recordClosed(store);}
+   if(['read-role-success','retired-control-success'].includes(scenario))for(const mode of (epochFixture?['success']:['success','root-ack','report-ack','request-ack','job-ack']))await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode,readRole:readRoleFixture.profile,
+    ...(epochFixture?{commonBackend:independentControl.b,bootstrapAlreadyPublished:true}:{}),
     ...(scenario==='retired-control-success'?{retirement:retirementFor(freshStorage),controlCustody:independentControl}:{})}});
    if(scenario==='retired-control-success'){assert.equal(events.filter(e=>e==='original-control-delete').length,1);assert.equal(events.filter(e=>e==='original-control-canary-positive').length,1);assert.ok(events.filter(e=>e==='retired-control-canary-refusal').length>1);}
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');
-  }finally{await writer.$disconnect();await readRoleFixture?.close();sdk.destroy();independentControl?.close();}
+  }finally{await writer.$disconnect();await readRoleFixture?.close();sdk.destroy();if(!epochFixture)independentControl?.close();}
  }
 }

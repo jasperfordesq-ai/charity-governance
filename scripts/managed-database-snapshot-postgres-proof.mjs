@@ -29,7 +29,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  assert.match(id,/^[a-f0-9]{64}$/);assert.match(database,/^managed_writer_[a-f0-9]{32}$/);
  const holder=new PrismaClient({datasources:{db:{url}}}),destination='snapshot_'+randomUUID().replaceAll('-','');
  const body=Buffer.from('synthetic snapshot file'),fileId=randomUUID();
- const cloud=managed?managedCommonCustodyBackend(managed.scope.installationId,managed.controlCustody):undefined;let sourceCalls=0;
+ const cloud=managed?managedCommonCustodyBackend(managed.scope.installationId,managed.controlCustody,managed.commonBackend):undefined;let sourceCalls=0;
  const document={id:fileId,organisationId:'synthetic_tenant',fileUrl:'record.txt',fileSize:body.length,mimeType:'text/plain'};
  const parent=mkdtempSync(join(tmpdir(),'charitypilot-imported-proof-'));
  if(process.platform==='win32'){
@@ -182,8 +182,10 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   let result;
   if(managed){
    const {coordinator,control,mode}=managed,journal=cloud.journal,archive=cloud.archive;
-   if(managed.controlSessionId)cloud.b.bindControl(managed.controlSessionId);
-   const head=await control.observe();await coordinator.publishCaptureBootstrap(journal);
+   if(managed.controlSessionId&&managed.controlSessionId!==cloud.b.sessionId)cloud.b.bindControl(managed.controlSessionId);
+   const head=await control.observe();
+   if(managed.bootstrapAlreadyPublished){const original=await journal.observePlanBootstrap(head);assert.deepEqual(original.plan,coordinator.planDescriptor());}
+   else await coordinator.publishCaptureBootstrap(journal);
    const retirement=managed.retirement?await managed.retirement.inspect(coordinator.planDescriptor()):undefined;
    const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
     captureConfigurationDigest:managed.readRole?.configurationDescriptor().captureConfigurationDigest??capture.configurationDigest(),metadataWindowConfigurationDigest:managed.readRole?.configurationDescriptor().metadataWindowConfigurationDigest??service.configurationDigest(),

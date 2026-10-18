@@ -18,8 +18,9 @@ import {GetObjectCommand,HeadObjectCommand} from '@aws-sdk/client-s3';
 const hex=v=>hash(v).toString('hex');
 /** In-process signed SDK synthetic cloud transport, actual crypto/archive classes.
  * Input report and dump come from the genuine native source/isolated-restore proof. */
-export function managedCommonCustodyBackend(installationId,controlCustody){
- const config={...defaults,installationId},b=process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?openSyntheticCustodyProcess(installationId,process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE):backend(config);
+export function managedCommonCustodyBackend(installationId,controlCustody,sharedBackend){
+ if(sharedBackend)assert.ok(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE&&sharedBackend.sessionId);
+ const config={...defaults,installationId},b=sharedBackend??(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?openSyntheticCustodyProcess(installationId,process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE):backend(config));
  const s3=()=>{
   const client=b.s3();
   if(controlCustody&&!process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE){
