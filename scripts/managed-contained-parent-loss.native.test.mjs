@@ -10,6 +10,7 @@ import {DEFAULT_POSTGRES_IMAGE,prepareLocalDockerCommand,captureHelperImplementa
 import {inspectContainmentUnit,containmentUnit,verifyOutcomeCustodyReceiver,currentContainmentBootId} from './managed-proof-systemd-containment.mjs';
 import {inspectOriginalProofStorage} from './managed-proof-storage-inspect.mjs';
 import {requireDaemonGateDirectory} from './managed-daemon-custody-channel.mjs';
+import {readSyntheticCustodyDescriptor} from './synthetic-custody-wire.mjs';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function docker(args,input){const p=prepareLocalDockerCommand(['docker',...args],process.env),r=spawnSync(p.command[0],p.command.slice(1),{env:p.environment,input,encoding:'utf8',timeout:15000,maxBuffer:65536});assert.equal(r.status,0,'Synthetic Docker operation refused');return r.stdout.trim();}
 function manager(args){const r=spawnSync('systemctl',['--user',...args],{encoding:'utf8',timeout:15000,maxBuffer:4096});assert.equal(r.status,0,'Synthetic manager operation refused');return r.stdout;}
@@ -18,6 +19,9 @@ function protectedRemove(path,prefix){if(!existsSync(path))return;assert.equal(d
 for(const captureFormat of ['3','5'])test('format '+captureFormat+' real source caller loss stops its cohort while the original independent request owner and unresolved quarantine survive',{
  skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_CONTAINED_PARENT!=='1',timeout:120000
 },async()=>{
+ // This cohort needs the separately owned SDK keeper used by outcome custody.
+ // Refuse an unsupported standalone invocation before creating fixture state.
+ readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
  assert.notEqual(process.getuid(),0);const helper=captureHelperImplementationBinding();assert.equal(helper.sourceMatchesCommit,true);assert.equal(helper.canonicalRepositoryMatched,true);
  const root=mkdtempSync(join(tmpdir(),'charitypilot-parent-observer-'));chmodSync(root,0o700);
  let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,originalOwner,verifiedSource,channelRoot,originalGroup,daemonGateBinding,output='',errors='';const originalCustodies=[],observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
