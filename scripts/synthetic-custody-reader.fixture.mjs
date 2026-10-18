@@ -41,9 +41,10 @@ for(const session of sessions){
      if(!record.job?.daemon)continue;const daemon=record.job.daemon;daemonCatalogues++;
      assert.deepEqual(daemon.protocolOrdinalRange,{first:0,last:64});assert.equal(daemon.listingStableAtBoundaries,true);
      assert.deepEqual(daemon.ownerOrdinalRange,{first:1,last:64});assert.equal(daemon.independentOwnerDispatchVerified,false);
-     assert.equal(daemon.ownerBindingCount,0); // Current production-style helper has no owner adapter yet.
+     assert.ok(daemon.ownerBindingCount>=daemon.ownerOutcomeCount&&daemon.ownerBindingCount<=64);
      for(const field of ['historyCompletenessVerified','pendingRequestResolved','completeResourceInventory','originalAcknowledgementReconstructed','savedEvidenceAuthorizesDispatch','cleanupAuthorized','actionAuthorized'])assert.equal(daemon[field],false);
-     if(daemon.state==='RECORDED_CLIENT_RESPONSES'){daemonCompleted++;assert.ok(daemon.endPin);assert.equal(daemon.records.length,daemon.responseCount);}
+     if(daemon.state==='RECORDED_CLIENT_RESPONSES'){daemonCompleted++;assert.ok(daemon.endPin);assert.equal(daemon.records.length,daemon.responseCount);
+      assert.ok(daemon.ownerBindingCount>0);assert.equal(daemon.ownerBindingCount,daemon.responseCount);assert.equal(daemon.ownerOutcomeCount,daemon.responseCount);}
      else daemonUnresolved++;
      if(!record.unresolved){assert.equal(daemon.state,'RECORDED_CLIENT_RESPONSES');assert.ok(daemon.records.length>0);}
     }

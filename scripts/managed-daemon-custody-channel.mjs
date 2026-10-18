@@ -10,12 +10,12 @@ export function requireDaemonGateDirectory(root){
  const s=lstatSync(root);if(!s.isDirectory()||s.uid!==process.getuid()||(s.mode&0o777)!==0o700)throw refuse();
  return s;
 }
-export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourceSha,onHeader,onIntent,onResponse,onEnd,onOwner,onOwnerOutcome,requireIndependentOwner=false,requireIndependentOutcome=false}){
+export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourceSha,onHeader,onIntent,onResponse,onEnd,onOwner,onOwnerOutcome,requireIndependentOwner=false,requireIndependentOutcome=false,requireOwnerInput=false}){
  if(typeof jobId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(jobId)||!hex(inputDigest)
   ||typeof sourceSha!=='string'||!/^[a-f0-9]{40}$/.test(sourceSha)||[onHeader,onIntent,onResponse,onEnd].some(f=>typeof f!=='function')
   ||typeof requireIndependentOwner!=='boolean'||onOwner!==undefined&&typeof onOwner!=='function'||requireIndependentOwner&&typeof onOwner!=='function'
   ||typeof requireIndependentOutcome!=='boolean'||onOwnerOutcome!==undefined&&typeof onOwnerOutcome!=='function'
-  ||requireIndependentOutcome&&(!requireIndependentOwner||typeof onOwnerOutcome!=='function'))throw refuse();
+  ||requireIndependentOutcome&&(!requireIndependentOwner||typeof onOwnerOutcome!=='function')||typeof requireOwnerInput!=='boolean'||requireOwnerInput&&!requireIndependentOwner)throw refuse();
  if(process.platform!=='linux'||process.getuid()===0)throw refuse();
  const root=mkdtempSync(join(tmpdir(),'charitypilot-daemon-gate-'));chmodSync(root,0o700);const originalRoot=requireDaemonGateDirectory(root);
  const unchanged=()=>{const current=requireDaemonGateDirectory(root);if(current.dev!==originalRoot.dev||current.ino!==originalRoot.ino)throw refuse();};
@@ -28,12 +28,14 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
   socket.on('close',()=>{bytes.fill(0);sockets.delete(socket);if(!received)failed=true;});
   socket.on('data',chunk=>{
    if(received){fail();return;}const merged=Buffer.concat([bytes,chunk]);bytes.fill(0);bytes=merged;
-   if(bytes.length>32768){fail();return;}const n=bytes.indexOf(10);if(n<0)return;received=true;
+   if(bytes.length>131072){fail();return;}const n=bytes.indexOf(10);if(n<0)return;received=true;
    const task=(async()=>{
     try{
      if(!open||failed||busy||n!==bytes.length-1)throw refuse();busy=true;
      const v=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,n)));bytes.fill(0);
-     if(!v||Object.keys(v).sort().join(',')!=='artifact,capability,inputDigest,jobId,kind,nonce,sourceSha'||!hex(v.capability)
+     const withInput=v?.kind==='OWNER'&&v.ownerInput!==undefined;
+     if(!v||Object.keys(v).sort().join(',')!==(withInput?'artifact,capability,inputDigest,jobId,kind,nonce,ownerInput,sourceSha':'artifact,capability,inputDigest,jobId,kind,nonce,sourceSha')||!hex(v.capability)
+      ||n>(withInput?131071:32767)
       ||!timingSafeEqual(Buffer.from(v.capability),Buffer.from(capability))||v.jobId!==jobId||v.inputDigest!==inputDigest||v.sourceSha!==sourceSha
       ||!hex(v.nonce)||nonces.has(v.nonce)||!['HEADER','INTENT','RESPONSE','END','OWNER','OUTCOME'].includes(v.kind)||endAcknowledged)throw refuse();
      const a=v.artifact;if(!a||Object.keys(a).sort().join(',')!=='body,byteLength,sha256'||typeof a.body!=='string'||Buffer.byteLength(a.body)<1||Buffer.byteLength(a.body)>8192
@@ -43,6 +45,12 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
      if(v.kind==='HEADER'&&(headerAcknowledged||local.inputDigest!==inputDigest||local.kind!=='MANAGED_DAEMON_REQUEST_HEADER_V2'))throw refuse();
      if(v.kind==='INTENT'&&(!headerAcknowledged||local.kind!=='MANAGED_DAEMON_REQUEST_INTENT_V2'||ordinal!==intentCount+1||ordinal>64||responseCount!==intentCount))throw refuse();
      if(v.kind==='OWNER'&&(!onOwner||!headerAcknowledged||local.kind!=='MANAGED_DAEMON_REQUEST_OWNER_V1'||ordinal!==intentCount||ordinal!==responseCount+1||owners.has(ordinal)))throw refuse();
+     if(v.kind==='OWNER'){
+      if(requireOwnerInput&&!withInput)throw refuse();
+      if(withInput){const i=v.ownerInput;if(!i||typeof i!=='object'||Array.isArray(i)||Buffer.byteLength(JSON.stringify(i))>65536
+       ||i.jobId!==jobId||i.sourceSha!==sourceSha||i.inputDigest!==inputDigest||i.descriptorPath!==descriptorPath||i.ownerId!==local.identity?.ownerId
+       ||createHash('sha256').update(JSON.stringify(i)).digest('hex')!==local.identity?.inputDigest)throw refuse();}
+     }
      if(v.kind==='OUTCOME'){
       const original=owners.get(ordinal);
       if(!onOwnerOutcome||!headerAcknowledged||local.kind!=='MANAGED_DAEMON_OWNER_OUTCOME_V1'||ordinal!==intentCount||ordinal!==responseCount+1||!original||outcomes.has(ordinal)
@@ -58,7 +66,7 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
       if(local.intentPin?.sha256!==original.intentPin.sha256||local.intentPin?.byteLength!==original.intentPin.byteLength)throw refuse();
      }
      if(v.kind==='END'&&(!headerAcknowledged||local.kind!=='MANAGED_DAEMON_REQUEST_END_V1'||local.requestCount!==intentCount||responseCount!==intentCount))throw refuse();
-     nonces.add(v.nonce);const saved=await({HEADER:onHeader,INTENT:onIntent,RESPONSE:onResponse,END:onEnd,OWNER:onOwner,OUTCOME:onOwnerOutcome}[v.kind](a));
+     nonces.add(v.nonce);const saved=await({HEADER:onHeader,INTENT:onIntent,RESPONSE:onResponse,END:onEnd,OWNER:onOwner,OUTCOME:onOwnerOutcome}[v.kind](a,v.ownerInput));
      const completion=v.kind==='RESPONSE'||v.kind==='END'||v.kind==='OUTCOME';
      if(!open||failed||socket.destroyed||saved?.savedEvidenceAuthorizesDispatch!==false||saved?.actionAuthorized!==false||saved?.pin?.kind!==(completion?'OBSERVATION':'BASELINE')
       ||completion&&saved?.pendingRequestResolved!==false||['OWNER','OUTCOME'].includes(v.kind)&&saved?.independentOwnerDispatchVerified!==false
@@ -91,5 +99,5 @@ export async function createManagedDaemonCustodyChannel({jobId,inputDigest,sourc
  };
  return{descriptorPath,binding:()=>({format:1,kind:'MANAGED_DAEMON_GATE_BINDING_V1',jobId,inputDigest,sourceSha,descriptorPath,
   device:originalRoot.dev,inode:originalRoot.ino,executionAuthorized:false,actionAuthorized:false}),
-  snapshot:()=>({headerAcknowledged,intentCount,responseCount,ownerCount,ownerOutcomeCount,requireIndependentOwner,requireIndependentOutcome,endAcknowledged,failed,inFlight:pending.size}),close:()=>closing??=close()};
+  snapshot:()=>({headerAcknowledged,intentCount,responseCount,ownerCount,ownerOutcomeCount,requireIndependentOwner,requireIndependentOutcome,requireOwnerInput,endAcknowledged,failed,inFlight:pending.size}),close:()=>closing??=close()};
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runManagedDaemonOwner,validateManagedDaemonOwnerInput} from './managed-daemon-owner-worker.mjs';
+import {runManagedDaemonOwner,validateManagedDaemonOwnerInput,prepareManagedDaemonOwnerLaunch} from './managed-daemon-owner-worker.mjs';
 import {independentOwnerProbeArguments} from './managed-daemon-owner-probe.mjs';
 import {planManagedProofStorage} from './postgres-backup.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -44,4 +44,13 @@ test('unbound worker refuses the actual default identity and CLI before any exec
  const r=spawnSync(process.execPath,[fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url)),'--stdin'],{
   input:JSON.stringify(fixture()),encoding:'utf8',timeout:10000,maxBuffer:4096});
  assert.equal(r.status,1);assert.equal(r.stdout,'');assert.equal(r.stderr,'Original daemon owner unresolved\n');
+});
+test('fixed service launch transports private payload only on stdin and pins its command and resource limits',()=>{
+ const input={...fixture(),environment:{PGPASSWORD:'synthetic-private-payload'}},launch=prepareManagedDaemonOwnerLaunch(input,{PATH:'/synthetic',DATABASE_URL:'omit',NODE_OPTIONS:'omit',AWS_SECRET_ACCESS_KEY:'omit'});
+ try{
+  assert.deepEqual(JSON.parse(launch.input.toString()),input);assert.equal(JSON.stringify(launch.args).includes('synthetic-private-payload'),false);
+  assert.deepEqual(launch.environment,{PATH:'/synthetic'});assert.ok(launch.args.includes('--pipe'));assert.ok(launch.args.includes('--property=KillMode=control-group'));
+  assert.ok(launch.args.includes('--property=NoNewPrivileges=yes'));assert.equal(launch.args.at(-1),'--stdin');
+  assert.ok(launch.args.at(-2).endsWith('managed-daemon-owner-worker.mjs'));assert.equal(launch.args.some(v=>v.includes('RemainAfterExit')),false);
+ }finally{launch.input.fill(0);}
 });

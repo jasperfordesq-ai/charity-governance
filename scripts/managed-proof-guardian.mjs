@@ -43,7 +43,10 @@ export async function runManagedProofGuardian({workerPath=actualWorker,onTermina
   clearTimeout(startup);input?.fill(0);
   const workerTerminal=!!owned&&(owned.exitCode!==null||owned.signalCode!==null);
   // Never infer terminal ownership from a stored PID or process-name lookup.
-  if(jobId&&workerTerminal){try{requests=inspectRequests(requestValue);cleanup=reconcile(jobId,workerEnv);}catch{success=false;}}
+  if(jobId&&workerTerminal){try{requests=inspectRequests(requestValue);
+   if(requests?.mutatingRequestsObservedSuccessful===true&&requests?.declaredImageVolumesCovered===true)cleanup=reconcile(jobId,workerEnv);
+   else cleanup={removedCount:0,observedJobContainersAbsent:false};
+  }catch{success=false;}}
   else success=false;
   if(!cleanup||cleanup.removedCount!==0||requests?.mutatingRequestsObservedSuccessful!==true||requests?.declaredImageVolumesCovered!==true||cancelled||parentDisconnected||!parent.connected)success=false;
   const observed={format:1,kind:'MANAGED_PROOF_GUARDIAN_TERMINAL_V1',workerTimeoutMs,parentDisconnected,cancellationRequested:cancelled,

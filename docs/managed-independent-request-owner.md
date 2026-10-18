@@ -1,3 +1,26 @@
+## 18 October: mandatory managed mutation routing
+
+COMMON_CANDIDATE kernel-contained restore proofs route mutating Docker requests
+through the fixed independent user service. There is no direct-dispatch fallback.
+The original parent checks the exact private input against its acknowledged
+intent, source SHA, source input digest and protected descriptor, then verifies
+the actual worker command, invocation and separate cgroup before OWNER ACK.
+The private input travels over stdin and the protected local socket; saved
+custody artifacts retain only its digest. An original outcome writer must ACK
+the worker's result before the source can account its response.
+
+Unknown launch or ACK prevents retry and final success. The parent waits up to
+95 seconds for its original owner groups before closing the outcome gate;
+each command is capped at 90 seconds and its output at one MiB. Only complete
+original request/outcome accounting allows automatic container reconciliation.
+Resetting terminal metadata of an originally owned unit grants no Docker
+cleanup, replay or queue resolution. Read-only daemon probes remain separate.
+
+This integrates source and owner lifetimes while the custody parent lives. It
+does not prove custody-parent loss, provider IAM, independent physical host-loss
+recovery, tenant authority or public-production readiness. Release-specific
+native evidence and failure limits are recorded privately.
+
 # Independent daemon request owner acceptance
 
 ## 18 October: ordered owner-outcome transport

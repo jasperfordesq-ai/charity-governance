@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {createManagedDaemonRequestJournal,inspectManagedDaemonRequests,planManagedProofStorage,DEFAULT_POSTGRES_IMAGE,PROOF_CLIENT_DATA_TMPFS} from './postgres-backup.mjs';
 const createJournal=scope=>createManagedDaemonRequestJournal(scope,{imageVolumes:()=>['/var/lib/postgresql/data']});
 const runArgs=(extra=[])=>['run','--name','charitypilot-source-snapshot-123-456-abcdef12','--tmpfs',PROOF_CLIENT_DATA_TMPFS,...extra,DEFAULT_POSTGRES_IMAGE,'sh'];
@@ -28,16 +28,33 @@ test('original intent exists before dispatch and a fresh reader requires respons
   assert.throws(()=>createJournal(f.scope));assert.throws(()=>j.dispatch(runArgs(),()=>assert.fail('No replay')));
  }finally{f.close();}
 });
-test('lost or ambiguous response remains unresolved even with an end marker and no listed containers',()=>{
+test('lost or ambiguous response remains unresolved and a thrown client cannot finish or dispatch again',()=>{
  for(const reply of [null,{status:1},{status:null,error:new Error('private error')},{status:0,signal:'SIGKILL'}]){
   const f=fixture();try{
    const j=createJournal(f.scope);
    if(reply===null)assert.throws(()=>j.dispatch(runArgs(),()=>{throw new Error('Original client response lost');}));
    else j.dispatch(runArgs(),()=>reply);
-   assert.equal(j.finish().state,'UNRESOLVED_REQUESTS');assert.equal(inspectManagedDaemonRequests(f.scope).mutatingRequestsObservedSuccessful,false);
+   if(reply===null){assert.throws(()=>j.finish());assert.throws(()=>j.dispatch(runArgs(),()=>assert.fail('No second request after client throw')));}
+   else assert.equal(j.finish().state,'UNRESOLVED_REQUESTS');
+   assert.equal(inspectManagedDaemonRequests(f.scope).mutatingRequestsObservedSuccessful,false);
   }finally{f.close();}
  }
 });
+test('owner dispatcher replaces direct mutations only after original intent ACK and unknown dispatch blocks completion',()=>{
+ for(const fail of [false,true]){const f=fixture(),order=[];try{
+  const j=createManagedDaemonRequestJournal(f.scope,{imageVolumes:()=>['/var/lib/postgresql/data'],acknowledge:kind=>{order.push(kind);return true;},dispatchOwner:request=>{
+   order.push('OWNER');assert.deepEqual(request.args,runArgs());const stored=readFileSync(join(f.root,'proof-daemon.001.intent.json'),'utf8');
+   assert.equal(request.intent.body,stored);assert.equal(request.intent.sha256,createHash('sha256').update(stored).digest('hex'));
+   if(fail)throw new Error('synthetic owner ACK unknown');return{status:0};
+  }});
+  // Validate original stored bytes without requiring a response that does not yet exist.
+  if(fail)assert.throws(()=>j.dispatch(runArgs(),()=>assert.fail('Direct mutation fallback forbidden')));
+  else{j.dispatch(runArgs(),()=>assert.fail('Direct mutation fallback forbidden'));assert.equal(j.finish().mutatingRequestsObservedSuccessful,true);}
+  if(fail){assert.throws(()=>j.finish());assert.throws(()=>j.dispatch(runArgs(),()=>assert.fail('No retry')));}
+  assert.deepEqual(order,fail?['HEADER','INTENT','OWNER']:['HEADER','INTENT','OWNER','RESPONSE','END']);
+ }finally{f.close();}}
+});
+
 test('idempotent daemon removal absence is distinct from an unknown create and is not a retry grant',()=>{
  const f=fixture();try{
   const j=createJournal(f.scope);j.dispatch(['rm','-f','charitypilot-source-snapshot-123-456-abcdef12'],()=>({status:1,stderr:'Error response from daemon: No such container: charitypilot-source-snapshot-123-456-abcdef12\n'}));

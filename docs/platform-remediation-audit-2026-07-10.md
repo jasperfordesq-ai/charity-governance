@@ -1,3 +1,12 @@
+## 18 October: managed mutation owner routing
+
+COMMON_CANDIDATE kernel-contained mutations now require the independent fixed
+worker and original OWNER/OUTCOME ACKs. Private input is checked transiently
+against the original intent; incomplete accounting preserves resources and
+refuses retry. See [request owner](managed-independent-request-owner.md).
+Exact release/native evidence is private. Custody-parent loss, actual provider
+and physical-host-loss proof remain open; deployment is a separate gate.
+
 ## 18 October: actual fixed-owner service acceptance
 
 Read [independent request owner](managed-independent-request-owner.md). The fixed

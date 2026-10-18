@@ -42,7 +42,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
    '--expected-source-database-identity-sha256='+identity,'--output-dir='+output,'--output-file=common.dump','--report-file=common.json'];
-  const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent','observeDaemonResponse','finishDaemonRequests'].map(name=>[name,async artifact=>{
+  const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeWriter','observeDaemonResponse','finishDaemonRequests'].map(name=>[name,async artifact=>{
    if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ENTER');
    const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');
    if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal});
@@ -63,6 +63,8 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   if(sourceExecutionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'){
    assert.equal(supervised.daemonCustodyRequired,true);assert.equal(supervised.daemonHeaderCustodyAcknowledged,true);assert.ok(supervised.daemonIntentCustodyAcknowledgements>0);
    assert.equal(supervised.daemonResponseCustodyAcknowledgements,supervised.daemonIntentCustodyAcknowledgements);assert.equal(supervised.daemonEndCustodyAcknowledged,true);
+   assert.equal(supervised.daemonOwnerCustodyAcknowledgements,supervised.daemonIntentCustodyAcknowledgements);
+   assert.equal(supervised.daemonOwnerOutcomeAcknowledgements,supervised.daemonIntentCustodyAcknowledgements);
   }
   assert.ok(statSync(join(output,'common.json')).size<16*1024*1024);
   const report=JSON.parse(readFileSync(join(output,'common.json'),'utf8'));

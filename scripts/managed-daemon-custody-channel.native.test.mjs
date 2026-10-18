@@ -41,7 +41,7 @@ test('separate synchronous source client waits for original custody before dispa
    assert.equal(existsSync(join(root,'synthetic-dispatched.txt')),mode==='success'||mode.startsWith('response-')||mode.startsWith('end-'));
    assert.equal(responses,['success','response-refused','response-ACK-lost','end-refused','end-ACK-lost'].includes(mode)?1:0);
    assert.equal(ends,['success','end-refused','end-ACK-lost'].includes(mode)?1:0);
-   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,ownerOutcomeCount:0,requireIndependentOwner:false,requireIndependentOutcome:false,endAcknowledged:true,failed:false,inFlight:0});
+   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,ownerOutcomeCount:0,requireIndependentOwner:false,requireIndependentOutcome:false,requireOwnerInput:false,endAcknowledged:true,failed:false,inFlight:0});
   }finally{await gate?.close();assert.equal(dirname(root),resolve(tmpdir()));assert.match(basename(root),/^charitypilot-daemon-barrier-test-[A-Za-z0-9]{6}$/);rmSync(root,{recursive:true,force:true});}
  }
 });
@@ -111,4 +111,23 @@ test('OUTCOME is original-owner-bound, once-only and required before opted-in re
 test('bound worker input refuses missing custody descriptor before any helper mutation',{timeout:15000},async()=>{
  const result=await child(fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url)),{args:['prove-restore','--output-dir','/synthetic-not-created'],snapshot:{synthetic:true},jobId:randomUUID(),daemonCustodyRequired:true});
  assert.equal(result.code,1);assert.equal(result.body.includes('MANAGED_IMPORTED_PROOF_WORKER_V1'),false);
+});
+
+test('required private OWNER input matches the original gate and byte digest without entering saved artifacts',{skip:!enabled,timeout:30000},async()=>{
+ for(const mode of ['success','missing','scope','source','descriptor','owner','digest']){
+  const jobId=randomUUID(),inputDigest='b'.repeat(64),sourceSha='1'.repeat(40),ownerId=randomUUID();let calls=0;
+  const record=value=>{const body=JSON.stringify(value);return{body,sha256:createHash('sha256').update(body).digest('hex'),byteLength:Buffer.byteLength(body)};};
+  const gate=await createManagedDaemonCustodyChannel({jobId,inputDigest,sourceSha,requireIndependentOwner:true,requireOwnerInput:true,
+   onHeader:async()=>saved(),onIntent:async()=>saved(),onResponse:async()=>saved('OBSERVATION'),onEnd:async()=>saved('OBSERVATION'),
+   onOwner:async(a,input)=>{calls++;assert.equal(a.body.includes('private-synthetic-secret'),false);assert.equal(input.environment.PGPASSWORD,'private-synthetic-secret');return{...saved(),independentOwnerDispatchVerified:false};}});
+  const input={jobId,inputDigest,sourceSha,ownerId,descriptorPath:gate.descriptorPath,environment:{PGPASSWORD:'private-synthetic-secret'}};
+  if(mode==='scope')input.jobId=randomUUID();if(mode==='source')input.sourceSha='2'.repeat(40);if(mode==='descriptor')input.descriptorPath+='.changed';if(mode==='owner')input.ownerId=randomUUID();
+  const owner=record({kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId,sequence:1,identity:{ownerId,inputDigest:mode==='digest'?'0'.repeat(64):createHash('sha256').update(JSON.stringify(input)).digest('hex')}});
+  const send=(kind,artifact,extra={})=>requestManagedDaemonCustody({descriptorPath:gate.descriptorPath,jobId,inputDigest,sourceSha,kind,artifact,...extra});
+  try{
+   await send('HEADER',record({kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId,inputDigest}));await send('INTENT',record({kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId,sequence:1}));
+   const pending=send('OWNER',owner,mode==='missing'?{}:{ownerInput:input});
+   if(mode==='success'){await pending;assert.equal(calls,1);assert.equal(gate.snapshot().ownerCount,1);}else{await assert.rejects(pending);assert.equal(calls,0);assert.equal(gate.snapshot().failed,true);}
+  }finally{await gate.close();}
+ }
 });

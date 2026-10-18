@@ -5,8 +5,11 @@ import {fileURLToPath} from 'node:url';
 import {prepareLocalDockerCommand,captureHelperImplementationBinding,inspectManagedDaemonInvocation} from './postgres-backup.mjs';
 import {superviseContainedManagedProof} from './managed-proof-systemd-runner.mjs';
 import {createManagedDaemonCustodyChannel} from './managed-daemon-custody-channel.mjs';
+import {validateManagedDaemonOwnerInput} from './managed-daemon-owner-worker.mjs';
+import {inspectContainmentUnit,observeOriginalControlGroup,currentContainmentBootId,verifyIndependentDaemonOwner} from './managed-proof-systemd-containment.mjs';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const worker=fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url));
+const ownerWorker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url));
 const jobPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const unresolved=()=>new Error('Managed source proof unresolved; preserve quarantine and partial artifacts');
 /** The helper gets its explicit source DB credential, not the parent's cloud,
@@ -17,6 +20,26 @@ export function managedProofWorkerEnvironment(source,databaseUrl){
  return{...Object.fromEntries(Object.entries(source).filter(([key,value])=>allowed.has(key.toUpperCase())&&typeof value==='string')),DATABASE_URL:databaseUrl};
 }
 function requireJob(id){if(typeof id!=='string'||!jobPattern.test(id))throw unresolved();return id;}
+async function settleOriginalOwners(owners){
+ const deadline=Date.now()+95000;
+ while(true){
+  let running=false;for(const {identity}of owners.values()){
+   if(identity.bootId!==currentContainmentBootId())return false;
+   running||=observeOriginalControlGroup(identity.controlGroup,identity.unit,process.getuid())==='POPULATED';
+  }
+  if(!running)break;if(Date.now()>=deadline)return false;await new Promise(r=>setTimeout(r,100));
+ }
+ // Reset only terminal metadata of the original live-owned invocation. This
+ // neither removes daemon resources nor resolves an unknown request.
+ for(const {identity}of owners.values()){
+  const state=spawnSync('systemctl',['--user','show',identity.unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:15000,maxBuffer:4096});
+  if(!state.error&&[0,1,4].includes(state.status)&&state.stdout.trim()==='not-found')continue;
+  if(state.error||state.status!==0||state.stdout.trim()!=='loaded')return false;
+  const current=inspectContainmentUnit(identity.unit);if(current.InvocationID!==identity.invocationId||current.ExecMainStartTimestampMonotonic!==identity.mainStartMonotonic||current.MainPID!=='0'||!['failed','inactive'].includes(current.ActiveState))return false;
+  const reset=spawnSync('systemctl',['--user','reset-failed',identity.unit],{encoding:'utf8',timeout:15000,maxBuffer:4096});if(reset.error||reset.status!==0)return false;
+ }
+ return[...owners.values()].every(v=>v.outcome!==undefined);
+}
 function docker(args,env){
  const p=prepareLocalDockerCommand(['docker',...args],env);
  const r=spawnSync(p.command[0],p.command.slice(1),{env:p.environment,encoding:'utf8',windowsHide:true,stdio:'pipe',timeout:15000,maxBuffer:65536});
@@ -108,7 +131,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
  if(executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'&&typeof jobCustody?.bindService!=='function')throw unresolved();
  const daemonCustodyRequired=executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE';
- if(daemonCustodyRequired&&(typeof jobCustody.reserveDaemonHeader!=='function'||typeof jobCustody.reserveDaemonIntent!=='function'||typeof jobCustody.observeDaemonResponse!=='function'||typeof jobCustody.finishDaemonRequests!=='function'))throw unresolved();
+ if(daemonCustodyRequired&&['reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeWriter','observeDaemonResponse','finishDaemonRequests'].some(name=>typeof jobCustody[name]!=='function'))throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  prepareLocalDockerCommand(['docker','version'],process.env);
  const env=managedProofWorkerEnvironment(process.env,databaseUrl);
@@ -122,30 +145,46 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
   argumentsDigest:hash(JSON.stringify(args)),createdAt:new Date().toISOString(),state:'REQUESTED_ONLY',
   executionAuthorized:false,publicationAuthorized:false,actionAuthorized:false},signal);
  if(jobCustody)await jobCustody.reserve(job.requestArtifact);
- let result,boundService,daemonGate,daemonGateState,cohortTerminated=executionMode==='INTERNAL_IPC_PROOF';
+ let result,boundService,sourceManagerIdentity,daemonGate,daemonGateState,cohortTerminated=executionMode==='INTERNAL_IPC_PROOF';
+ const originalIntents=new Map(),owners=new Map();
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId,...(daemonCustodyRequired?{daemonCustodyRequired:true}:{})}));
  try{
-  if(daemonCustodyRequired){daemonGate=await createManagedDaemonCustodyChannel({jobId,sourceSha:helper.commitSha,inputDigest:hash(input),
-   onHeader:artifact=>jobCustody.reserveDaemonHeader(artifact),onIntent:artifact=>jobCustody.reserveDaemonIntent(artifact),
+  if(daemonCustodyRequired){daemonGate=await createManagedDaemonCustodyChannel({jobId,sourceSha:helper.commitSha,inputDigest:hash(input),requireIndependentOwner:true,requireIndependentOutcome:true,requireOwnerInput:true,
+   onHeader:artifact=>jobCustody.reserveDaemonHeader(artifact),onIntent:async artifact=>{const saved=await jobCustody.reserveDaemonIntent(artifact);originalIntents.set(JSON.parse(artifact.body).sequence,{...artifact});return saved;},
+   onOwner:async(artifact,privateInput)=>{
+    const prepared=validateManagedDaemonOwnerInput(privateInput),value=JSON.parse(artifact.body),original=originalIntents.get(value.sequence);
+    if(!sourceManagerIdentity||prepared.jobId!==jobId||prepared.sourceSha!==helper.commitSha||prepared.inputDigest!==hash(input)
+     ||prepared.descriptorPath!==daemonGate.descriptorPath||!original||JSON.stringify(prepared.intent)!==JSON.stringify(original))throw unresolved();
+    const options={source:sourceManagerIdentity,sourceSha:helper.commitSha,ownerInputDigest:hash(JSON.stringify(prepared)),expectedCommandLine:[process.execPath,ownerWorker,'--stdin']};
+    verifyIndependentDaemonOwner(value,options);const record={identity:structuredClone(value.identity)};owners.set(value.sequence,record);
+    const saved=await jobCustody.bindDaemonOwner(artifact);verifyIndependentDaemonOwner(value,options);
+    record.writer=await jobCustody.createDaemonOwnerOutcomeWriter();return saved;
+   },
+   onOwnerOutcome:async artifact=>{const value=JSON.parse(artifact.body),record=owners.get(value.sequence);if(!record?.writer)throw unresolved();
+    const saved=await record.writer.publish(artifact);record.outcome=value;return saved;},
    onResponse:artifact=>jobCustody.observeDaemonResponse(artifact),onEnd:artifact=>jobCustody.finishDaemonRequests(artifact)});env.CHARITYPILOT_INTERNAL_DAEMON_GATE=daemonGate.descriptorPath;}
   if(executionMode==='KERNEL_CONTAINED'){
    await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,diagnostics,daemonGateBinding:daemonGate?.binding(),authorizeInvocation:async identity=>{
-    boundService=await job.bindService(identity,input);if(jobCustody)await jobCustody.bindService(boundService.artifact);signal?.throwIfAborted();return true;
+    boundService=await job.bindService(identity,input);if(jobCustody)await jobCustody.bindService(boundService.artifact);sourceManagerIdentity=inspectContainmentUnit(identity.unit);signal?.throwIfAborted();return true;
    }});cohortTerminated=true;
   }else await superviseManagedProofGuardian({input,env,signal,timeoutMs},{onStderr:diagnostics});success=true;
  }
  catch(error){if(executionMode==='KERNEL_CONTAINED')cohortTerminated=error?.cohortTerminated===true;throw unresolved();}
  finally{
+  let ownersSettled=true;try{if(daemonCustodyRequired)ownersSettled=await settleOriginalOwners(owners);}catch{ownersSettled=false;}
+  for(const record of owners.values())if(!record.outcome)record.writer?.revoke();
   input.fill(0);
   let gateClosed=true;const gateState=daemonGateState=daemonGate?.snapshot();try{await daemonGate?.close();}catch{gateClosed=false;}
   if(!cohortTerminated){
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
-  try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
+  let settled=false;try{const r=inspectManagedDaemonInvocation({args,snapshot,jobId,daemonCustodyRequired});settled=r.mutatingRequestsObservedSuccessful===true&&r.declaredImageVolumesCovered===true
+   &&(!daemonCustodyRequired||(ownersSettled&&owners.size===r.requestCount&&gateClosed&&gateState?.headerAcknowledged&&!gateState.failed&&gateState.inFlight===0&&r.requestCount>0
+    &&gateState.intentCount===r.requestCount&&gateState.ownerCount===r.requestCount&&gateState.ownerOutcomeCount===r.requestCount&&gateState.responseCount===r.requestCount&&gateState.endAcknowledged));}catch{}
+  cleanup={removedCount:0,observedJobContainersAbsent:false};
+  if(success&&settled)try{cleanup=reconcileManagedProofContainers(jobId,env);}catch{
    try{const failed=await job.observe('UNRESOLVED',false);if(jobCustody)await jobCustody.observe(failed.artifact);}catch{}throw unresolved();
   }
-  let settled=false;try{const r=inspectManagedDaemonInvocation({args,snapshot,jobId,daemonCustodyRequired});settled=r.mutatingRequestsObservedSuccessful===true&&r.declaredImageVolumesCovered===true
-   &&(!daemonCustodyRequired||(gateClosed&&gateState?.headerAcknowledged&&!gateState.failed&&gateState.inFlight===0&&r.requestCount>0&&gateState.intentCount===r.requestCount&&gateState.responseCount===r.requestCount&&gateState.endAcknowledged));}catch{}
   try{result=await job.observe(success&&settled&&cleanup.removedCount===0?'WORKER_EXIT_ACK_OBSERVED':'UNRESOLVED',settled);if(jobCustody)await jobCustody.observe(result.artifact);}catch{throw unresolved();}
   // Residue after an apparently successful worker is an unresolved outcome too.
   if(success&&(!settled||cleanup.removedCount!==0))throw unresolved();
@@ -153,5 +192,6 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  return{jobId,requestPin:job.requestPin,observationPin:result.pin,servicePin:boundService?.pin??null,kernelContained:executionMode==='KERNEL_CONTAINED',
   daemonCustodyRequired,daemonHeaderCustodyAcknowledged:daemonGateState?.headerAcknowledged??false,daemonIntentCustodyAcknowledgements:daemonGateState?.intentCount??0,
   daemonResponseCustodyAcknowledgements:daemonGateState?.responseCount??0,daemonEndCustodyAcknowledged:daemonGateState?.endAcknowledged??false,
+  daemonOwnerCustodyAcknowledgements:daemonGateState?.ownerCount??0,daemonOwnerOutcomeAcknowledgements:daemonGateState?.ownerOutcomeCount??0,
   directoryFlushSupported:job.directoryFlushSupported,workerExited:true,observedJobContainersAbsent:true,actionAuthorized:false};
 }

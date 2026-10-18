@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {basename} from 'node:path';
-import {pathToFileURL} from 'node:url';
-import {spawnLocalDockerCommand,validateManagedDaemonOwnerArguments} from './postgres-backup.mjs';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {spawnLocalDockerCommand,prepareLocalDockerCommand,validateManagedDaemonOwnerArguments} from './postgres-backup.mjs';
 import {containmentUnit,inspectContainmentUnit,currentContainmentBootId} from './managed-proof-systemd-containment.mjs';
 import {verifyContainedExecutorSource} from './managed-proof-systemd-runner.mjs';
 import {requestManagedDaemonCustody} from './managed-daemon-custody-client.mjs';
@@ -11,6 +12,32 @@ const no=()=>new Error('Original daemon owner unresolved; preserve intent withou
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');
 const hex=(v,n)=>typeof v==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(v);
 const artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
+export function prepareManagedDaemonOwnerLaunch(raw,source=process.env){
+ const input=validateManagedDaemonOwnerInput(raw),unit=containmentUnit(input.ownerId);
+ const environment=Object.fromEntries(['PATH','HOME','USER','LOGNAME','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS'].filter(k=>typeof source[k]==='string').map(k=>[k,source[k]]));
+ const args=['--user','--quiet','--pipe','--unit='+unit,'--service-type=exec','--property=KillMode=control-group','--property=Restart=no',
+  '--property=RuntimeMaxSec='+Math.ceil((input.timeoutMs+30000)/1000)+'s','--property=TimeoutStopSec=2s',
+  '--property=NoNewPrivileges=yes','--property=MemoryMax=128M','--property=TasksMax=32','--property=CPUQuota=50%',
+  '--property=UnsetEnvironment=NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH',process.execPath,fileURLToPath(import.meta.url),'--stdin'];
+ return{unit,args,environment,input:Buffer.from(JSON.stringify(input)),timeout:input.timeoutMs+35000,maxBuffer:input.maxBuffer*8+16384};
+}
+/** Synchronous caller adapter. A killed client does not fence the daemon or
+ * authorise retry. Original owner/outcome custody remains in the live parent. */
+export function dispatchManagedDaemonOwnerSync(raw){
+ if(process.platform!=='linux'||process.getuid()===0)throw no();const input=validateManagedDaemonOwnerInput(raw);
+ verifyContainedExecutorSource(input.sourceSha);prepareLocalDockerCommand(['docker','version'],process.env);
+ const launch=prepareManagedDaemonOwnerLaunch(input);
+ try{
+  const state=spawnSync('systemctl',['--user','show',launch.unit,'--property=LoadState','--value'],{env:launch.environment,encoding:'utf8',timeout:15000,maxBuffer:4096});
+  if(state.error||![0,1,4].includes(state.status)||state.stdout.trim()!=='not-found')throw no();
+  const r=spawnSync('systemd-run',launch.args,{env:launch.environment,input:launch.input,encoding:'utf8',timeout:launch.timeout,maxBuffer:launch.maxBuffer,killSignal:'SIGKILL'});
+  if(r.status!==0||r.error||r.signal||r.stderr?.trim())throw no();const value=JSON.parse(r.stdout);
+  if(!exact(value,'status,transportError,signal,stdout,stderr')||value.status!==null&&!Number.isSafeInteger(value.status)
+   ||typeof value.transportError!=='boolean'||typeof value.signal!=='boolean'||typeof value.stdout!=='string'||typeof value.stderr!=='string'
+   ||Buffer.byteLength(value.stdout)>input.maxBuffer||Buffer.byteLength(value.stderr)>input.maxBuffer)throw no();
+  return{status:value.status,stdout:value.stdout,stderr:value.stderr,error:value.transportError?no():undefined,signal:value.signal?'UNKNOWN':null};
+ }finally{launch.input.fill(0);}
+}
 export function validateManagedDaemonOwnerInput(raw){
  if(!exact(raw,'format,kind,jobId,ownerId,sourceSha,inputDigest,descriptorPath,intent,args,environment,timeoutMs,maxBuffer')
   ||raw.format!==1||raw.kind!=='MANAGED_DAEMON_OWNER_INPUT_V1'||!hex(raw.sourceSha,40)||!hex(raw.inputDigest,64)
@@ -42,7 +69,7 @@ function actualIdentity(input){
 export async function runManagedDaemonOwner(raw,{identity=actualIdentity,acknowledge=requestManagedDaemonCustody,execute=spawnLocalDockerCommand}={}){
  const input=validateManagedDaemonOwnerInput(raw),intent=JSON.parse(input.intent.body),owner=artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',
   jobId:input.jobId,sequence:intent.sequence,intentPin:{sha256:input.intent.sha256,byteLength:input.intent.byteLength},identity:identity(input)});
- const send=(kind,record)=>acknowledge({kind,artifact:record,descriptorPath:input.descriptorPath,jobId:input.jobId,inputDigest:input.inputDigest,sourceSha:input.sourceSha});
+ const send=(kind,record)=>acknowledge({kind,artifact:record,descriptorPath:input.descriptorPath,jobId:input.jobId,inputDigest:input.inputDigest,sourceSha:input.sourceSha,...(kind==='OWNER'?{ownerInput:input}:{})});
  if(await send('OWNER',owner)!==true)throw no();
  const environment=Object.fromEntries(['PATH','HOME','USER','LOGNAME'].filter(k=>process.env[k]!==undefined).map(k=>[k,process.env[k]]));
  Object.assign(environment,input.environment);
