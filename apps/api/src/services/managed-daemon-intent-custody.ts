@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {randomBytes} from 'node:crypto';
 import {ListObjectsV2Command,S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
-import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
+import {anyCommonCandidateBindingSchema as commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 import {localJobArtifact,localJobArtifactSchema,parseJobRequest,parseJobService,assertJobServicePair} from './managed-proof-job-contract.js';
 import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
 import {managedMaintenanceStorageConfigurationSchema} from './managed-maintenance-control.js';

@@ -1,3 +1,13 @@
+## 18 October: versioned read-role common-candidate path
+
+A format-4 original request/report now carries the configured read-role capture
+through source job/daemon custody and archive preparation, staging, saved root
+reference, publication and read-only verification. Format-10 plan discovery binds
+its authorization digest and refuses legacy downgrade or substituted scopes.
+Read [the protocol and evidence limits](managed-read-role-common-candidate.md).
+Focused regressions pass; exact native execution remains recorded privately.
+Provider and independent host-loss gates remain open.
+
 ## 18 October: joined read-role capture verified natively
 
 The native TLS cohort passed original snapshot import, both Storage metadata

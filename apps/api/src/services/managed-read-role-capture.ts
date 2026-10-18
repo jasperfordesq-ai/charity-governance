@@ -4,17 +4,7 @@ import {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
 import {ManagedStorageDatabaseInventory} from './managed-storage-database-inventory.js';
 import {ManagedStorageMetadataWindow,type ManagedDatabaseSnapshot} from './managed-storage-metadata-window.js';
 import {managedSnapshotInterval} from './managed-snapshot-interval.js';
-const sha=z.string().regex(/^[a-f0-9]{64}$/),name=z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/);
-const oid=z.string().regex(/^[1-9][0-9]{0,9}$/).refine(v=>Number(v)<=4294967295);
-const principal=z.object({name,oid}).strict();
-const operation=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),sourceSha:z.string().regex(/^[a-f0-9]{40}$/),maintenanceEpoch:z.number().int().positive().max(2147483647)}).strict();
-const configuration=operation.extend({kind:z.literal('MANAGED_READ_ROLE_CAPTURE_CONFIGURATION_V1'),
- projectRef:z.string().regex(/^[a-z0-9]{20}$/),bucket:z.string().regex(/^[a-z0-9][a-z0-9_-]{0,62}$/),subject:z.string().uuid(),sqlRole:principal,
- database:z.object({name,oid}).strict(),catalogueObserver:principal,snapshotObserver:principal,
- storageRelations:z.object({buckets:z.object({schema:z.literal('storage'),name:z.literal('buckets'),oid}).strict(),
-  objects:z.object({schema:z.literal('storage'),name:z.literal('objects'),oid}).strict()}).strict(),
- captureConfigurationDigest:sha,catalogueConfigurationDigest:sha,metadataWindowConfigurationDigest:sha,
- maxWindowMs:z.number().int().min(1000).max(30000)}).strict().refine(v=>v.storageRelations.buckets.oid!==v.storageRelations.objects.oid);
+import {managedReadRoleConfigurationSchema as configuration,managedReadRoleOperationSchema as operation} from './managed-read-role-configuration.js';
 const failure=()=>new Error('Managed read-role capture is unresolved; discard the candidate without retry or admission');
 /** Explicit configured authority only. No provider grant, caller-selected SQL,
  * application activation, preserved original ACK or whole-backend claim. */
@@ -35,6 +25,7 @@ export class ManagedReadRoleCapture {
   this.#catalogue.assertCaptureWindowScope({database:c.database.name,databaseOid:c.database.oid,observer:c.catalogueObserver,capture:c.sqlRole,relations});
   this.#metadata.assertCaptureWindowScope({database:c.database.name,databaseOid:c.database.oid,observer:c.snapshotObserver,relations,maxWindowMs:c.maxWindowMs});
  }
+ configurationDescriptor(){return configuration.parse(this.#config);}
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.#config)).digest('hex');}
  assertMaintenanceScope(raw:unknown){const value=operation.parse(raw);for(const key of ['installationId','sourceSha','maintenanceEpoch'] as const)if(value[key]!==this.#config[key])throw failure();this.assertComponents();}
  assertStorageScope(raw:unknown){

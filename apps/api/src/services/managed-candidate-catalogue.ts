@@ -90,7 +90,7 @@ export async function discoverManagedCandidateCatalogue(context:Context,raw:unkn
    let reportPin:z.infer<typeof candidatePinSchema>|null=null,reportObservationDigest:string|null=null,objectCount:number|null=null;
    if(group.report){const saved=await current(group.report,'OBSERVATION');const inspected=await session.inspectReport(saved.pin,original.pin,signal);
     reportPin=saved.pin;reportObservationDigest=inspected.value.observationDigest;objectCount=inspected.value.capture.objects.length;
-    if(inspected.value.kind==='MANAGED_QUARANTINED_COMMON_CANDIDATE')commonRoot={...inspected.value.rootReference,archiveConfigurationDigest:inspected.value.binding.archiveConfigurationDigest};}
+    if(inspected.value.kind!=='MANAGED_QUARANTINED_STORAGE_CANDIDATE')commonRoot={...inspected.value.rootReference,archiveConfigurationDigest:inspected.value.binding.archiveConfigurationDigest};}
    records.push({binding:b,requestPin:original.pin,reportPin,reportObservationDigest,objectCount,...(commonRoot?{commonRoot}:{}),
     reportStatus:reportPin?'SAVED_REPORT_OBSERVED' as const:'NOT_LISTED_AT_BOUNDARY' as const,
     originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const,archivedSetAdmitted:false as const});

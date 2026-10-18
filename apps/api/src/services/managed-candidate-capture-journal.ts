@@ -43,6 +43,10 @@ export class ManagedCandidateCaptureJournal {
    const before=await head(),saved=await this.bootstrap.observe(before,signal);
    const catalogue=await this.discoverCandidates({attemptId:before.value.attemptId,planDigest:before.value.planDigest,
     sourceSha:saved.plan.sourceSha,maintenanceEpoch:before.value.maintenanceEpoch,controlRevision:before.revision},signal);
+   for(const row of catalogue.records){
+    if(saved.plan.format===10){if(row.binding.format!==4||row.binding.captureAuthorizationDigest!==saved.plan.captureAuthorization)throw failure();}
+    else if(row.binding.format===4)throw failure();
+   }
    const after=await head();if(after.revision!==before.revision)throw failure();
    return{kind:'MANAGED_CURRENT_CANDIDATE_BOOTSTRAP_V1' as const,head:managedClosedHead(before,this.storage.installationId),bootstrapPin:saved.pin,plan:saved.plan,catalogue,
     minimumEpoch,descriptorPlanDigestMatched:true as const,liveHeadStableAtBoundaries:true as const,
@@ -66,7 +70,7 @@ export class ManagedCandidateCaptureJournal {
    const records=[];let unresolvedCommonCandidates=0;
    for(const row of before.catalogue.records){
     signal.throwIfAborted();
-    if(row.binding.format!==3){records.push({candidateId:row.binding.candidateId,kind:'LEGACY_CAPTURE_NOT_COMMON' as const});continue;}
+    if(row.binding.format===2){records.push({candidateId:row.binding.candidateId,kind:'LEGACY_CAPTURE_NOT_COMMON' as const});continue;}
     let job:Awaited<ReturnType<ManagedCandidateCaptureJournal['discoverSourceJob']>>|null=null;
     let root:Awaited<ReturnType<ManagedCandidateCaptureJournal['verifyDiscoveredCommonRoot']>>|null=null;
     try{job=await this.discoverSourceJob(row.binding,signal);}catch{signal.throwIfAborted();}
@@ -103,9 +107,9 @@ export class ManagedCandidateCaptureJournal {
  }
  async verifyDiscoveredCommonRoot(raw:unknown,archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,signal?:AbortSignal){
   const binding=candidateBindingSchema.parse(raw);
-  if(binding.format!==3||binding.archiveConfigurationDigest!==archive.configurationDigest())throw failure();
+  if(binding.format===2||binding.archiveConfigurationDigest!==archive.configurationDigest())throw failure();
   const session=this.forCandidate(binding),request=await session.discoverRequest(signal),saved=await session.discoverReport(request.pin,signal);
-  if(saved.value.kind!=='MANAGED_QUARANTINED_COMMON_CANDIDATE')throw failure();
+  if(saved.value.kind==='MANAGED_QUARANTINED_STORAGE_CANDIDATE')throw failure();
   const result=await archive.verifySet(saved.value.rootReference.pin,undefined,signal),interval=result.snapshotInterval;
   if(result.completedIntervalBindingVerified!==true||!interval||interval.metadataWindow.observationDigest!==saved.value.metadataWindow.observationDigest
    ||JSON.stringify(interval.databaseSnapshot)!==JSON.stringify(saved.value.databaseSnapshot)||result.objectCount!==saved.value.capture.objects.length
@@ -151,7 +155,7 @@ class CandidateSession {
  }
  closeExecution(){this.acknowledgedRequest=undefined;this.jobs?.closeExecution();}
  private jobCustody(){
-  if(this.binding.format!==3)throw failure();
+  if(this.binding.format===2)throw failure();
   return this.jobs??=new ManagedProofJobCustody(this.storage,this.binding,this.credentials,this.client,pin=>!!this.acknowledgedRequest&&JSON.stringify(pin)===JSON.stringify(this.acknowledgedRequest));
  }
  reserveSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserve(local,pin,signal);}

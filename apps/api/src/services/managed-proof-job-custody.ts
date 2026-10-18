@@ -2,7 +2,7 @@ import {ListObjectsV2Command,type S3Client,type S3ClientConfig} from '@aws-sdk/c
 import {z} from 'zod';
 import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
-import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
+import {anyCommonCandidateBindingSchema as commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 import {jobScope,jobRequestArtifact,jobObservationArtifact,parseJobRequest,parseJobObservation,assertJobPair,jobServiceScope,jobServiceArtifact,parseJobService,assertJobServicePair} from './managed-proof-job-contract.js';
 import {ManagedDaemonIntentCustody} from './managed-daemon-intent-custody.js';
 const failure=()=>new Error('Managed proof job custody unresolved; saved records do not authorise execution');

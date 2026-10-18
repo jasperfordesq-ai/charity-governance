@@ -1,3 +1,5 @@
+import {managedReadRoleConfigurationSchema} from '../services/managed-read-role-configuration.js';
+import {readRoleCommonCandidateReportSchema} from '../services/managed-common-candidate-contract.js';
 import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
 import {candidateBindingSchema,candidateReportArtifact} from '../services/managed-candidate-capture-contract.js';
 import {ManagedCandidateCaptureJournal} from '../services/managed-candidate-capture-journal.js';
@@ -1106,4 +1108,102 @@ test('protocol10 original closure and bootstrap preserve the capture authorizati
  const cold=new ManagedCandidateCaptureJournal(config,credentials,f.client),seen=await cold.discoverCurrentCandidates(f.store,1);
  assert.equal(seen.plan.format,10);assert.equal('captureAuthorization' in seen.plan&&seen.plan.captureAuthorization,profile.configurationDigest());
  assert.equal(seen.catalogue.records.length,0);assert.equal(seen.savedObservationAuthorizesExecution,false);assert.equal(seen.originalAcknowledgementReconstructed,false);
+});
+
+async function readRoleCommonParentFixture(){
+ // Structure/custody fixture only; real JWT, SQL and source/archive execution
+ // are covered by the native PostgreSQL cohort.
+ const seed=await commonJournalFixture(),f=fixture(),events:string[]=[];let sourceCalls=0,published=false,interval:unknown,context:unknown;
+ const role={name:'capture_reader',oid:'20000'},relations=[{schema:'storage' as const,name:'buckets' as const,oid:'20001'},{schema:'storage' as const,name:'objects' as const,oid:'20002'}];
+ const w=structuredClone(seed.report.metadataWindow);w.relations=relations;w.configurationDigest=hash('read-role-metadata');
+ const {observationDigest:oldWindowHash,scope,metadataWindowCompleted,windowStillHeld,objectBytesFenced,allWritersInventoried,wholeBackendQuiesced,actionAuthorized,...windowFacts}=w;w.observationDigest=hash(JSON.stringify(windowFacts));
+ const snapshot={...seed.report.databaseSnapshot,configurationDigest:w.configurationDigest};
+ const jwt={format:1,kind:'SUPABASE_CAPTURE_JWT_VERIFICATION_V1',algorithm:'ES256',keyId:'synthetic-unit',verificationKeySha256:hash('unit-key'),sqlRole:role,subject:'11111111-1111-4111-8111-111111111111',issuedAt:1700000000,expiresAt:1700000600,
+  signatureVerified:true,configuredClaimsMatched:true,sqlRoleOidDeclared:true,sqlRoleOidVerified:false,providerKeyCurrentVerified:false,providerSqlRoleVerified:false,privilegeIntervalHeld:false};
+ const capture={...seed.report.capture,kind:'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1',credentialCapability:'ASYMMETRIC_CUSTOM_ROLE_JWT',configurationDigest:hash('read-role-capture'),jwtVerification:jwt};
+ const authorization=managedReadRoleConfigurationSchema.parse({kind:'MANAGED_READ_ROLE_CAPTURE_CONFIGURATION_V1',...operation,projectRef:f.storage.candidateCaptureScope().projectRef,bucket:f.storage.candidateCaptureScope().bucket,subject:jwt.subject,sqlRole:role,
+  database:{name:w.database,oid:w.databaseOid},catalogueObserver:{name:'maintenance',oid:'10'},snapshotObserver:w.observer,storageRelations:{buckets:relations[0],objects:relations[1]},
+  captureConfigurationDigest:capture.configurationDigest,catalogueConfigurationDigest:hash('role-catalogue'),metadataWindowConfigurationDigest:w.configurationDigest,maxWindowMs:5000});
+ const catalogueNames=['pg_attribute','pg_proc','pg_class','pg_authid','pg_auth_members','pg_database','pg_namespace','pg_policy'];
+ const facts={format:1,kind:'MANAGED_CAPTURE_SQL_PRIVILEGE_WINDOW_V1',windowId:randomUUID(),configurationDigest:authorization.catalogueConfigurationDigest,database:w.database,databaseOid:w.databaseOid,capture:role,backendPid:222,
+  catalogues:catalogueNames.map((name,i)=>({name,oid:String(1200+i),shared:['pg_authid','pg_auth_members','pg_database'].includes(name),held:true})),startedAt:w.startedAt,finishedAt:w.finishedAt,maxWindowMs:5000};
+ const sqlPrivilegeWindow={...facts,observationDigest:hash(JSON.stringify(facts)),scope:'LISTED_SQL_CATALOGUES_DURING_CALLBACK_ONLY',configuredCaptureSqlReadOnlyObserved:true,preexistingAssignedTransactionsExcludedAtEntry:true,listedCatalogueChangesExcludedDuringCallback:true,windowStillHeld:false,
+  providerTokenRoleVerified:false,providerManagementActorsExcluded:false,unfilteredBucketVisibilityVerified:false,captureCredentialReadOnlyVerified:false,allWritersInventoried:false,wholeBackendQuiesced:false,actionAuthorized:false};
+ const profile={configurationDescriptor:()=>structuredClone(authorization),configurationDigest:()=>hash(JSON.stringify(authorization)),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},
+  runWithSnapshot:async(fn:(snapshot:unknown,signal:AbortSignal)=>Promise<{visit:unknown;value:unknown}>)=>{events.push('windows');const prepared=await fn({snapshotId:'00000001-00000002-1',database:w.database,databaseOid:w.databaseOid,observerOid:w.observer.oid,backendPid:w.backendPid},new AbortController().signal);
+   return{configurationDigest:hash(JSON.stringify(authorization)),captured:capture,snapshotInterval:{metadataWindow:w,databaseSnapshot:snapshot},sqlPrivilegeWindow,sourceValue:prepared.value};}};
+ const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
+ f.value.planDigest=coordinator.planDigest();await coordinator.close();const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);await coordinator.publishCaptureBootstrap(journal);
+ const getReport=()=>JSON.parse([...f.artifacts.values()].find(v=>{try{return JSON.parse(v.body).kind==='MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE';}catch{return false;}})!.body) as z.infer<typeof readRoleCommonCandidateReportSchema>;
+ const archive={configurationDigest:()=>seed.archiveDigest,prepareImported:async(_raw:unknown,completed:unknown)=>{events.push('prepare');interval=completed;const pin=structuredClone(seed.report.rootReference.pin);pin.scope.index.objectStoreIdentitySha256=capture.configurationDigest;pin.scope.index.objectCapturedAt=capture.observedAt;return{pin,artifact:{body:'unit-preparation',sha256:pin.sha256}};},
+  stagePrepared:async()=>{events.push('stage');return{versionId:'role-original-preparation'};},publishPrepared:async()=>{events.push('root-write');assert.equal(getReport().rootReference.state,'PREPARED_ROOT_REFERENCE_ONLY');published=true;},
+  verifySet:async()=>{if(!published)throw new Error('No original root');events.push('root-read');const report=getReport();return{kind:'ARCHIVED_SET_VERIFIED' as const,restoreMode:'QUARANTINE_ONLY' as const,captureConsistency:'EXTERNAL_VERIFICATION_REQUIRED' as const,
+   sha256:report.rootReference.pin.sha256,rootVersionId:'role-original-root',documentCount:1,objectCount:1,snapshotInterval:interval,objectInventorySha256:commonCaptureObjectInventory(report),completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};}};
+ const head=await f.store.observe(),request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,captureConfigurationDigest:capture.configurationDigest,metadataWindowConfigurationDigest:w.configurationDigest,
+  journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest(),captureAuthorizationDigest:profile.configurationDigest(),sqlPrivilegeConfigurationDigest:authorization.catalogueConfigurationDigest};
+ const source=async(_snapshot:unknown,_signal:AbortSignal,ctx:unknown)=>{sourceCalls++;context=ctx;events.push('source');return{visit:async()=>{},prepareArchiveInput:async()=>{events.push('input');return{};}};};
+ return{f,coordinator,journal,archive,request,source,profile,getReport,events,sourceCalls:()=>sourceCalls,context:()=>context,published:()=>published};
+}
+
+test('format4 common path binds original request/role evidence and root reference; cold readers preserve quarantine',async()=>{
+ const x=await readRoleCommonParentFixture(),result=await x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ assert.equal(result.candidate.kind,'MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE');assert.equal(result.candidate.binding.format,4);assert.equal(result.actionAuthorized,false);
+ assert.deepEqual(x.events,['windows','source','input','prepare','stage','root-write','root-read']);assert.equal(x.sourceCalls(),1);
+ const context=x.context() as {bindingDigest:string;jobCustody:{reserve:(raw:unknown)=>Promise<unknown>}};assert.equal(context.bindingDigest,hash(JSON.stringify(result.candidate.binding)));
+ const before=x.f.artifacts.size;await assert.rejects(context.jobCustody.reserve({}));assert.equal(x.f.artifacts.size,before);
+ const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),seen=await cold.discoverCurrentCandidates(x.f.store,1);
+ assert.equal(seen.plan.format,10);assert.equal(seen.catalogue.records[0]?.binding.format,4);assert.ok(seen.catalogue.records[0]?.commonRoot);
+ assert.equal((await cold.verifyDiscoveredCommonRoot(result.candidate.binding,x.archive as never)).actionAuthorized,false);
+ await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,cold,x.archive as never,x.source));assert.equal(x.sourceCalls(),1);
+});
+
+test('format4 request ACK loss never enters source and fresh inspection cannot reconstitute its execution grant',async()=>{
+ const x=await readRoleCommonParentFixture();x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.includes('/capture-candidate/')&&command.input.Key.endsWith('/baseline.json'))throw new Error('original request ACK lost');});
+ await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.published(),false);
+ x.f.setFault(()=>{});const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),seen=await cold.discoverCurrentCandidates(x.f.store,1);
+ assert.equal(seen.catalogue.records.length,1);assert.equal(seen.catalogue.records[0]?.binding.format,4);assert.equal(seen.catalogue.records[0]?.reportPin,null);
+ await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,cold,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);
+});
+
+test('format4 report/root ACK losses preserve prepared or committed original roots without automatic repair',async()=>{
+ for(const mode of ['report','root']){
+  const x=await readRoleCommonParentFixture();
+  if(mode==='report')x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.includes('/capture-candidate/')&&command.input.Key.endsWith('/observation.json'))throw new Error('report ACK lost');});
+  else{const original=x.archive.publishPrepared;x.archive.publishPrepared=async()=>{await original();throw new Error('root ACK lost');};}
+  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),1);assert.equal(x.published(),mode==='root');
+  x.f.setFault(()=>{});const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),seen=await cold.discoverCurrentCandidates(x.f.store,1),row=seen.catalogue.records[0]!;assert.ok(row.commonRoot);
+  if(mode==='report')await assert.rejects(cold.verifyDiscoveredCommonRoot(row.binding,x.archive as never));else assert.equal((await cold.verifyDiscoveredCommonRoot(row.binding,x.archive as never)).actionAuthorized,false);
+  const before=x.f.artifacts.size;await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,cold,x.archive as never,x.source));assert.equal(x.f.artifacts.size,before);assert.equal(x.sourceCalls(),1);
+ }
+});
+
+test('format4 report refuses version, role, authority and catalogue-evidence substitutions even with a recomputed outer hash',async()=>{
+ const x=await readRoleCommonParentFixture();await x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ const mutations:Array<(r:z.infer<typeof readRoleCommonCandidateReportSchema>)=>void>=[r=>{Object.assign(r.binding,{format:3});},r=>{Object.assign(r,{providerTokenRoleVerified:true});},r=>{Object.assign(r.capture,{credentialCapability:'PRIVILEGED_MODERN_SERVER_KEY'});},
+  r=>{r.capture.jwtVerification.sqlRole.oid='1';},r=>{r.authorization.projectRef='z'.repeat(20);},r=>{Object.assign(r.sqlPrivilegeWindow,{preexistingAssignedTransactionsExcludedAtEntry:false});},
+  r=>{Object.assign(r.sqlPrivilegeWindow.catalogues[0]!,{held:false});},r=>{r.sqlPrivilegeWindow.capture.name='other';},r=>{r.metadataWindow.relations.pop();}];
+ for(const mutate of mutations){
+  const report=structuredClone(x.getReport());mutate(report);const{observationDigest,...core}=report;assert.throws(()=>anyReportArtifact({...core,observationDigest:hash(JSON.stringify(core))}));
+ }
+});
+
+test('format4 mismatched request scopes refuse before source or new custody writes',async()=>{
+ const x=await readRoleCommonParentFixture(),before=x.f.artifacts.size;
+ for(const key of ['captureAuthorizationDigest','sqlPrivilegeConfigurationDigest','captureConfigurationDigest','metadataWindowConfigurationDigest','journalConfigurationDigest','archiveConfigurationDigest','controlRevision'] as const){
+  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined({...x.request,[key]:'0'.repeat(64)},x.journal,x.archive as never,x.source));
+  assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,before);
+ }
+ const legacy=fixture();await assert.rejects(legacy.coordinator.captureReadRoleCommonQuarantined({},undefined as never,undefined as never,x.source));assert.equal(legacy.puts,0);
+});
+
+test('format10 current discovery refuses format4 authorization substitution or a legacy capture baseline',async()=>{
+ for(const mode of ['authorization','legacy']){
+  const x=await readRoleCommonParentFixture();await x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+  const original=x.getReport().binding;
+  const altered=mode==='authorization'?{...original,candidateId:randomUUID(),captureAuthorizationDigest:'0'.repeat(64)}:
+   commonCandidateBindingSchema.parse(Object.fromEntries(Object.entries({...original,format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',candidateId:randomUUID()}).filter(([k])=>!['captureAuthorizationDigest','sqlPrivilegeConfigurationDigest'].includes(k))));
+  await new ManagedCandidateCaptureJournal(config,credentials,x.f.client).forCandidate(altered).reserve();
+  const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),before=x.f.artifacts.size;
+  await assert.rejects(cold.discoverCurrentCandidates(x.f.store,1));assert.equal(x.f.artifacts.size,before);assert.equal(x.sourceCalls(),1);
+ }
 });

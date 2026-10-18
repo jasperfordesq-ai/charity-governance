@@ -36,9 +36,7 @@ format-9 READY head cannot authorise the changed plan digest. Plan bootstrap
 serialization and read-only inspection recognise both exact versions.
 
 Format 10 refuses both legacy capture entry points before network or source work.
-The versioned candidate/journal/archive path for the new capture report still
-needs integration; it must not coerce the report into the legacy privileged-key
-format. No operator should switch a live plan until that complete path and
+The [versioned format-4 candidate/journal/archive path](managed-read-role-common-candidate.md) now preserves the new capture report without coercing it into the legacy privileged-key format. No operator should switch a live plan until that complete path and
 actual provider compatibility are verified.
 
 The inherited maintenance policy still retains its privileged canary/control

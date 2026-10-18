@@ -1,10 +1,10 @@
-import {commonCandidateRequestSchema,commonCandidateBindingSchema,commonCandidateReportSchema} from './managed-common-candidate-contract.js';
+import {commonCandidateRequestSchema,commonCandidateBindingSchema,commonCandidateReportSchema,anyCommonCandidateBindingSchema,readRoleCommonCandidateRequestSchema,readRoleCommonCandidateBindingSchema,readRoleCommonCandidateReportSchema} from './managed-common-candidate-contract.js';
 import type {ArchivedRecoverySets} from './archived-recovery-set.js';
 import type {ManagedDatabaseSnapshot} from './managed-storage-metadata-window.js';
 import {managedSnapshotInterval,type ManagedSnapshotInterval} from './managed-snapshot-interval.js';
 import {requireProtocol9ClosedHead} from './managed-maintenance-control.js';
 import type {ManagedCandidateCaptureJournal} from './managed-candidate-capture-journal.js';
-import {candidateRequestSchema as candidateRequest,candidateBindingSchema,legacySupabaseCaptureSchema,type ManagedLegacySupabaseCapture} from './managed-candidate-capture-contract.js';
+import {candidateRequestSchema as candidateRequest,candidateBindingSchema,candidatePinSchema,legacySupabaseCaptureSchema,type ManagedLegacySupabaseCapture} from './managed-candidate-capture-contract.js';
 import type {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
 import type {ManagedStorageMetadataWindow} from './managed-storage-metadata-window.js';
 import type {ManagedS3MaintenanceEvidence} from './managed-s3-maintenance-evidence.js';
@@ -22,6 +22,7 @@ import type {ManagedSignedUploadEvidence} from './managed-signed-upload-evidence
 import {signedUploadBaselineSchema,signedUploadObservationSchema} from './signed-upload-evidence-contract.js';
 import {credentialWriteObservationSchema} from './credential-write-evidence.js';
 import type {ManagedReadRoleCapture} from './managed-read-role-capture.js';
+import {readRoleSupabaseCaptureSchema,type ManagedReadRoleCapturedFiles} from './managed-read-role-capture-contract.js';
 
 const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
  sourceSha:z.string().regex(/^[a-f0-9]{40}$/),maintenanceEpoch:z.number().int().positive().max(2147483647)}).strict();
@@ -199,23 +200,7 @@ export class ManagedBackendMaintenance {
    const binding=commonCandidateBindingSchema.parse({format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',...this.config,...request,planDigest:this.planDigest()});
    session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);acknowledged=true;await check();
    const guarded=await window.runWithSnapshot(async(snapshot,signal)=>{
-    const context=Object.freeze({kind:'COMMON_CANDIDATE' as const,sourceSha:binding.sourceSha,bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),
-     requestPinDigest:createHash('sha256').update(JSON.stringify(requestPin)).digest('hex'),jobCustody:Object.freeze({
-      reserve:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceJob(artifact,requestPin,signal);await check();return saved;},
-      bindService:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.bindSourceJobService(artifact,requestPin,signal);await check();return saved;},
-      reserveDaemonHeader:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceDaemonHeader(artifact,requestPin,signal);await check();return saved;},
-      reserveDaemonIntent:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceDaemonIntent(artifact,requestPin,signal);await check();return saved;},
-      bindDaemonOwner:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.bindSourceDaemonOwner(artifact,requestPin,signal);await check();return saved;},
-      createDaemonOwnerOutcomeWriter:async()=>{await check();signal.throwIfAborted();const writer=session!.createSourceDaemonOwnerOutcomeWriter(requestPin);try{await check();return writer;}catch(error){writer.revoke();throw error;}},
-      createDaemonOwnerOutcomeTransfer:async()=>{await check();signal.throwIfAborted();const transfer=await session!.createSourceDaemonOwnerOutcomeTransfer(requestPin,signal);
-       const checked=async<T>(run:()=>T|Promise<T>)=>{try{await check();signal.throwIfAborted();const value=await run();await check();signal.throwIfAborted();return value;}catch(error){transfer.abandon();throw error;}};
-       try{await check();return Object.freeze({take:()=>checked(()=>transfer.take()),claim:(nonce:string,digest:string)=>checked(()=>transfer.claim(nonce,digest)),observeReceipt:(artifact:unknown,receipt:unknown)=>checked(()=>transfer.observeReceipt(artifact,receipt,signal)),confirmReady:()=>checked(()=>transfer.confirmReady()),abandon:()=>transfer.abandon()});}
-       catch(error){transfer.abandon();throw error;}
-      },
-      observeDaemonResponse:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.observeSourceDaemonResponse(artifact,requestPin,signal);await check();return saved;},
-      finishDaemonRequests:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.finishSourceDaemonRequests(artifact,requestPin,signal);await check();return saved;},
-      observe:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.observeSourceJob(artifact,requestPin,signal);await check();return saved;}
-     })});
+    const context=this.commonSourceContext(binding,session!,requestPin,signal,check);
     const prepared=await source(snapshot,signal,context);signal.throwIfAborted();
     if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
     const visit=prepared.visit,prepareArchiveInput=prepared.prepareArchiveInput;
@@ -240,6 +225,73 @@ export class ManagedBackendMaintenance {
     restoreMode:'QUARANTINE_ONLY' as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
   }catch{throw new Error('Managed common candidate capture is unresolved; inspect original root reference without retry or admission');}
   finally{if(acknowledged)session?.closeExecution();}
+ }
+ /** Explicit format4 path. The original request ACK always precedes source
+  * execution; uncertain request/report/root outcomes have no replay path. */
+ async captureReadRoleCommonQuarantined(raw:unknown,journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
+  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:ReturnType<ManagedBackendMaintenance['commonSourceContext']>)=>Promise<{
+   visit:Parameters<SupabaseRecoveryCapture['capture']>[0];prepareArchiveInput:(captured:ManagedReadRoleCapturedFiles,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
+  }>,caller?:AbortSignal){
+  let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,acknowledged=false;
+  try{
+   if(!this.readRole||typeof source!=='function')throw new Error();caller?.throwIfAborted();
+   this.readRole.assertMaintenanceScope(this.config);this.readRole.assertStorageScope(this.storage.candidateCaptureScope());
+   const request=readRoleCommonCandidateRequestSchema.parse(raw),authorization=this.readRole.configurationDescriptor();
+   if(request.captureAuthorizationDigest!==this.readRole.configurationDigest()||request.captureConfigurationDigest!==authorization.captureConfigurationDigest
+    ||request.sqlPrivilegeConfigurationDigest!==authorization.catalogueConfigurationDigest||request.metadataWindowConfigurationDigest!==authorization.metadataWindowConfigurationDigest
+    ||request.journalConfigurationDigest!==journal.configurationDigest()||request.archiveConfigurationDigest!==archive.configurationDigest())throw new Error();
+   const check=async()=>{caller?.throwIfAborted();const head=requireProtocol9ClosedHead(await this.control.observe(caller));
+    if(head.revision!==request.controlRevision||head.value.attemptId!==request.attemptId||head.value.planDigest!==this.planDigest()
+     ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();return head;};
+   await check();await this.inspect();const bootstrap=await journal.observePlanBootstrap(await check(),caller);await check();
+   if(bootstrap.plan.format!==10||bootstrap.plan.captureAuthorization!==request.captureAuthorizationDigest)throw new Error();
+   const binding=readRoleCommonCandidateBindingSchema.parse({format:4,kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CAPTURE_V4',...this.config,...request,planDigest:this.planDigest()});
+   session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);acknowledged=true;await check();
+   const guarded=await this.readRole.runWithSnapshot(async(snapshot,signal)=>{
+    const context=this.commonSourceContext(binding,session!,requestPin,signal,check),prepared=await source(snapshot,signal,context);
+    signal.throwIfAborted();await check();if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
+    return{visit:prepared.visit,value:prepared.prepareArchiveInput};
+   },caller);
+   await check();await this.inspect();await check();
+   if(guarded.configurationDigest!==request.captureAuthorizationDigest)throw new Error();
+   const captured=readRoleSupabaseCaptureSchema.parse(guarded.captured),interval=managedSnapshotInterval(guarded.snapshotInterval);
+   const input=await guarded.sourceValue(captured,interval,caller);await check();
+   const prepared=await archive.prepareImported(input,interval,caller);await check();
+   const staged=await archive.stagePrepared(prepared.pin,prepared.artifact,caller);await check();
+   const parsed=readRoleCommonCandidateReportSchema.parse({kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE',binding,
+    bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),requestPin,capture:captured,
+    metadataWindow:interval.metadataWindow,databaseSnapshot:interval.databaseSnapshot,authorization,sqlPrivilegeWindow:guarded.sqlPrivilegeWindow,
+    configuredJwtSqlRoleMatched:true,providerTokenRoleVerified:false,providerProjectDatabaseVerified:false,unfilteredBucketVisibilityVerified:false,retainedPrivilegedCredentialsExcluded:false,
+    rootReference:{pin:prepared.pin,preparedVersionId:staged.versionId,expectedRootFormat:2,state:'PREPARED_ROOT_REFERENCE_ONLY',finalPublicationAcknowledgementReconstructed:false},
+    restoreMode:'QUARANTINE_ONLY',controlRevisionVerifiedAtBoundaries:true,wholeBackendQuiesced:false,objectBytesFenced:false,
+    currentTenantAuthorityVerified:false,archivedSetAdmitted:false,actionAuthorized:false,observationDigest:'0'.repeat(64)});
+   const{observationDigest,...core}=parsed,report={...core,observationDigest:createHash('sha256').update(JSON.stringify(core)).digest('hex')};
+   const stored=await session.publishReport(report,requestPin,caller);await check();
+   await archive.publishPrepared(prepared.pin,staged.versionId,caller);await check();
+   const verified=await journal.verifyDiscoveredCommonRoot(binding,archive,caller);await check();
+   return{candidate:stored.report,requestPin,reportPin:stored.pin,root:verified.root,savedObservationAuthorizesExecution:false as const,
+    restoreMode:'QUARANTINE_ONLY' as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
+  }catch{throw new Error('Managed read-role common candidate is unresolved; inspect original evidence without retry or admission');}
+  finally{if(acknowledged)session?.closeExecution();}
+ }
+ private commonSourceContext(binding:z.infer<typeof anyCommonCandidateBindingSchema>,session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>,requestPin:z.infer<typeof candidatePinSchema>,signal:AbortSignal,check:()=>Promise<unknown>){
+  return Object.freeze({kind:'COMMON_CANDIDATE' as const,sourceSha:binding.sourceSha,bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),
+     requestPinDigest:createHash('sha256').update(JSON.stringify(requestPin)).digest('hex'),jobCustody:Object.freeze({
+      reserve:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.reserveSourceJob(artifact,requestPin,signal);await check();return saved;},
+      bindService:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.bindSourceJobService(artifact,requestPin,signal);await check();return saved;},
+      reserveDaemonHeader:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.reserveSourceDaemonHeader(artifact,requestPin,signal);await check();return saved;},
+      reserveDaemonIntent:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.reserveSourceDaemonIntent(artifact,requestPin,signal);await check();return saved;},
+      bindDaemonOwner:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.bindSourceDaemonOwner(artifact,requestPin,signal);await check();return saved;},
+      createDaemonOwnerOutcomeWriter:async()=>{await check();signal.throwIfAborted();const writer=session.createSourceDaemonOwnerOutcomeWriter(requestPin);try{await check();return writer;}catch(error){writer.revoke();throw error;}},
+      createDaemonOwnerOutcomeTransfer:async()=>{await check();signal.throwIfAborted();const transfer=await session.createSourceDaemonOwnerOutcomeTransfer(requestPin,signal);
+       const checked=async<T>(run:()=>T|Promise<T>)=>{try{await check();signal.throwIfAborted();const value=await run();await check();signal.throwIfAborted();return value;}catch(error){transfer.abandon();throw error;}};
+       try{await check();return Object.freeze({take:()=>checked(()=>transfer.take()),claim:(nonce:string,digest:string)=>checked(()=>transfer.claim(nonce,digest)),observeReceipt:(artifact:unknown,receipt:unknown)=>checked(()=>transfer.observeReceipt(artifact,receipt,signal)),confirmReady:()=>checked(()=>transfer.confirmReady()),abandon:()=>transfer.abandon()});}
+       catch(error){transfer.abandon();throw error;}
+      },
+      observeDaemonResponse:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.observeSourceDaemonResponse(artifact,requestPin,signal);await check();return saved;},
+      finishDaemonRequests:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.finishSourceDaemonRequests(artifact,requestPin,signal);await check();return saved;},
+      observe:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session.observeSourceJob(artifact,requestPin,signal);await check();return saved;}
+     })});
  }
  async inspect(){
   try{

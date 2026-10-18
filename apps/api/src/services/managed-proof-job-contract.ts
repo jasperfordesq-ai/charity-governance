@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
-import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
+import {anyCommonCandidateBindingSchema as commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 const sha=z.string().regex(/^[a-f0-9]{64}$/),no=z.literal(false);
 const release=z.string().regex(/^[a-f0-9]{40}$/);
 export const localJobPinSchema=z.object({sha256:sha,byteLength:z.number().int().min(1).max(8192)}).strict();

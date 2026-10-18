@@ -171,7 +171,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.equal(sourceFingerprint.documentMetadata.rowCount,1);
    assert.equal(sourceFingerprint.documentMetadata.rowsSha256,canonicalDocumentMetadataRowsSha256(metadata));
    assert.equal(dump.subarray(0,5).toString(),'PGDMP');
-   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,capture.configurationDigest(),context?scope:undefined,jobCustody);
+   const releaseProof=await prove(snapshot,sourceFingerprint.databaseIdentitySha256,signal,managed?.readRole?.configurationDescriptor().captureConfigurationDigest??capture.configurationDigest(),context?scope:undefined,jobCustody);
    return{visit:async(file,bytes,digest)=>{
     assert.equal(file.fileUrl,'record.txt');assert.equal(digest,hash(body));assert.deepEqual(bytes,body);
     const [row]=await admin.$queryRaw`SELECT body FROM managed_snapshot_fixture.objects WHERE id='record.txt'`;
@@ -185,10 +185,11 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    if(managed.controlSessionId)cloud.b.bindControl(managed.controlSessionId);
    const head=await control.observe();await coordinator.publishCaptureBootstrap(journal);
    const request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,
-    captureConfigurationDigest:capture.configurationDigest(),metadataWindowConfigurationDigest:service.configurationDigest(),
+    captureConfigurationDigest:managed.readRole?.configurationDescriptor().captureConfigurationDigest??capture.configurationDigest(),metadataWindowConfigurationDigest:managed.readRole?.configurationDescriptor().metadataWindowConfigurationDigest??service.configurationDigest(),
+    ...(managed.readRole?{captureAuthorizationDigest:managed.readRole.configurationDigest(),sqlPrivilegeConfigurationDigest:managed.readRole.configurationDescriptor().catalogueConfigurationDigest}:{}),
     journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest()};
    cloud.b.loseDaemonResponseRead=mode==='daemon-response-ack';cloud.b.loseDaemonEndRead=mode==='daemon-end-ack';cloud.b.loseDaemonHeaderRead=mode==='daemon-header-ack';cloud.b.loseDaemonIntentRead=mode==='daemon-intent-ack';cloud.b.loseJobServiceRead=mode==='service-ack';cloud.b.loseJobRequestRead=mode==='job-ack';cloud.b.loseRoot=mode==='root-ack';cloud.b.loseCommonReportRead=mode==='report-ack';cloud.b.loseCommonRequestRead=mode==='request-ack';
-   const execute=()=>coordinator.captureCommonQuarantined(request,capture,service,journal,archive,prepareSource);
+   const execute=()=>managed.readRole?coordinator.captureReadRoleCommonQuarantined(request,journal,archive,prepareSource):coordinator.captureCommonQuarantined(request,capture,service,journal,archive,prepareSource);
    if(mode==='success')assert.equal((await execute()).root.completedIntervalBindingVerified,true);
    else await assert.rejects(execute);
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.equal((await control.observe()).revision,head.revision);
@@ -262,10 +263,10 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    }else assert.equal(cloud.b.generates,0);
    assert.equal(cloud.b.writes,writes);assert.equal(cloud.b.generates,generates);
    const retained=[...cloud.b.objects].map(([k,v])=>[k,v.version,v.checksum]);
-   await assert.rejects(coordinator.captureCommonQuarantined(request,capture,service,from.journal,from.archive,prepareSource));
+   await assert.rejects(managed.readRole?coordinator.captureReadRoleCommonQuarantined(request,from.journal,from.archive,prepareSource):coordinator.captureCommonQuarantined(request,capture,service,from.journal,from.archive,prepareSource));
    assert.equal(sourceCalls,mode==='request-ack'?0:1);assert.deepEqual([...cloud.b.objects].map(([k,v])=>[k,v.version,v.checksum]),retained);assert.equal(cloud.b.generates,generates);
    if(mode==='request-ack')console.log('PASS native managed common request-ack: original request stored but ACK unknown; source/window/capture not entered, no data keys or root, fresh catalogue preserves requested-only state and refuses replay');
-   else if(!['job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode))console.log('PASS native managed common '+mode+': original closed control/request, real TLS window/full v2 dump proof, actual SDK crypto/custody, durable common report, current bootstrap learns root without local IDs/pin, fresh verification or unresolved missing root after original holder disconnect/local proof files removed, no replay/repair');
+   else if(!['job-ack','service-ack','daemon-header-ack','daemon-intent-ack'].includes(mode))console.log('PASS native managed common '+(managed.readRole?'read-role-format4-':'')+mode+': original closed control/request, real TLS window/full v2 dump proof, actual SDK crypto/custody, durable common report, current bootstrap learns root without local IDs/pin, fresh verification or unresolved missing root after original holder disconnect/local proof files removed, no replay/repair');
    if(mode==='job-ack')console.log('PASS native common job ACK lost: descriptor stored, worker/full proof/crypto/root never entered; fresh original candidate discovery learns job ID and baseline pin without caller memory; no replay or repair');
    if(mode==='service-ack')console.log('PASS native contained service ACK lost: exact identity stored but original ACK unknown; full dump/proof/crypto/root never entered; fresh clients discover service without replay');
    if(['daemon-header-ack','daemon-intent-ack'].includes(mode))console.log('PASS native '+mode+': original custody bytes stored but ACK unknown; controlled helper mutations not dispatched, no subsequent mutation intent, common proof/crypto/root absent; source/job remains unresolved');
