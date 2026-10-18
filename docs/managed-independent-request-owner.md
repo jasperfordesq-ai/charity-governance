@@ -15,10 +15,10 @@ reads do not recreate it.
 
 The synthetic service probe now sends outcomes through this channel after source
 context closure, including both SDK readback-ACK loss and original wire-ACK loss
-after storage. The test parent still holds the writer and credentials. The fixed
-product worker remains source-disabled: its actual service adapter, exact source
-binding, source-parent-loss outcome transfer and provider/host-loss proof are
-separate unfinished integration gates. Exact execution results are private.
+after storage. The test parent still holds the writer and credentials. The actual
+fixed worker and its source binding are now exercised as described below. Product
+helper routing, custody-parent-loss outcome transfer and provider/host-loss proof
+remain separate unfinished gates. Exact execution results are private.
 
 ## Fixed worker service acceptance
 
