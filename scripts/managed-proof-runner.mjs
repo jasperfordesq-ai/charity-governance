@@ -1,3 +1,4 @@
+import {launchOriginalOutcomeCustody} from './managed-outcome-custody-launcher.mjs';
 import {recordManagedProofJob} from './managed-proof-job.mjs';
 import {spawn,spawnSync} from 'node:child_process';
 import {randomUUID,createHash} from 'node:crypto';
@@ -126,12 +127,12 @@ export async function superviseManagedProofGuardian(options,{guardianPath=fileUR
  }});
 }
 /** Dedicated original helper runner, not an arbitrary command execution API. */
-export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000,executionMode='KERNEL_CONTAINED'}){
+export async function runManagedImportedProof({args,snapshot,databaseUrl,workspace,scope={kind:'STANDALONE_INTERNAL_PROOF'},jobCustody,diagnostics,signal,timeoutMs=90000,executionMode='KERNEL_CONTAINED'},{launchOutcomeCustody=launchOriginalOutcomeCustody}={}){
  if(!['KERNEL_CONTAINED','INTERNAL_IPC_PROOF'].includes(executionMode)||(executionMode==='KERNEL_CONTAINED'&&(process.platform!=='linux'||process.getuid()===0)))throw unresolved();
  if(scope?.kind==='COMMON_CANDIDATE'&&(!jobCustody||typeof jobCustody.reserve!=='function'||typeof jobCustody.observe!=='function'))throw unresolved();
  if(executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE'&&typeof jobCustody?.bindService!=='function')throw unresolved();
  const daemonCustodyRequired=executionMode==='KERNEL_CONTAINED'&&scope?.kind==='COMMON_CANDIDATE';
- if(daemonCustodyRequired&&['reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeWriter','observeDaemonResponse','finishDaemonRequests'].some(name=>typeof jobCustody[name]!=='function'))throw unresolved();
+ if(daemonCustodyRequired&&['reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeTransfer','observeDaemonResponse','finishDaemonRequests'].some(name=>typeof jobCustody[name]!=='function'))throw unresolved();
  const jobId=randomUUID();let success=false,cleanup;
  prepareLocalDockerCommand(['docker','version'],process.env);
  const env=managedProofWorkerEnvironment(process.env,databaseUrl);
@@ -149,19 +150,20 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  const originalIntents=new Map(),owners=new Map();
  const input=Buffer.from(JSON.stringify({args,snapshot,jobId,...(daemonCustodyRequired?{daemonCustodyRequired:true}:{})}));
  try{
-  if(daemonCustodyRequired){daemonGate=await createManagedDaemonCustodyChannel({jobId,sourceSha:helper.commitSha,inputDigest:hash(input),requireIndependentOwner:true,requireIndependentOutcome:true,requireOwnerInput:true,
+  if(daemonCustodyRequired){daemonGate=await createManagedDaemonCustodyChannel({jobId,sourceSha:helper.commitSha,inputDigest:hash(input),requireIndependentOwner:true,requireIndependentOutcome:true,requireOwnerInput:true,requireRetainedOutcome:true,
    onHeader:artifact=>jobCustody.reserveDaemonHeader(artifact),onIntent:async artifact=>{const saved=await jobCustody.reserveDaemonIntent(artifact);originalIntents.set(JSON.parse(artifact.body).sequence,{...artifact});return saved;},
    onOwner:async(artifact,privateInput)=>{
     const prepared=validateManagedDaemonOwnerInput(privateInput),value=JSON.parse(artifact.body),original=originalIntents.get(value.sequence);
-    if(!sourceManagerIdentity||prepared.jobId!==jobId||prepared.sourceSha!==helper.commitSha||prepared.inputDigest!==hash(input)
+    if(prepared.outcomeMode!=='RETAINED_SDK_V1'||!sourceManagerIdentity||prepared.jobId!==jobId||prepared.sourceSha!==helper.commitSha||prepared.inputDigest!==hash(input)
      ||prepared.descriptorPath!==daemonGate.descriptorPath||!original||JSON.stringify(prepared.intent)!==JSON.stringify(original))throw unresolved();
     const options={source:sourceManagerIdentity,sourceSha:helper.commitSha,ownerInputDigest:hash(JSON.stringify(prepared)),expectedCommandLine:[process.execPath,ownerWorker,'--stdin']};
-    verifyIndependentDaemonOwner(value,options);const record={identity:structuredClone(value.identity)};owners.set(value.sequence,record);
+    verifyIndependentDaemonOwner(value,options);const record={identity:structuredClone(value.identity),value,options};owners.set(value.sequence,record);
     const saved=await jobCustody.bindDaemonOwner(artifact);verifyIndependentDaemonOwner(value,options);
-    record.writer=await jobCustody.createDaemonOwnerOutcomeWriter();return saved;
+    record.transfer=await jobCustody.createDaemonOwnerOutcomeTransfer();record.retained=await launchOutcomeCustody({jobId,sourceSha:helper.commitSha,source:sourceManagerIdentity,transfer:record.transfer,signal});
+    return{...saved,retainedOutcome:{format:1,kind:'MANAGED_RETAINED_OUTCOME_HANDOFF_V1',endpoint:record.retained.binding(),receiver:record.retained.receiver}};
    },
-   onOwnerOutcome:async artifact=>{const value=JSON.parse(artifact.body),record=owners.get(value.sequence);if(!record?.writer)throw unresolved();
-    const saved=await record.writer.publish(artifact);record.outcome=value;return saved;},
+   onOwnerOutcome:async(artifact,receipt)=>{const value=JSON.parse(artifact.body),record=owners.get(value.sequence);if(!record?.transfer||!record.retained)throw unresolved();
+    verifyIndependentDaemonOwner(record.value,record.options);const saved=await record.transfer.observeReceipt(artifact,receipt);verifyIndependentDaemonOwner(record.value,record.options);record.outcome=value;return saved;},
    onResponse:artifact=>jobCustody.observeDaemonResponse(artifact),onEnd:artifact=>jobCustody.finishDaemonRequests(artifact)});env.CHARITYPILOT_INTERNAL_DAEMON_GATE=daemonGate.descriptorPath;}
   if(executionMode==='KERNEL_CONTAINED'){
    await superviseContainedManagedProof({jobId,sourceSha:helper.commitSha,input,env,signal,timeoutMs,diagnostics,daemonGateBinding:daemonGate?.binding(),authorizeInvocation:async identity=>{
@@ -172,7 +174,7 @@ export async function runManagedImportedProof({args,snapshot,databaseUrl,workspa
  catch(error){if(executionMode==='KERNEL_CONTAINED')cohortTerminated=error?.cohortTerminated===true;throw unresolved();}
  finally{
   let ownersSettled=true;try{if(daemonCustodyRequired)ownersSettled=await settleOriginalOwners(owners);}catch{ownersSettled=false;}
-  for(const record of owners.values())if(!record.outcome)record.writer?.revoke();
+  for(const record of owners.values()){try{await record.retained?.close();}catch{ownersSettled=false;}if(!record.outcome)record.transfer?.abandon();}
   input.fill(0);
   let gateClosed=true;const gateState=daemonGateState=daemonGate?.snapshot();try{await daemonGate?.close();}catch{gateClosed=false;}
   if(!cohortTerminated){

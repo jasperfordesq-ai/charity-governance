@@ -41,7 +41,7 @@ test('separate synchronous source client waits for original custody before dispa
    assert.equal(existsSync(join(root,'synthetic-dispatched.txt')),mode==='success'||mode.startsWith('response-')||mode.startsWith('end-'));
    assert.equal(responses,['success','response-refused','response-ACK-lost','end-refused','end-ACK-lost'].includes(mode)?1:0);
    assert.equal(ends,['success','end-refused','end-ACK-lost'].includes(mode)?1:0);
-   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,ownerOutcomeCount:0,requireIndependentOwner:false,requireIndependentOutcome:false,requireOwnerInput:false,endAcknowledged:true,failed:false,inFlight:0});
+   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,ownerOutcomeCount:0,requireIndependentOwner:false,requireIndependentOutcome:false,requireOwnerInput:false,requireRetainedOutcome:false,endAcknowledged:true,failed:false,inFlight:0});
   }finally{await gate?.close();assert.equal(dirname(root),resolve(tmpdir()));assert.match(basename(root),/^charitypilot-daemon-barrier-test-[A-Za-z0-9]{6}$/);rmSync(root,{recursive:true,force:true});}
  }
 });

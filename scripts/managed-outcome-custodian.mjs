@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {dirname,basename,join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {claimOriginalOutcomeAuthority} from './managed-outcome-claim-channel.mjs';
+import {validateOutcomeReceiverMetadata} from './managed-outcome-claim-channel.mjs';
 import {containmentUnit,inspectContainmentUnit,currentContainmentBootId} from './managed-proof-systemd-containment.mjs';
 import {verifyContainedExecutorSource} from './managed-proof-systemd-runner.mjs';
 const no=()=>new Error('Original outcome custody unresolved; preserve evidence without retry');
@@ -45,6 +46,14 @@ export function actualOutcomeCustodianIdentity(input,inputDigest){
 }
 const pin=v=>exact(v,'kind,versionId,sha256,byteLength')&&v.kind==='OBSERVATION'&&hex(v.sha256)&&Number.isSafeInteger(v.byteLength)&&v.byteLength>0&&v.byteLength<=16384
  &&typeof v.versionId==='string'&&v.versionId!=='null'&&/^[\x21-\x7e]{1,1024}$/.test(v.versionId);
+export function validateOutcomeCustodyReceipt(v){
+ if(!exact(v,'pin,originalAcknowledgementReconstructed,pendingRequestResolved,actionAuthorized')||!pin(v.pin)
+  ||v.originalAcknowledgementReconstructed!==false||v.pendingRequestResolved!==false||v.actionAuthorized!==false)throw no();return structuredClone(v);
+}
+export function validateOutcomeCustodyHandoff(v,{jobId,sourceSha}){
+ if(!exact(v,'format,kind,endpoint,receiver')||v.format!==1||v.kind!=='MANAGED_RETAINED_OUTCOME_HANDOFF_V1')throw no();endpointShape(v.endpoint);
+ validateOutcomeReceiverMetadata(v.receiver,jobId,sourceSha,v.receiver?.receiverId,v.receiver?.inputDigest);return structuredClone(v);
+}
 function reply(request,stored){return{format:1,kind:stored?'MANAGED_OUTCOME_STORED_ACK_V1':'MANAGED_OUTCOME_READY_ACK_V1',jobId:request.jobId,
  receiverId:request.receiverId,sourceSha:request.sourceSha,inputDigest:request.inputDigest,exchangeNonce:request.exchangeNonce,
  ...(stored?{artifactPin:{sha256:request.artifact.sha256,byteLength:request.artifact.byteLength},pin:stored.pin}:{}),

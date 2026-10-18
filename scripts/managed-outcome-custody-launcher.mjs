@@ -57,7 +57,7 @@ async function launchCustody({jobId,sourceSha,source,transfer,signal},synthetic)
  };
  const closeOnce=()=>closing??=close();
  try{
-  endpoint=prepareOutcomeCustodyEndpoint();const ticket=transfer.take(),ticketDigest=hash(JSON.stringify(ticket));
+  endpoint=prepareOutcomeCustodyEndpoint();const ticket=await transfer.take(),ticketDigest=hash(JSON.stringify(ticket));
   channel=await createOriginalOutcomeClaimChannel({jobId,sourceSha,receiverId,ticketDigest,transfer,verifyReceiver:verify});
   prepared=prepareOutcomeCustodyLaunch({format:1,kind:'MANAGED_OUTCOME_CUSTODIAN_INPUT_V1',jobId,receiverId,sourceSha,
    claim:channel.binding(),endpoint:endpoint.binding(),ticket},environment);

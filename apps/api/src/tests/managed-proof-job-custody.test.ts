@@ -160,6 +160,45 @@ async function transferFixture(){
  return{...f,writer,live,local,bound};
 }
 
+test('original live transfer observes its delivered SDK receipt once without a duplicate write',async()=>{
+ const f=await transferFixture();let grant;
+ try{
+  const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();
+  grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);
+  const outcome=f.ownerOutcome(f.local,f.bound),stored=await grant.publish(outcome),writes=f.b.writes;
+  const receipt={pin:stored.pin,originalAcknowledgementReconstructed:false,pendingRequestResolved:false,actionAuthorized:false};
+  const observed=await transfer.observeReceipt(outcome,receipt);assert.deepEqual(observed.pin,stored.pin);assert.equal(observed.pendingRequestResolved,false);assert.equal(observed.savedEvidenceAuthorizesDispatch,false);
+  assert.equal(f.b.writes,writes);await assert.rejects(transfer.observeReceipt(outcome,receipt));assert.equal(f.b.writes,writes);
+ }finally{grant?.revoke();f.close();}
+});
+
+test('transferred receipt refuses missing original claim, changed pin/body, source closure and reconstructed flags without writes',async()=>{
+ for(const mode of ['unclaimed','version','body','closed','reconstructed','during-read']){
+  const f=await transferFixture();let grant;
+  try{
+   const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();
+   if(mode!=='unclaimed')grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);
+   const outcome=f.ownerOutcome(f.local,f.bound),stored=grant?await grant.publish(outcome):{pin:{kind:'OBSERVATION',versionId:'synthetic-missing',sha256:'0'.repeat(64),byteLength:1}};
+   const receipt={pin:{...stored.pin},originalAcknowledgementReconstructed:false,pendingRequestResolved:false,actionAuthorized:false};
+   if(mode==='version')receipt.pin.versionId='other-version';if(mode==='closed')f.live.value=false;
+   if(mode==='reconstructed')receipt.originalAcknowledgementReconstructed=true;
+   if(mode==='during-read'){const original=f.client.send.bind(f.client);mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{if(command instanceof GetObjectCommand)f.live.value=false;return original(command as never);});}
+   const writes=f.b.writes;
+   await assert.rejects(transfer.observeReceipt(mode==='body'?f.ownerOutcome(f.local,f.bound,{status:1}):outcome,receipt));
+   await assert.rejects(transfer.observeReceipt(outcome,receipt));assert.equal(f.b.writes,writes);
+  }finally{grant?.revoke();f.close();}
+ }
+});
+
+test('original transfer receipt cannot renew its monotonic deadline',async(t)=>{
+ const real=process.hrtime.bigint.bind(process.hrtime);let now=real();t.mock.method(process.hrtime,'bigint',()=>now);
+ const f=await transferFixture();let grant;try{
+  const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);
+  const outcome=f.ownerOutcome(f.local,f.bound),stored=await grant.publish(outcome),writes=f.b.writes;now+=120000000001n;
+  await assert.rejects(transfer.observeReceipt(outcome,{pin:stored.pin,originalAcknowledgementReconstructed:false,pendingRequestResolved:false,actionAuthorized:false}));assert.equal(f.b.writes,writes);
+ }finally{grant?.revoke();f.close();}
+});
+
 test('original live outcome authority transfers once and publishes after source closure without recreating a cold grant',async()=>{
  const f=await transferFixture();try{
   const transfer=await f.writer.createOwnerOutcomeTransfer();assert.equal(Object.isFrozen(transfer),true);assert.equal(JSON.stringify(transfer),'{}');

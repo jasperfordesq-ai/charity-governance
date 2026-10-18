@@ -207,12 +207,29 @@ export class ManagedDaemonIntentCustody{
     headerPin:this.savedHeader,intentPin:this.latestIntent,ownerPin:ack.pin,localIntent:ack.localIntent,
     credentials:{accessKeyId:credential.accessKeyId,secretAccessKey:credential.secretAccessKey,...(credential.sessionToken?{sessionToken:credential.sessionToken}:{})}});
    if(this.failed||!this.live()||!transferActive(value)||Buffer.byteLength(JSON.stringify(value))>65536)throw failure();this.busy=false;
-   const digest=candidateHash(JSON.stringify(value));let taken=false,claimed=false;
+   const digest=candidateHash(JSON.stringify(value));let taken=false,claimed=false,receiptAttempted=false;
    return Object.freeze({abandon:()=>{taken=true;claimed=true;this.failed=true;},take:()=>{
     if(taken||this.failed||!this.live()||!transferActive(value)){this.failed=true;throw failure();}taken=true;return structuredClone(value);
    },claim:(nonce:string,bodyDigest:string)=>{
     if(claimed)return false;claimed=true;
     if(!taken||this.failed||!this.live()||!transferActive(value)||nonce!==value.nonce||bodyDigest!==digest){this.failed=true;return false;}return true;
+   },observeReceipt:async(raw:unknown,receipt:unknown,caller?:AbortSignal)=>{
+    try{
+     if(receiptAttempted||!claimed||!taken||this.failed||this.busy||!this.live()||!transferActive(value)
+      ||this.sequence!==sequence||this.endAttempted||this.responseAttempts.has(sequence))throw failure();
+     receiptAttempted=true;this.busy=true;
+     const observed=z.object({pin:candidatePinSchema,originalAcknowledgementReconstructed:z.literal(false),pendingRequestResolved:z.literal(false),actionAuthorized:z.literal(false)}).strict().parse(receipt);
+     if(observed.pin.kind!=='OBSERVATION')throw failure();
+     const record=localJobArtifact(raw),local=ownerOutcome.parse(JSON.parse(record.body));if(local.sequence!==sequence)throw failure();
+     const remaining=Math.max(1,Number((BigInt(value.expiresMonotonicNs)-process.hrtime.bigint())/1000000n));
+     const expiry=AbortSignal.timeout(remaining),bounded=caller?AbortSignal.any([caller,expiry]):expiry;
+     const saved=await this.inspectOwnerOutcome(sequence,JSON.parse(value.localIntent.body).previousDigest,bounded);
+     if(JSON.stringify(saved.pin)!==JSON.stringify(observed.pin)||JSON.stringify(saved.localRecord)!==JSON.stringify(record)
+      ||this.failed||!this.live()||!transferActive(value))throw failure();
+     bounded.throwIfAborted();this.busy=false;
+     return{pin:saved.pin,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,
+      independentOwnerDispatchVerified:false as const,pendingRequestResolved:false as const,actionAuthorized:false as const};
+    }catch{receiptAttempted=true;this.failed=true;throw failure();}
    }});
   }catch{this.failed=true;throw failure();}
  }

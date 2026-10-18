@@ -1,3 +1,21 @@
+## 18 October: retained outcome source integration under verification
+
+Kernel-contained common-candidate work now requires the explicit retained-SDK
+OWNER mode. The parent issues the original transfer, awaits its private ticket,
+and returns the endpoint only after receiver SDK readiness and kernel checks.
+The owner probes before dispatch, publishes directly to the receiver once, then
+forwards the exact SDK receipt. The still-live source verifies original grant,
+receipt pin and stored bytes without a second PUT before response accounting.
+Legacy boolean ACKs cannot satisfy the new mode. Unknown receipts remain
+unresolved. Original transfer expiry and live common-window checks still apply.
+
+API and wire component tests passed; exact canonical native integration and
+release evidence are being verified and are recorded privately. This source
+change is not a deployment claim. Native source fixtures use a separately
+managed synthetic SDK keeper through a fixed internal dependency; production
+has no provider/test selector. Actual provider/current authority and independent
+physical-host-loss acceptance remain open.
+
 ## 18 October: private original claim transport
 
 The original transfer now has a bounded private Unix claim-channel component.

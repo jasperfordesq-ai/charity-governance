@@ -10,7 +10,7 @@ try{
  try{input=JSON.parse(body.toString('utf8'));}finally{body.fill(0);for(const b of chunks)b.fill(0);}
  if(!input||Object.keys(input).sort().join(',')!==(input.daemonCustodyRequired===true?'args,daemonCustodyRequired,jobId,snapshot':'args,jobId,snapshot')||typeof input.jobId!=='string')throw new Error();
  const acknowledge=input.daemonCustodyRequired===true?(record=>acknowledgeManagedDaemonCustodySync({...record,descriptorPath:process.env.CHARITYPILOT_INTERNAL_DAEMON_GATE})):undefined;
- const dispatch=input.daemonCustodyRequired===true?(record=>dispatchManagedDaemonOwnerSync({format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',jobId:input.jobId,ownerId:randomUUID(),
+ const dispatch=input.daemonCustodyRequired===true?(record=>dispatchManagedDaemonOwnerSync({format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',outcomeMode:'RETAINED_SDK_V1',jobId:input.jobId,ownerId:randomUUID(),
   sourceSha:captureHelperImplementationBinding().commitSha,inputDigest:createHash('sha256').update(JSON.stringify(input)).digest('hex'),descriptorPath:process.env.CHARITYPILOT_INTERNAL_DAEMON_GATE,
   intent:record.intent,args:record.args,environment:managedDaemonOwnerEnvironment(record.args,record.options.env??process.env),
   // Match the default live proof budget; original custody expires after120s.

@@ -34,7 +34,7 @@ try{
   const owner=custody.artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId:input.jobId,sequence:1,
    intentPin:{sha256:custody.intent.sha256,byteLength:custody.intent.byteLength},identity:{...input.owner,inputDigest:custody.inputDigest}});
   await custody.session.bindDaemonOwner(owner,custody.original);
-  const transfer=await custody.outcomeTransfer(),retained=await launchSyntheticOutcomeCustodyFixture({jobId:input.jobId,sourceSha:input.sourceSha,source,transfer},input.synthetic);
+  const transfer=await custody.outcomeTransfer(),retained=await launchSyntheticOutcomeCustodyFixture({jobId:input.jobId,sourceSha:input.sourceSha,source,transfer:{...transfer,take:async()=>transfer.take()}},input.synthetic);
   const outcome=custody.outcome(owner,{status:0,transportError:false,signal:false,stdoutSha256:hash('synthetic retained outcome'),stdoutBytes:26,stderrSha256:hash(''),stderrBytes:0});
   process.stdout.write(JSON.stringify({source,receiver:retained.receiver,endpoint:retained.binding(),outcome,binding:custody.binding,original:custody.original})+'\n');
   setInterval(()=>{},1000);

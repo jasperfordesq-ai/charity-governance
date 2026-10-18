@@ -49,6 +49,12 @@ test('unknown OWNER never executes; unknown OUTCOME withholds output and never r
  for(const kind of ['OWNER','OUTCOME']){let executed=0;await assert.rejects(runManagedDaemonOwner(fixture(),{identity:()=>({inputDigest:'a'.repeat(64)}),
   acknowledge:async v=>{if(v.kind===kind)throw new Error('synthetic unknown ACK');return true;},execute:()=>{executed++;return{status:0,stdout:'',stderr:''};}}));assert.equal(executed,kind==='OWNER'?0:1);}
 });
+
+test('retained mode refuses a legacy boolean OWNER ACK before execution or publication',async()=>{
+ let executed=0,published=0;await assert.rejects(runManagedDaemonOwner({...fixture(),outcomeMode:'RETAINED_SDK_V1'},
+  {identity:()=>({inputDigest:'a'.repeat(64)}),acknowledge:async()=>true,execute(){executed++;},publishRetained(){published++;}}));
+ assert.equal(executed,0);assert.equal(published,0);
+});
 test('unbound worker refuses the actual default identity and CLI before any execution',async()=>{
  await assert.rejects(runManagedDaemonOwner(fixture()));
  const r=spawnSync(process.execPath,[fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url)),'--stdin'],{
