@@ -82,3 +82,5 @@ control, PUT or DELETE. Original acknowledgement reconstruction remains false;
 fresh credential-read refusal and retired-control data-plane refusal remain
 false. Missing retirement evidence or recreated keys fail closed. No route,
 provider credential or tenant installation opts into the policy automatically.
+
+A separate [read comparison component](retired-control-read-comparison.md) now exists. Its original intent/baseline custody and public-data-only historical validators must be integrated before retirement or capture can claim its result.

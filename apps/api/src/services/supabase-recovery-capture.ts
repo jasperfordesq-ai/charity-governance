@@ -119,6 +119,7 @@ export class SupabaseRecoveryCapture {
     }catch{throw failure();}
   }
   readRoleRemainingMs(){if(!this.#jwt)throw failure();return this.#jwt.remainingMs();}
+  readRoleVerificationEvidence(){if(!this.#jwt)throw failure();return this.#jwt.evidence();}
   private timeout(maximum:number){return this.#jwt?Math.min(maximum,this.#jwt.remainingMs()):maximum;}
   private segment(raw: string) {
     if (

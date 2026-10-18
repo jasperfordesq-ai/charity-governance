@@ -1,3 +1,11 @@
+## 18 October: bounded retired-key read comparison component
+
+A new internal synthetic-canary probe requires successful reads by both original
+credentials, then brackets the retired-key 401/403 with matching custom-role JWT
+reads. It refuses generic failures, changed positives, expiry and cancellation.
+No original baseline ACK or global revocation is inferred. The probe is not yet
+wired into retirement/capture; read [custody ordering and cold-reader requirements](retired-control-read-comparison.md).
+Exact synthetic test and source evidence is private; actual provider gates remain.
 ## 18 October: explicit retirement coordinator and current inspection
 
 Supplying matching read-role and retirement components now selects format 11.
