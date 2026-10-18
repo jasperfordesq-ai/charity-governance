@@ -290,7 +290,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    const activeBefore=activeProbeMutations();
    signedTus.aws.setFault(()=>undefined); // explicit synthetic transport resolution, not parent backfill.
    if(scenario==='retired-control-success'){
-    await coordinator.publishCaptureBootstrap(independentControl.journal);await coordinator.retireCaptureControl();
+    await coordinator.retireCaptureControl();
     assert.equal(controlKeyPresent,false);assert.equal(events.filter(e=>e==='original-control-delete').length,1);
     assert.equal(events.filter(e=>e==='original-control-canary-positive').length,1);
    }
