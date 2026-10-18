@@ -155,3 +155,87 @@ Contract checked18October2026 against Render's official
 The full source snapshot/hash is retained privately. API-shape tests, short-page
 counterexamples, live-image substitutions and native integration are synthetic
 transport proof; they do not establish actual hosted API behaviour or account state.
+## Declared configuration and stored-secret readback
+
+`scripts/inspect-managed-provider.mjs` joins the compiled plan to read-only Render
+control-plane observations. Build the API helper first, then pipe protected input:
+
+```sh
+npm run build -w @charitypilot/api
+node scripts/inspect-managed-provider.mjs --stdin < /protected/operator/provider-readback.json
+```
+
+The strict64KiB UTF-8 input contains `format: 1`, `configuration` (the compiler
+input), `expectedConfigurationSha256`, `token`, `projectId`, `blueprintId`,
+`secrets` and `secretFileSha256`. The plan digest must match before any HTTP.
+`secrets` has exactly the compiler's `sync: false` key/value sets for API and
+scheduler. `secretFileSha256` maps each of gateway/web/API/scheduler to the exact
+required file basenames and hashes of independently reviewed original bytes:
+three service TLS JSON bundles, plus `database-ca.pem` for API and scheduler.
+Empty per-service maps remain explicit. No material is generated, uploaded,
+rotated or granted by this command. Keep the input outside the source checkout
+under operator-only permissions; it contains application credentials.
+
+All requests, including the existing service/deployment/job observer, pass through
+one fixed-origin GET-only transport. It refuses redirects, errors, invalid UTF-8,
+truncation, duplicate/cyclic pages, excessive bodies and deadlines: maximum256
+requests,90seconds total,5seconds per request,1MiB per response and8MiB total.
+The CLI accepts no apply, endpoint, transport or timeout override. Its internal
+transport seam exists only for tests. Input is snapshotted before asynchronous use.
+
+The reader verifies:
+
+- Exact owner/project/environment and the four selected service identities; no
+  additional project environment, database, Redis or environment group in the
+  selected synthetic environment. Network isolation is explicit in the compiler
+  (`networking.isolation: enabled`) and must be observed as enabled.
+- Visible owner-level group metadata, including groups outside the selected
+  environment, so an inherited group cannot be ignored. The current isolated
+  compiler profile declares no inherited groups; any group linked to a selected
+  service refuses. Unrelated groups are allowed only after complete bounded
+  pagination. The published group schema does not require a cursor on nonempty
+  results: absent actual continuation evidence leaves the observation unverified;
+  no group ID or short page is substituted for that evidence.
+- A single selected Blueprint controller, exact resources, canonical repository/
+  master branch, in-sync status and automatic sync off. Other visible Blueprints
+  are fetched separately to check resource overlap. Visible sync history must
+  contain only terminal success/error entries. Render excludes unapproved created
+  syncs from that list; their absence is not proven.
+- Runtime type/region/plan/one instance, current source-bound image pins, exact
+  commands, no pre-deploy command, no autoscaling and previews off. Gateway/web/API
+  retain the image CMD; the singleton worker uses the scheduler command.
+- Exact directly declared environment key/value sets, including original supplied
+  secrets. Stale additional settings such as node preloads or conflicting TLS
+  directory selectors refuse. No inferred secret delivery from `sync: false`.
+- Exact stored file inventory and byte hashes. Existing TLS-bundle validation
+  checks the pinned issuer/leaves, current validity, private-key matches and usages
+  without writing material to disk. The database CA is compared with its trusted
+  original hash; this does not establish a live database connection.
+
+Two matching configuration samples are bracketed by service/work observations
+with the same stable state fingerprint. An older compiled API without that
+fingerprint refuses. Resource/property ordering and opaque cursors alone are not
+configuration changes. These are sampled readbacks, without an atomic provider
+snapshot, a lock or a permission lease. Changes outside the samples remain possible.
+
+The report contains public configuration/state digests, sample times, counts and
+observed checks. It includes no token, application secret, file content or derived
+secret-value fingerprint. Credential/file comparisons occur only in memory;
+transient buffers are cleared where possible, without a claim to erase JavaScript
+strings. Refusals expose a fixed message and an allowlisted stage code only.
+Timeouts also cancel bodies that arrive late or never complete.
+
+Runtime environment/mounted-file delivery, provider permission visibility,
+private DNS, image provenance, unapproved sync exclusion, control-plane writers,
+independent custody, own release attestation, whole-backend closure, release
+readiness and action/execution authority remain false. Account/access/spend/legal
+approval and actual provider/host-loss exercises remain separate prerequisites.
+No real provider account has been tested by the synthetic transport tests.
+
+Sources reviewed18October2026: [direct variables omit inherited groups](https://api-docs.render.com/reference/get-env-vars-for-service),
+[stored secret files](https://api-docs.render.com/reference/list-secret-files-for-service),
+[owner group inventory](https://api-docs.render.com/reference/list-env-groups),
+[Blueprint details](https://api-docs.render.com/reference/retrieve-blueprint) and the
+[public OpenAPI schema](https://api-docs.render.com/openapi/render-public-api-1.json).
+Its resource/list differences and incomplete cursor declaration are retained as
+proof limits rather than filled with inferred provider history.

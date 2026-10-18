@@ -64,7 +64,7 @@ export function compileManagedProviderPlan(raw){
    {role:'api',dockerfile:'apps/api/Dockerfile',args:{CHARITYPILOT_BUILD_COMMIT:r.sourceSha,CHARITYPILOT_MANAGED_API_PEER_BINDING_SHA256:binding.sha256}},
   ];
   const core={format:1,kind:'MANAGED_PROVIDER_CONFIGURATION_REVIEW_V1',purpose:raw.purpose,sourceSha:r.sourceSha,meshSha256:binding.sha256,
-   build,blueprint:{previews:{generation:'off'},projects:[{name:'CharityPilot synthetic managed review',environments:[{name:'synthetic-review',services}]}]},
+   build,blueprint:{previews:{generation:'off'},projects:[{name:'CharityPilot synthetic managed review',environments:[{name:'synthetic-review',networking:{isolation:'enabled'},services}]}]},
    maintenanceRegistry:{ownerId:r.ownerId,environmentId:r.environmentId,services:roles.map(component=>({component,id:r[component+'ServiceId'],imagePath:imageFor(component).url}))},
    recoveryKeys:Object.fromEntries(['storageKeyArn','dataKeyArn','indexMacKeyArn','rootMacKeyArn'].map(key=>[key,raw.recoveryKeys[key]])),
    secretFiles:['gateway','web','api'].map(role=>({serviceId:r[role+'ServiceId'],path:'/etc/secrets/charitypilot-'+role+'-tls.json'})),

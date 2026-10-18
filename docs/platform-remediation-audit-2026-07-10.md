@@ -1,3 +1,16 @@
+## 18 October: declared provider settings and stored-secret readback
+
+A bounded stdin-only GET inspector now reconciles the compiled synthetic plan
+with visible project/environment/group/Blueprint metadata, commands, direct
+variables, expected application secrets and stored TLS/CA file bytes. Two matching
+samples are bracketed by stable service/work fingerprints. Missing fingerprints,
+linked inherited groups, incomplete pagination, conflicting controllers or changed
+material refuse; credentials and their fingerprints are not emitted. Read
+[the observation contract](managed-provider-plan.md).
+The compiler now explicitly requests network isolation. Runtime mounts, permission
+visibility, private DNS, image provenance, unseen controllers/queued plans and
+independent recovery/host loss remain unverified; no grant or deployment follows.
+Exact source/tests and remaining work are recorded privately.
 ## 18 October: Render inventories require empty-page completion and live image pins
 
 Render maintenance now follows short pages to an empty continuation and checks

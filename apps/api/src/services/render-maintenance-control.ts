@@ -111,6 +111,9 @@ export class RenderMaintenanceControl {
    const state=await this.snapshot(this.budget()),observedAt=new Date().toISOString();
    return{format:1,kind:'MANAGED_RENDER_CONFIGURATION_DIAGNOSTIC_V1' as const,
     scope:'RENDER_CONFIGURED_SERVICE_AND_WORK_OBSERVATION' as const,configurationDigest:this.configurationDigest(),observedAt,
+    configurationStateSha256:createHash('sha256').update(JSON.stringify({
+     services:[...state.services].sort((a,b)=>a.id.localeCompare(b.id)),jobs:[...state.jobs].sort((a,b)=>a.id.localeCompare(b.id)),
+     liveDeployments:[...state.liveDeployments].sort((a,b)=>a.serviceId.localeCompare(b.serviceId))})).digest('hex'),
     observationDigest:createHash('sha256').update(JSON.stringify({configurationDigest:this.configurationDigest(),state,observedAt})).digest('hex'),
     configuredServices:4,liveImagePinsMatched:state.liveDeployments.length,activeJobs:state.jobs.length,
     suspendedServices:state.services.filter(s=>s.suspended==='suspended').length,
