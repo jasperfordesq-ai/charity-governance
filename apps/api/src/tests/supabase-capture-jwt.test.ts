@@ -39,7 +39,9 @@ test('asymmetric capture JWT verifies signature and exact configured claims with
  }
 });
 
-test('forged/wrong key, claims, future/expired or overlong tokens and symmetric/URL/private-key substitutions refuse before HTTP',()=>{
+test('forged/wrong key, claims, future/expired or overlong tokens and symmetric/URL/private-key substitutions refuse before HTTP',t=>{
+ // Keep the exact 601-second counterexample and its fixture in the same second.
+ const now=Date.now();t.mock.method(Date,'now',()=>now);
  for(const claims of [{iss:'https://other.supabase.co/auth/v1'},{aud:'other'},{aud:['authenticated','other']},{sub:'22222222-2222-4222-8222-222222222222'},
   {role:'other_reader'},{role:'service_role'},{iat:Math.floor(Date.now()/1000)+100},{nbf:Math.floor(Date.now()/1000)+100},{exp:Math.floor(Date.now()/1000)-1},
   {exp:Math.floor(Date.now()/1000)+601},{email:'synthetic-private@example.invalid'}]){

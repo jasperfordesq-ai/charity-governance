@@ -1,5 +1,6 @@
 import {ManagedProofJobCustody} from './managed-proof-job-custody.js';
 import {ManagedSavedRetirementCustody} from './managed-retirement-custody.js';
+import type {ManagedRecoveryEpochCatalogue} from './managed-recovery-epoch-catalogue.js';
 import {ManagedPlanBootstrap,managedClosedHead} from './managed-plan-bootstrap.js';
 import {requireProtocol9ClosedHead,type S3ManagedMaintenanceControl} from './managed-maintenance-control.js';
 import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.js';
@@ -114,6 +115,26 @@ export class ManagedCandidateCaptureJournal {
     sourceHostLossProven:false as const,daemonRequestsAccountedFor:false as const,writerFencingVerified:false as const,
     originalAcknowledgementReconstructed:false as const,archivedSetAdmitted:false as const,
     cleanupAuthorized:false as const,executionAuthorized:false as const,publicationAuthorized:false as const,actionAuthorized:false as const};
+  }catch{throw failure();}finally{clearTimeout(timer);controller.abort();}
+ }
+ /** Explicit independently configured epoch-catalogue composition. It binds
+  * the observed current source head, never grants restore/reopen authority. */
+ async inspectAnchoredCurrentRecovery(catalogue:ManagedRecoveryEpochCatalogue,control:S3ManagedMaintenanceControl,
+  archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,caller?:AbortSignal){
+  const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
+  const timer=setTimeout(()=>controller.abort(),300000);
+  try{
+   const before=await catalogue.observe(signal);signal.throwIfAborted();const entry=before.latest;if(!entry)throw failure();
+   if(entry.installationId!==this.storage.installationId||entry.controlConfigurationDigest!==control.configurationDigest()
+    ||entry.journalConfigurationDigest!==this.configurationDigest()||entry.archiveConfigurationDigest!==archive.configurationDigest())throw failure();
+   const recorded=requireProtocol9ClosedHead(entry.closedControl);
+   const check=async()=>{signal.throwIfAborted();const head=await control.observe(signal);signal.throwIfAborted();
+    if(head.revision!==recorded.revision||JSON.stringify(head.value)!==JSON.stringify(recorded.value))throw failure();};
+   await check();const recovery=await this.inspectCurrentRecovery(control,entry.plan.maintenanceEpoch,archive,signal);await check();
+   const after=await catalogue.observe(signal);signal.throwIfAborted();
+   if(before.head.revision!==after.head.revision||before.head.artifact.body!==after.head.artifact.body)throw failure();await check();
+   return{...recovery,epochCatalogue:after,epochCatalogueBoundAtReadBoundaries:true as const,
+    independentEpochProviderVerified:false as const,reopeningAuthorized:false as const};
   }catch{throw failure();}finally{clearTimeout(timer);controller.abort();}
  }
  async verifyDiscoveredCommonRoot(raw:unknown,archive:Pick<ArchivedRecoverySets,'configurationDigest'|'verifySet'>,signal?:AbortSignal){

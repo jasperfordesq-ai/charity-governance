@@ -104,3 +104,7 @@ policy. The full delegated goal remains active; further personal Nikita review i
 
 See [durable candidate journal](managed-candidate-capture-journal.md) and
 [remaining writer/capture boundaries](managed-writer-capture-audit-2026-10-17.md).
+
+## 18 October: closed-epoch lineage
+
+An explicit [epoch catalogue and anchored inspection path](managed-recovery-epoch-catalogue.md) now bind recorded closed epochs to an externally retained genesis/checkpoint. This supersedes the missing-library portion of the earlier multi-epoch notes; actual provider/custody and current-authority acceptance remain open. Existing inspection remains quarantine-only.

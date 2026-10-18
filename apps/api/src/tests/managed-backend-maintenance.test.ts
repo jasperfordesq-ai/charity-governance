@@ -1,4 +1,5 @@
 import {managedReadRoleConfigurationSchema} from '../services/managed-read-role-configuration.js';
+import {ManagedRecoveryEpochCatalogue,ManagedRecoveryEpochPublisher,managedRecoveryEpochSchemas as epochSchemas,type ManagedRecoveryEpochReader,type ManagedRecoveryEpochWriter} from '../services/managed-recovery-epoch-catalogue.js';
 import {ManagedCaptureControlRetirement} from '../services/managed-capture-control-retirement.js';
 import {managedPlanSchema} from '../services/managed-plan-bootstrap.js';
 import {retiredControlReadFixture} from './fixtures/retired-control-read.js';
@@ -1538,4 +1539,131 @@ test('format5 current head movement or a failed post-source canary comparison pr
   await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,source));
   assert.equal(x.sourceCalls(),mode==='head'?0:1);assert.equal(x.published(),false);assert.equal(x.events.includes('prepare'),false);
  }
+});
+
+function epochStoreFixture(){
+ const wrap=(v:unknown)=>{const body=JSON.stringify(v);return{body,sha256:hash(body)};};
+ const genesis=wrap(epochSchemas.head.parse({format:1,kind:'MANAGED_RECOVERY_EPOCH_HEAD_V1',installationId:config.installationId,sequence:0,entryPin:null,publicationId:randomUUID()}));
+ const selected={installationId:config.installationId,storeConfigurationDigest:hash('separate-epoch-store'),genesisHeadSha256:genesis.sha256,trustedCheckpoint:{sequence:0,sha256:genesis.sha256}};
+ type Record=z.infer<typeof epochSchemas.record>;type Pin=z.infer<typeof epochSchemas.pin>;type Artifact=z.infer<typeof epochSchemas.artifact>;
+ let current:Record={revision:'independent-version-0',artifact:genesis},sequence=0,entryAttempts=0,headAttempts=0,reads=0;
+ const entries=new Map<number,{pin:Pin;artifact:Artifact}>(),state={loseEntryAck:false,loseHeadAck:false,onHeadRead:undefined as (()=>void)|undefined};
+ const reader:ManagedRecoveryEpochReader={configurationDigest:()=>selected.storeConfigurationDigest,
+  readHead:async signal=>{signal.throwIfAborted();reads++;state.onHeadRead?.();return structuredClone(current);},
+  readEntry:async(n,_pin,signal)=>{signal.throwIfAborted();const row=entries.get(n);if(!row)throw new Error('Missing original epoch');return structuredClone(row);}};
+ const writer:ManagedRecoveryEpochWriter={configurationDigest:reader.configurationDigest,
+  createEntry:async(n,artifact,signal)=>{signal.throwIfAborted();entryAttempts++;if(entries.has(n))throw new Error('Original conditional conflict');
+   const pin=epochSchemas.pin.parse({kind:'BASELINE',versionId:'original-entry-'+n,sha256:artifact.sha256,byteLength:Buffer.byteLength(artifact.body)});entries.set(n,{pin,artifact:structuredClone(artifact)});
+   if(state.loseEntryAck)throw new Error('Stored entry ACK unknown');return pin;},
+  replaceHead:async(expected,artifact,signal)=>{signal.throwIfAborted();headAttempts++;if(expected!==current.revision)throw new Error('Original head conflict');
+   current={revision:'independent-version-'+(++sequence),artifact:structuredClone(artifact)};if(state.loseHeadAck)throw new Error('Stored head ACK unknown');return structuredClone(current);}};
+ const catalogue=()=>new ManagedRecoveryEpochCatalogue(selected,reader);
+ return{selected,state,reader,writer,entries,wrap,catalogue,publisher:()=>new ManagedRecoveryEpochPublisher(catalogue(),reader,writer),
+  get current(){return structuredClone(current);},set current(v:Record){current=structuredClone(v);},
+  get counts(){return{entryAttempts,headAttempts,reads};}};
+}
+async function closedEpochFixture(epoch=1){
+ const f=fixture({epoch});await f.coordinator.close();const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);
+ await f.coordinator.publishCaptureBootstrap(journal);return{f,journal,archiveDigest:hash('synthetic-epoch-archive')};
+}
+
+test('separate epoch catalogue follows original closed lineage and enforces an external checkpoint without granting authority',async()=>{
+ const store=epochStoreFixture(),a=await closedEpochFixture(),b=await closedEpochFixture(2);
+ const empty=await store.catalogue().observe();assert.equal(empty.entryCount,0);assert.equal(empty.latest,null);
+ const first=await store.publisher().publishClosedEpoch(a.f.store,a.journal,a.archiveDigest,store.current.revision);const firstHead=store.current;
+ assert.equal(first.originalEntryAcknowledgementObserved,true);assert.equal(first.originalHeadAcknowledgementObserved,true);
+ await store.publisher().publishClosedEpoch(b.f.store,b.journal,b.archiveDigest,store.current.revision);
+ const writesBeforeReplay=store.counts.entryAttempts;
+ await assert.rejects(store.publisher().publishClosedEpoch(b.f.store,b.journal,b.archiveDigest,store.current.revision));
+ assert.equal(store.counts.entryAttempts,writesBeforeReplay);
+ const before=store.counts,observed=await store.catalogue().observe();assert.equal(observed.entryCount,2);assert.equal(observed.latest!.plan.maintenanceEpoch,2);
+ for(const key of ['providerRollbackExclusionVerified','independentCustodyVerified','currentTenantAuthorityVerified','completeHistoryVerified','originalAcknowledgementReconstructed','executionAuthorized','reopeningAuthorized','actionAuthorized'] as const)assert.equal(observed[key],false);
+ assert.equal(store.counts.entryAttempts,before.entryAttempts);assert.equal(store.counts.headAttempts,before.headAttempts);
+ const pinned={...store.selected,trustedCheckpoint:{sequence:2,sha256:store.entries.get(2)!.artifact.sha256}};
+ assert.equal(new ManagedRecoveryEpochCatalogue(pinned,store.reader).configurationDigest(),store.catalogue().configurationDigest());
+ await new ManagedRecoveryEpochCatalogue(pinned,store.reader).observe();store.current=firstHead;
+ await assert.rejects(new ManagedRecoveryEpochCatalogue(pinned,store.reader).observe());
+});
+
+test('epoch publication lost entry or head ACK never permits replay or reconstructed acknowledgement',async()=>{
+ for(const loss of ['entry','head']){
+  const store=epochStoreFixture(),x=await closedEpochFixture(),original=store.current;
+  if(loss==='entry')store.state.loseEntryAck=true;else store.state.loseHeadAck=true;
+  await assert.rejects(store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,original.revision));
+  const observed=await store.catalogue().observe();assert.equal(observed.entryCount,loss==='head'?1:0);assert.equal(observed.originalAcknowledgementReconstructed,false);
+  store.state.loseEntryAck=false;store.state.loseHeadAck=false;
+  await assert.rejects(store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,store.current.revision));
+  assert.equal(store.entries.size,1);assert.equal(store.counts.headAttempts,loss==='head'?1:0);
+ }
+});
+
+test('epoch reader refuses missing originals, substituted versions, altered plans and broken genesis even with fresh outer hashes',async()=>{
+ for(const change of ['missing','version','plan','prior','checkpoint']){
+  const store=epochStoreFixture(),x=await closedEpochFixture();await store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,store.current.revision);
+  const row=store.entries.get(1)!;
+  if(change==='missing')store.entries.delete(1);
+  else if(change==='version')row.pin.versionId='replacement-version';
+  else if(change==='checkpoint')store.selected.trustedCheckpoint={sequence:1,sha256:'0'.repeat(64)};
+  else {
+   const entry=JSON.parse(row.artifact.body);
+   if(change==='plan')entry.plan.sourceSha='2'.repeat(40);else entry.previousHead=store.wrap({...JSON.parse(entry.previousHead.body),publicationId:randomUUID()});
+   row.artifact=store.wrap(entry);row.pin.sha256=row.artifact.sha256;row.pin.byteLength=Buffer.byteLength(row.artifact.body);
+   const current=store.current;current.artifact=store.wrap({...JSON.parse(current.artifact.body),entryPin:row.pin});store.current=current;
+  }
+  await assert.rejects(store.catalogue().observe());assert.equal(store.counts.headAttempts,1);
+ }
+});
+
+test('epoch publisher refuses wrong registry configuration, stale expected head, non-advancing epochs and drift before CAS',async()=>{
+ const store=epochStoreFixture(),x=await closedEpochFixture();
+ assert.throws(()=>new ManagedRecoveryEpochCatalogue({...store.selected,storeConfigurationDigest:'0'.repeat(64)},store.reader));
+ await assert.rejects(store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,'stale'));assert.equal(store.counts.entryAttempts,0);
+ const original=store.writer.createEntry;store.writer.createEntry=async(...args)=>{const pin=await original(...args);x.f.value={...x.f.value,publicationId:randomUUID()};return pin;};
+ await assert.rejects(store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,store.current.revision));assert.equal(store.counts.headAttempts,0);
+ assert.equal(store.entries.size,1);assert.equal((await store.catalogue().observe()).latest,null);
+});
+
+test('anchored format5 inspection binds original control and archive while remaining read-only and refusing drift',async()=>{
+ const x=await readRoleCommonParentFixture(true);await x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ const store=epochStoreFixture();await store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archive.configurationDigest(),store.current.revision);
+ const writes=x.f.artifacts.size,originalCounts=store.counts;
+ const observed=await x.journal.inspectAnchoredCurrentRecovery(store.catalogue(),x.f.store,x.archive as never);
+ assert.equal(observed.epochCatalogueBoundAtReadBoundaries,true);assert.equal(observed.independentEpochProviderVerified,false);assert.equal(observed.actionAuthorized,false);
+ assert.equal(x.f.artifacts.size,writes);assert.equal(store.counts.entryAttempts,originalCounts.entryAttempts);assert.equal(store.counts.headAttempts,originalCounts.headAttempts);
+ await assert.rejects(x.journal.inspectAnchoredCurrentRecovery(store.catalogue(),x.f.store,{...x.archive,configurationDigest:()=>hash('wrong-archive')} as never));
+ const verify=x.archive.verifySet;x.archive.verifySet=async()=>{const r=await verify();const h=store.current;h.revision+='-drift';store.current=h;return r;};
+ await assert.rejects(x.journal.inspectAnchoredCurrentRecovery(store.catalogue(),x.f.store,x.archive as never));
+ x.f.value={...x.f.value,publicationId:randomUUID()};await assert.rejects(x.journal.inspectAnchoredCurrentRecovery(store.catalogue(),x.f.store,x.archive as never));
+});
+
+test('epoch observation cancellation discards late head reads without entering history or writing',async()=>{
+ const store=epochStoreFixture(),abort=new AbortController();let release!:(v:unknown)=>void,entries=0;
+ const reader:ManagedRecoveryEpochReader={...store.reader,readHead:async()=>new Promise(resolve=>{release=resolve;}),readEntry:async(...args)=>{entries++;return store.reader.readEntry(...args);}};
+ const pending=new ManagedRecoveryEpochCatalogue(store.selected,reader).observe(abort.signal);abort.abort();await assert.rejects(pending);
+ release(store.current);await new Promise(resolve=>setImmediate(resolve));assert.equal(entries,0);assert.equal(store.counts.entryAttempts,0);assert.equal(store.counts.headAttempts,0);
+});
+
+test('concurrent original epoch publishers cannot create two entries or heads for one sequence',async()=>{
+ const store=epochStoreFixture(),x=await closedEpochFixture(),revision=store.current.revision;
+ const results=await Promise.allSettled([store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision),store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected').length,1);
+ assert.equal(store.entries.size,1);assert.equal(store.counts.headAttempts,1);assert.equal((await store.catalogue().observe()).entryCount,1);
+});
+
+test('epoch cancellation after entry persistence cannot start head CAS when a late ACK arrives',async()=>{
+ const store=epochStoreFixture(),x=await closedEpochFixture(),abort=new AbortController();
+ let release!:()=>void,started!:()=>void;const entryStarted=new Promise<void>(resolve=>{started=resolve;});
+ const original=store.writer.createEntry;
+ store.writer.createEntry=async(...args)=>{const pin=await original(...args);started();await new Promise<void>(resolve=>{release=resolve;});return pin;};
+ const pending=store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,store.current.revision,abort.signal);
+ await entryStarted;abort.abort();await assert.rejects(pending);release();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(store.entries.size,1);assert.equal(store.counts.headAttempts,0);assert.equal((await store.catalogue().observe()).latest,null);
+});
+
+test('epoch head drift and substituted reader configuration cannot yield a partial chain observation',async()=>{
+ const store=epochStoreFixture(),x=await closedEpochFixture();await store.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,store.current.revision);
+ let boundaries=0;store.state.onHeadRead=()=>{if(++boundaries===2){const current=store.current;current.revision+='-changed';store.current=current;}};
+ await assert.rejects(store.catalogue().observe());assert.equal(store.counts.headAttempts,1);
+ store.state.onHeadRead=undefined;const reader={...store.reader,configurationDigest:()=>hash('substituted-store')};
+ assert.throws(()=>new ManagedRecoveryEpochCatalogue(store.selected,reader));
 });

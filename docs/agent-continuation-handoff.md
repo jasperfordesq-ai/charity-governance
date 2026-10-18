@@ -1,3 +1,14 @@
+## 18 October: explicit closed-epoch catalogue and anchored inspection
+
+A new read-only catalogue validates original closed-control/plan lineage against
+a separately retained genesis and checkpoint. Its separate publisher requires
+an original immutable entry ACK before head CAS; unknown ACKs cannot be repaired
+or reconstructed. Anchored recovery inspection binds current control, journal
+and archive identities before and after existing quarantine-only inspection.
+See [contract and proof limits](managed-recovery-epoch-catalogue.md).
+The provider adapter, actual independent IAM/checkpoint custody, native multi-epoch
+loss/current authority and physical-host-loss acceptance remain open. No activation,
+provider grant or tenant policy decision follows from this implementation.
 ## 18 October: genuine caller loss covered for retired-control captures
 
 The separate-custody native cohort now exercises real SIGKILL for both legacy

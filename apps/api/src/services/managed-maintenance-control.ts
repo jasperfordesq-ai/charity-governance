@@ -93,6 +93,7 @@ export class S3ManagedMaintenanceControl {
   this.client=client??new S3Client({region:'eu-west-1',credentials,endpoint:'https://s3.eu-west-1.amazonaws.com',
    maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:15000,throwOnRequestTimeout:true}});
  }
+ configurationDigest(){return createHash('sha256').update(JSON.stringify({format:1,policy:'MANAGED_MAINTENANCE_CONTROL_LOCATION_V1',...this.config})).digest('hex');}
  private request(){return{Bucket:this.config.bucket,ExpectedBucketOwner:this.config.accountId,
   Key:`managed-maintenance/${this.config.installationId}/control.json`};}
  private validMetadata(value:{VersionId?:string;ServerSideEncryption?:string;SSEKMSKeyId?:string}){
