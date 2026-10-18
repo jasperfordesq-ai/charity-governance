@@ -12,6 +12,21 @@ const no=()=>new Error('Original daemon owner unresolved; preserve intent withou
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');
 const hex=(v,n)=>typeof v==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(v);
 const artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
+const requestEnvironmentNames=new Set(('PGPASSWORD POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB '+
+ 'CHARITYPILOT_PROOF_DATABASE_URL CHARITYPILOT_SOURCE_ENDPOINT_IDENTITY_SHA256 CHARITYPILOT_SNAPSHOT_ACTION '+
+ 'CHARITYPILOT_TEMP_FILE_LIMIT_KB CHARITYPILOT_TEMP_FILE_LIMIT_BYTES CHARITYPILOT_MAX_PUBLIC_TABLES CHARITYPILOT_MAX_ROWS_PER_TABLE '+
+ 'CHARITYPILOT_MAX_TOTAL_ROWS CHARITYPILOT_MAX_FINGERPRINT_REPORT_BYTES CHARITYPILOT_MAX_DUMP_BYTES CHARITYPILOT_CAPACITY_SAFETY_FACTOR '+
+ 'CHARITYPILOT_CAPACITY_SAFETY_MARGIN_BYTES CHARITYPILOT_SOURCE_DATABASE_SIZE_BYTES CHARITYPILOT_CAPACITY_REQUIRED_BYTES '+
+ 'CHARITYPILOT_CAPACITY_PREFLIGHT_VERIFIED CHARITYPILOT_RAW_REPORT_PATH CHARITYPILOT_DUMP_PATH CHARITYPILOT_IMPORTED_SNAPSHOT '+
+ 'CHARITYPILOT_IMPORTED_DATABASE CHARITYPILOT_IMPORTED_DATABASE_OID CHARITYPILOT_IMPORTED_OBSERVER_OID CHARITYPILOT_IMPORTED_BACKEND_PID '+
+ 'CHARITYPILOT_RESTORE_DATABASE_URL CHARITYPILOT_RESTORE_QUERY CHARITYPILOT_RESTORE_DUMP_FILE').split(' '));
+/** Copy only explicit fixed-helper Docker environment operands, including the
+ * safety limits and snapshot program. Never forward ambient cloud credentials. */
+export function managedDaemonOwnerEnvironment(args,source){
+ const names=args.filter((_,i)=>i>0&&args[i-1]==='-e');
+ if(names.some(k=>!requestEnvironmentNames.has(k)||typeof source?.[k]!=='string'))throw no();
+ return Object.fromEntries(names.map(k=>[k,source[k]]));
+}
 export function prepareManagedDaemonOwnerLaunch(raw,source=process.env){
  const input=validateManagedDaemonOwnerInput(raw),unit=containmentUnit(input.ownerId);
  const environment=Object.fromEntries(['PATH','HOME','USER','LOGNAME','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS'].filter(k=>typeof source[k]==='string').map(k=>[k,source[k]]));
@@ -45,7 +60,7 @@ export function validateManagedDaemonOwnerInput(raw){
   ||raw.args.some(v=>typeof v!=='string'||v.includes('\0')||v.length>16384)||Buffer.byteLength(JSON.stringify(raw))>65536
   ||!Number.isSafeInteger(raw.timeoutMs)||raw.timeoutMs<50||raw.timeoutMs>90000||!Number.isSafeInteger(raw.maxBuffer)||raw.maxBuffer<1||raw.maxBuffer>1048576
   ||!raw.environment||typeof raw.environment!=='object'||Array.isArray(raw.environment)
-  ||Object.entries(raw.environment).some(([k,v])=>k!=='PGPASSWORD'||typeof v!=='string'||v.length>8192||v.includes('\0'))
+  ||Object.entries(raw.environment).some(([k,v])=>!requestEnvironmentNames.has(k)||typeof v!=='string'||v.length>65536||v.includes('\0'))
   ||!exact(raw.intent,'body,sha256,byteLength')||typeof raw.intent.body!=='string'||Buffer.byteLength(raw.intent.body)>8192
   ||raw.intent.byteLength!==Buffer.byteLength(raw.intent.body)||raw.intent.sha256!==hash(raw.intent.body))throw no();
  containmentUnit(raw.jobId);containmentUnit(raw.ownerId);if(raw.jobId===raw.ownerId)throw no();

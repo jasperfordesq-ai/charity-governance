@@ -1,6 +1,6 @@
 import {runImportedSnapshotRestoreProof} from './postgres-backup.mjs';
 import {acknowledgeManagedDaemonCustodySync} from './managed-daemon-custody-client.mjs';
-import {dispatchManagedDaemonOwnerSync} from './managed-daemon-owner-worker.mjs';
+import {dispatchManagedDaemonOwnerSync,managedDaemonOwnerEnvironment} from './managed-daemon-owner-worker.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {captureHelperImplementationBinding} from './postgres-backup.mjs';
 let bytes=0;const chunks=[];
@@ -12,7 +12,7 @@ try{
  const acknowledge=input.daemonCustodyRequired===true?(record=>acknowledgeManagedDaemonCustodySync({...record,descriptorPath:process.env.CHARITYPILOT_INTERNAL_DAEMON_GATE})):undefined;
  const dispatch=input.daemonCustodyRequired===true?(record=>dispatchManagedDaemonOwnerSync({format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',jobId:input.jobId,ownerId:randomUUID(),
   sourceSha:captureHelperImplementationBinding().commitSha,inputDigest:createHash('sha256').update(JSON.stringify(input)).digest('hex'),descriptorPath:process.env.CHARITYPILOT_INTERNAL_DAEMON_GATE,
-  intent:record.intent,args:record.args,environment:typeof record.options.env?.PGPASSWORD==='string'?{PGPASSWORD:record.options.env.PGPASSWORD}:{},
+  intent:record.intent,args:record.args,environment:managedDaemonOwnerEnvironment(record.args,record.options.env??process.env),
   // Match the default live proof budget; original custody expires after120s.
   timeoutMs:Math.min(record.options.timeout??90000,90000),maxBuffer:record.options.maxBuffer??524288})):undefined;
  const r=await runImportedSnapshotRestoreProof(input.args,input.snapshot,process.env,input.jobId,input.daemonCustodyRequired===true,acknowledge,dispatch);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runManagedDaemonOwner,validateManagedDaemonOwnerInput,prepareManagedDaemonOwnerLaunch} from './managed-daemon-owner-worker.mjs';
+import {runManagedDaemonOwner,validateManagedDaemonOwnerInput,prepareManagedDaemonOwnerLaunch,managedDaemonOwnerEnvironment} from './managed-daemon-owner-worker.mjs';
 import {independentOwnerProbeArguments} from './managed-daemon-owner-probe.mjs';
 import {planManagedProofStorage} from './postgres-backup.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -14,6 +14,15 @@ function fixture(){
  return{format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',jobId,ownerId:randomUUID(),sourceSha:'1'.repeat(40),inputDigest:'2'.repeat(64),
   descriptorPath:'/synthetic/gate.json',intent:{body,sha256:hash(body),byteLength:Buffer.byteLength(body)},args,environment:{},timeoutMs:15000,maxBuffer:65536};
 }
+
+test('request environment retains explicit safety and snapshot operands while excluding ambient credentials',()=>{
+ const source={CHARITYPILOT_TEMP_FILE_LIMIT_KB:'1048576',CHARITYPILOT_PROOF_DATABASE_URL:'postgresql://synthetic',CHARITYPILOT_IMPORTED_SNAPSHOT:'synthetic',AWS_SECRET_ACCESS_KEY:'omit',PATH:'omit'};
+ const args=['run','-e','CHARITYPILOT_TEMP_FILE_LIMIT_KB','-e','CHARITYPILOT_PROOF_DATABASE_URL','-e','CHARITYPILOT_IMPORTED_SNAPSHOT'];
+ assert.deepEqual(managedDaemonOwnerEnvironment(args,source),Object.fromEntries(Object.entries(source).slice(0,3)));
+ assert.throws(()=>managedDaemonOwnerEnvironment(['run','-e','AWS_SECRET_ACCESS_KEY'],source));
+ assert.throws(()=>managedDaemonOwnerEnvironment(args,{}));
+ assert.deepEqual(managedDaemonOwnerEnvironment(['rm','synthetic'],source),{});
+});
 test('fixed owner validates exact original arguments, storage and bounded secret transport before custody or dispatch',async()=>{
  const base=fixture();assert.deepEqual(validateManagedDaemonOwnerInput(base),base);
  for(const change of [{extra:true},{sourceSha:'HEAD'},{ownerId:base.jobId},{timeoutMs:90001},{maxBuffer:1048577},{environment:{NODE_OPTIONS:'--inspect'}},
