@@ -39,7 +39,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const workspace=await createManagedCaptureWorkspace(parent),output=workspace.root;
  const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
   assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
-  let sourceFailure='';
+  let sourceFailure='',preserveSourceFailure=false;
  const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope,jobCustody)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
@@ -66,6 +66,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    return retained;
   }});}catch(error){
    if(sourceExecutionMode==='KERNEL_CONTAINED'){
+    preserveSourceFailure=true;
     const path=join(output,'proof-job.request.json'),request=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):null;
     console.log('CONTAINED_SOURCE_FAILURE='+JSON.stringify({jobId:request?.jobId??null,requestRecorded:!!request,serviceRecorded:existsSync(join(output,'proof-job.service.json')),
      outcomeRecorded:existsSync(join(output,'proof-job.observation.json')),dumpPresent:existsSync(join(output,'common.dump')),reportPresent:existsSync(join(output,'common.json'))}));
@@ -311,6 +312,9 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  }finally{
   dump?.fill(0);if(cloud)cloud.close();else custody?.close();
   try{if(created)await successful(['dropdb','-h','127.0.0.1','-U','postgres',destination]);}
-  finally{await holder.$disconnect();await admin.$executeRaw`DROP SCHEMA IF EXISTS managed_snapshot_fixture CASCADE`;await admin.$executeRaw`DROP TABLE IF EXISTS public.synthetic_snapshot_public`;await admin.$executeRaw`DROP TABLE IF EXISTS public."Document"`;await workspace.close();verifyOutput();rmSync(parent,{recursive:true,force:true});}
+  finally{await holder.$disconnect();await admin.$executeRaw`DROP SCHEMA IF EXISTS managed_snapshot_fixture CASCADE`;await admin.$executeRaw`DROP TABLE IF EXISTS public.synthetic_snapshot_public`;await admin.$executeRaw`DROP TABLE IF EXISTS public."Document"`;await workspace.close();verifyOutput();
+   if(preserveSourceFailure)console.log('CONTAINED_SOURCE_PRESERVED='+JSON.stringify({parentDirectory:parent,workspaceRoot:output,originalAcknowledgementReconstructed:false,cleanupAuthorized:false,executionAuthorized:false}));
+   else rmSync(parent,{recursive:true,force:true});
+  }
  }
 }

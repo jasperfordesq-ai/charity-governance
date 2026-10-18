@@ -121,6 +121,25 @@ archive pins. Reads may not mutate custody, generate keys, admit, reconstruct an
 ACK or fall back to an older acceptable-looking archive. These new read-refusal
 extensions still require an exact-source native execution result.
 
+Exact source `5bc0cb00ae348be04474fac93e1cb66f04000abe` subsequently passed the
+complete five-case ACK-loss/read-refusal cohort in 186,662 ms, including all six
+catalogue refusals and seven fresh anchored positive reads. Four Linux boundary
+tests passed. A focused entry-read-loss scenario also passed at that source.
+Earlier full `93d10b6d` was only 4/5 and two focused scenarios failed before the
+intended loss hook. Those failures remain recorded; later passes do not establish
+their cause or a reliability fix. Bounded diagnostic stage codes now retain the
+first known owner/custody failure through a later refused cleanup/finalisation.
+No original command, credential or raw provider body is added to those stages.
+
+Two synthetic containers from earlier failed jobs remained in the bounded
+inventory; their saved labels do not authorize removal. Future kernel-source
+fixture failures retain the original protected local workspace after closing its
+streams, instead of deleting the evidence. Successful fixture workspaces remain
+disposable. The existing full kernel/SIGKILL cohort validates ownership/mode of
+these retained failure workspaces. Retention is not an original ACK, execution,
+cleanup or recovery-admission grant; remote synthetic custody is still ephemeral
+and this does not prove physical-host recovery.
+
 The original independent legacy/read-role/retired-control ACK-loss cohorts and
 genuine legacy/retired-control caller SIGKILL cases remain separate. Their
 22-current-candidate counts do not become multi-epoch evidence. The new shared

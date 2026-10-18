@@ -47,6 +47,16 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
    sourceTerminal=terminal(source);const log=childOutput(source);
    assert.equal((await sourceTerminal).code,0,'Synthetic original source refused: '+log().slice(-6000));assert.equal(service.exitCode,null);
    if(ackError)throw ackError;
+   if(!name.includes('parent-loss')){
+    const preserved=[...log().matchAll(/CONTAINED_SOURCE_PRESERVED=(\{[^\n]+\})/g)].map(match=>JSON.parse(match[1]));assert.ok(preserved.length>=1);
+    for(const original of preserved){
+     assert.equal(dirname(original.parentDirectory),resolve(tmpdir()));assert.match(basename(original.parentDirectory),/^charitypilot-imported-proof-[A-Za-z0-9]{6}$/);
+     assert.equal(dirname(original.workspaceRoot),original.parentDirectory);assert.match(basename(original.workspaceRoot),/^capture-/);
+     for(const path of [original.parentDirectory,original.workspaceRoot]){assert.equal(realpathSync(path),path);const state=lstatSync(path);assert.equal(state.isDirectory(),true);assert.equal(state.uid,process.getuid());assert.equal(state.mode&0o777,0o700);}
+     assert.equal(original.originalAcknowledgementReconstructed,false);assert.equal(original.cleanupAuthorized,false);assert.equal(original.executionAuthorized,false);
+    }
+    console.log('PRESERVED_SOURCE_FAILURE_WORKSPACES='+preserved.length+'|ownerProtected=true|cleanupAuthorized=false');
+   }
    if(name.includes('parent-loss')){
     for(const format of [3,5])assert.ok(log().includes('PASS genuine format '+format+' source parent SIGKILL:'),'Missing actual caller-loss proof for format '+format);
     console.log('GENUINE_CALLER_SIGKILL_FORMATS=3|5');

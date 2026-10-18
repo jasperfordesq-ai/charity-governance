@@ -1,4 +1,4 @@
-## 18 October: daemon proof failure under diagnosis
+## 18 October: native loss/read cohort passed; earlier daemon failures remain open
 
 The new native checkpoint/read probes passed all six refusals and seven fresh
 positive controls at93d10b6d. That same full run was4/5: an entry-read-loss case
@@ -8,7 +8,10 @@ claim this full matrix green or treat the failure as the intended ACK-loss resul
 Bounded owner-stage diagnostics now preserve the earlier redacted helper error
 when journal finalisation also refuses. Completion/identity/custody gates and
 no-replay behaviour remain enforced; diagnosis and exact native verification
-remain required. Detailed original failed transcripts are retained privately.
+remain required. Exact5bc0cb00 subsequently passed the complete5-case cohort,
+six read refusals and seven fresh positives. That pass does not root-cause the
+earlier failures. Original failed transcripts are retained privately; future
+kernel-source fixture failures now retain protected local workspaces for diagnosis.
 ## 18 October: original epoch publication loss passed; read-fault extension integrated
 
 A separate native cohort now covers entry/head PUT and exact-readback response
