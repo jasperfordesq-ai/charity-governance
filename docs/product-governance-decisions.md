@@ -1,3 +1,14 @@
+## 18 October: new-format native snapshot and separate recovery proof passed
+
+The retired-control format-5 path passed TLS SQL snapshot import/dump, canonical
+isolated restore and SDK archive custody in success and four original ACK-loss
+modes. Separate kernel-contained execution and a fresh recovery-capability reader
+verified two new-format roots and preserved three unresolved outcomes without
+caller pins, replay or new writes/data keys. Original retirement records remain
+in the bound control namespace. See [proof scope](managed-retired-control-common-candidate.md).
+Provider HTTP/cloud custody are synthetic; actual provider/IAM/current authority
+and physical-host-loss gates remain. Genuine caller SIGKILL still covers only the
+legacy path. No application deployment or provider activation followed these tests.
 ## 18 October: retired-control common capture and original-record discovery
 
 Explicit plan 12 now selects candidate format 5, binding the original retirement

@@ -37,10 +37,19 @@ Historical bound-record reads do not establish that their revision is current.
 
 ## Evidence limits
 
-Local regression tests use real signatures and SDK serialization with modelled
-provider/storage/source/archive transports. Fresh full native canonical SQL,
-separate kernel/process loss and cold-reader execution for this new format remain
-to be run; earlier format-4 proofs do not establish format-5 execution. Actual
+Local regressions use real signatures with modelled provider transports. The
+new format now also passed actual TLS PostgreSQL snapshot import/dump, canonical
+isolated restore, SDK crypto/archive custody and separate kernel-contained source
+execution. Five modes cover success and lost request, job, report and root ACKs.
+A separate recovery-capability process found all five new-format candidates,
+verified two quarantined roots and preserved three unresolved outcomes without
+new writes/data keys, caller IDs/pins or replay. Original retirement records are
+read from the bound control namespace, never copied into candidate sessions.
+The SQL-backed canary shares the main capture role and signing key. One original
+control-key DELETE and one pre-retirement old-key canary positive are asserted;
+fresh comparisons reuse that baseline. Provider HTTP and cloud custody remain
+synthetic. Existing genuine source SIGKILL coverage is for the legacy path; a
+new-format caller SIGKILL is not yet proved. Actual
 provider propagation, signing-key currency, project SQL identity, unfiltered
 visibility, remaining privileged writers/issuers, independent IAM/current tenant
 authority and physical-host-loss reopening remain open. All admission, global
