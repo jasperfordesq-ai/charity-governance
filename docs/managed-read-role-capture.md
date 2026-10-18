@@ -48,3 +48,22 @@ unfiltered RLS visibility, complete issuer/session/in-flight/control-plane fence
 independent current authority and physical-host-loss proof remain required.
 Catalogue UPDATE or other broader privileges must not be granted just to make
 this path available on an unsupported managed provider.
+
+## Executed synthetic verification — 18 October 2026
+
+The native TLS PostgreSQL composition passed original snapshot import, both
+metadata-table locks, role-authenticated SQL-backed object capture and a concurrent
+DML writer waiting until capture finished. A short-lived token cancelled stalled
+source preparation before HTTP and released the intervals. A deterministic unit
+test also verifies that outer cancellation waits for delayed bounded inner
+rollback without waiting for an arbitrary source callback.
+
+Synthetic plan tests passed format-10 original closure, bootstrap publication
+and fresh read-only discovery with the pinned capture authorization. Legacy
+READY-plan mismatch and legacy capture downgrade were refused. This does not
+activate the still-unimplemented versioned candidate/archive entry point.
+
+All prior SQL writer, catalogue-window and candidate-recovery regressions passed
+in the final cohort. Exact revisions, counts and deployment distinctions are
+recorded privately. These tests use a synthetic HTTP model and disposable
+PostgreSQL; they do not prove hosted provider compatibility or host-loss recovery.

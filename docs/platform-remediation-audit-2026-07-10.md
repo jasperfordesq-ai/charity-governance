@@ -1,3 +1,13 @@
+## 18 October: joined read-role capture verified natively
+
+The native TLS cohort passed original snapshot import, both Storage metadata
+table locks, role-authenticated capture, blocked concurrent DML and token-expiry
+cancellation before HTTP. Synthetic format-10 closure/bootstrap/fresh discovery
+preserve the explicit authorization digest and refuse legacy downgrade.
+Bounded inner rollback is awaited on outer cancellation. See [the contract](managed-read-role-capture.md).
+The new versioned common-candidate/journal/archive entry point remains open,
+alongside actual provider authority and independent physical-host-loss proof.
+
 ## 18 October: configured read-role interval and plan binding
 
 An explicit component now joins the configured JWT, SQL role/database, both
