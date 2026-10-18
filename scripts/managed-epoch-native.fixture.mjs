@@ -14,6 +14,7 @@ import {readSyntheticCustodyDescriptor,callSyntheticCustody} from './synthetic-c
 import {connectSyntheticCustody} from './synthetic-custody-client.mjs';
 import {managedCommonCustodyBackend} from './managed-common-custody-postgres-proof.mjs';
 import {proveManagedBackendMaintenance} from './managed-backend-maintenance-postgres-proof.mjs';
+import {syntheticEpochAckLossModes} from './synthetic-epoch-ack-loss.mjs';
 const installationId='synthetic-native-epochs';
 const hash=body=>createHash('sha256').update(body).digest('hex');
 const storage=config=>({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn});
@@ -70,22 +71,72 @@ export async function proveManagedEpochLifecycle(args){
  const b=connectSyntheticCustody(descriptor,bootstrap.sessionId,bootstrap.archiveConfiguration),custody=managedCommonCustodyBackend(installationId,undefined,b);
  const reader=new S3ManagedRecoveryEpochReader(storage(custody.config),credentials,custody.clients.s3),writer=new S3ManagedRecoveryEpochWriter(storage(custody.config),credentials,custody.clients.s3);
  const catalogue=new ManagedRecoveryEpochCatalogue(epochCatalogueConfiguration(bootstrap),reader),publisher=new ManagedRecoveryEpochPublisher(catalogue,reader,writer);
+ const lossMode=process.env.CHARITYPILOT_TEST_EPOCH_ACK_LOSS,expectedLoss=new Error('Expected synthetic epoch publication ACK loss');let lossRecorded=false;
+ if(lossMode)assert.ok(syntheticEpochAckLossModes.includes(lossMode)&&process.env.CHARITYPILOT_TEST_EPOCH_ONLY==='1');
  try{
   for(const epoch of [1,2]){
-   await proveManagedBackendMaintenance({...args,epochFixture:{epoch,custody,recordClosed:async control=>{
-    const before=await catalogue.observe(),published=await publisher.publishClosedEpoch(control,custody.journal,custody.archive.configurationDigest(),before.head.revision);
+   try{await proveManagedBackendMaintenance({...args,epochFixture:{epoch,custody,recordClosed:async control=>{
+    const before=await catalogue.observe();
+    if(epoch===2&&lossMode){
+     await assert.rejects(publisher.publishClosedEpoch(control,custody.journal,custody.archive.configurationDigest(),before.head.revision));
+     const fault=await callSyntheticCustody(descriptor,{op:'stats',id:bootstrap.sessionId});
+     assert.deepEqual(fault.epochAckLoss,{mode:lossMode,used:true,storedRecordPresent:true,responseLostAfterSdkOperation:true});
+     const writes=b.writes,generates=b.generates;
+     await assert.rejects(publisher.publishClosedEpoch(control,custody.journal,custody.archive.configurationDigest(),before.head.revision));
+     assert.equal(b.writes,writes);assert.equal(b.generates,generates);
+     await new Promise((yes,no)=>process.send({kind:'ORIGINAL_SYNTHETIC_EPOCH_UNRESOLVED_V1',mode:lossMode,maintenanceEpoch:2,sourceSha:before.latest.plan.sourceSha,originalAcknowledgementReconstructed:false},error=>error?no(error):yes()));
+     throw expectedLoss;
+    }
+    const published=await publisher.publishClosedEpoch(control,custody.journal,custody.archive.configurationDigest(),before.head.revision);
     assert.equal(published.originalEntryAcknowledgementObserved,true);assert.equal(published.originalHeadAcknowledgementObserved,true);
     assert.equal(published.entryCount,epoch);assert.equal(published.latest.plan.maintenanceEpoch,epoch);
     const ack={kind:'ORIGINAL_SYNTHETIC_EPOCH_ACK_V1',sequence:epoch,maintenanceEpoch:epoch,entrySha256:published.head.head.entryPin.sha256,headRevision:published.head.revision,sourceSha:published.latest.plan.sourceSha};
     await new Promise((yes,no)=>process.send(ack,error=>error?no(error):yes()));
-   }}});
+   }}});}catch(error){if(error!==expectedLoss)throw error;lossRecorded=true;break;}
    const observed=await custody.journal.inspectAnchoredCurrentRecovery(catalogue,new S3ManagedMaintenanceControl(storage(custody.config),credentials,custody.clients.s3),custody.archive);
    assert.equal(observed.epochCatalogue.entryCount,epoch);assert.equal(observed.bootstrap.plan.maintenanceEpoch,epoch);
    assert.equal(observed.records.length,1);assert.equal(observed.records[0].rootStatus,'ARCHIVE_VERIFIED_QUARANTINE_ONLY');assert.equal(observed.unresolvedCommonCandidates,0);
    assert.equal(observed.currentTenantAuthorityVerified,false);assert.equal(observed.actionAuthorized,false);
   }
-  console.log('PASS two native epochs: shared original SDK custody, original publication ACKs exported before cold recovery; no production reopening');
+  if(lossMode){assert.equal(lossRecorded,true);console.log('PASS original synthetic epoch publication remains unresolved after '+lossMode+'; no second capture or reconstructed ACK');}
+  else console.log('PASS two native epochs: shared original SDK custody, original publication ACKs exported before cold recovery; no production reopening');
  }finally{custody.close();}
+}
+/** Inspect surviving bytes after an original publication response was lost.
+ * Readback may verify history, but cannot create the missing original receipt. */
+export async function inspectSyntheticEpochLossRecovery(descriptor,path,mode){
+ assert.ok(syntheticEpochAckLossModes.includes(mode));const bootstrap=readSyntheticEpochBootstrap(path);assert.equal(bootstrap.trustedCheckpoint.sequence,1);
+ const b=connectSyntheticCustody(descriptor,bootstrap.sessionId,bootstrap.archiveConfiguration),before={writes:b.writes,generates:b.generates},clients={s3:b.s3(),kms:b.kms()};
+ try{
+  const config=bootstrap.archiveConfiguration,s=storage(config),reader=new S3ManagedRecoveryEpochReader(s,credentials,clients.s3),catalogue=new ManagedRecoveryEpochCatalogue(epochCatalogueConfiguration(bootstrap),reader);
+  const observed=await catalogue.observe(),headPublished=mode.startsWith('HEAD_');assert.equal(observed.entryCount,headPublished?2:1);
+  assert.equal(observed.originalAcknowledgementReconstructed,false);assert.equal(observed.executionAuthorized,false);
+  const entryKey=`managed-maintenance/${installationId}/recovery-epochs/entries/00002.json`;
+  const read=async(key,version)=>{
+   const r=await clients.s3.send(new GetObjectCommand({Bucket:config.bucket,ExpectedBucketOwner:config.accountId,Key:key,ChecksumMode:'ENABLED',...(version?{VersionId:version}:{})}));
+   const bytes=Buffer.from(await r.Body.transformToByteArray());assert.ok(r.VersionId);if(version)assert.equal(r.VersionId,version);
+   assert.equal(r.ChecksumSHA256,Buffer.from(hash(bytes),'hex').toString('base64'));assert.equal(r.ServerSideEncryption,'aws:kms');assert.equal(r.SSEKMSKeyId,config.storageKeyArn);
+   return{bytes,version:r.VersionId,sha256:hash(bytes)};
+  };
+  const latest=await read(entryKey),exact=await read(entryKey,latest.version);assert.deepEqual(exact,latest);
+  const entry=managedRecoveryEpochSchemas.entry.parse(JSON.parse(exact.bytes.toString('utf8')));assert.equal(entry.sequence,2);assert.equal(entry.plan.maintenanceEpoch,2);assert.equal(entry.registryConfigurationDigest,catalogue.configurationDigest());
+  const control=new S3ManagedMaintenanceControl(s,credentials,clients.s3),closed=await control.observe();assert.deepEqual(entry.closedControl,{revision:closed.revision,value:closed.value});
+  const journal=new ManagedCandidateCaptureJournal(s,credentials,clients.s3),archive=new ArchivedRecoverySets(config,credentials,clients);
+  if(headPublished){
+   const current=await journal.inspectAnchoredCurrentRecovery(catalogue,control,archive);assert.equal(current.records.length,0);assert.equal(current.bootstrap.plan.maintenanceEpoch,2);
+   assert.equal(current.actionAuthorized,false);assert.equal(current.currentTenantAuthorityVerified,false);
+  }else await assert.rejects(journal.inspectAnchoredCurrentRecovery(catalogue,control,archive));
+  // The verified closed-epoch chain supplies historical discovery context;
+  // no candidate ID or archive pin arrives from the source process.
+  const first=observed.latest.sequence===1?observed.latest:managedRecoveryEpochSchemas.entry.parse(JSON.parse((await reader.readEntry(1,JSON.parse(observed.latest.previousHead.body).entryPin,new AbortController().signal)).artifact.body));
+  assert.equal(first.sequence,1);assert.equal(first.plan.maintenanceEpoch,1);
+  const prior=await journal.discoverCandidates({attemptId:first.closedControl.value.attemptId,planDigest:first.closedControl.value.planDigest,sourceSha:first.plan.sourceSha,maintenanceEpoch:1,controlRevision:first.closedControl.revision});
+  assert.equal(prior.records.length,1);const verified=await journal.verifyDiscoveredCommonRoot(prior.records[0].binding,archive);
+  assert.equal(verified.root.restoreMode,'QUARANTINE_ONLY');assert.equal(verified.originalAcknowledgementReconstructed,false);assert.equal(verified.actionAuthorized,false);
+  assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
+  return{entries:observed.entryCount,checkpointSequence:1,savedEntry2Visible:true,head2Published:headPublished,verifiedHistoricalRoots:1,currentControlMismatchRefused:!headPublished,
+   originalPublicationUnresolved:true,originalAcknowledgementReconstructed:false,executionAuthorized:false,sourceHostLossProven:false};
+ }finally{clients.s3.destroy();clients.kms.destroy();}
 }
 /** New clients and the recovery-only capability; checkpoint is supplied by the
  * external supervisor from original IPC ACKs, never learned from source storage. */

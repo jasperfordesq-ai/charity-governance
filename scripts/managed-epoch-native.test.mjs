@@ -5,6 +5,19 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config as defaults} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 import {readSyntheticEpochBootstrap,validateOriginalSyntheticEpochAck} from './managed-epoch-native.fixture.mjs';
+import {syntheticEpochAckLossModes,matchesSyntheticEpochAckLoss} from './synthetic-epoch-ack-loss.mjs';
+import {syntheticCustodyAllowed} from './synthetic-custody-policy.mjs';
+test('epoch ACK-loss hooks match only the second fixed slot and exact readback in the disposable namespace',()=>{
+ for(const mode of syntheticEpochAckLossModes){
+  const config={installationId:'synthetic-native-epochs'},method=mode.includes('_PUT_')?'PUT':'GET',kind=mode.startsWith('ENTRY_')?'entries':'heads';
+  const request={method,path:`/managed-maintenance/${config.installationId}/recovery-epochs/${kind}/00002.json`,query:method==='GET'?{versionId:'original-version'}:{}};
+  assert.equal(matchesSyntheticEpochAckLoss(mode,config,request),true);
+  for(const change of [{method:'DELETE'},{method:'HEAD'},{path:request.path.replace('00002','00001')},{path:request.path+'/extra'},...(method==='GET'?[{query:{}},{query:{versionId:''}}]:[])])assert.equal(matchesSyntheticEpochAckLoss(mode,config,{...request,...change}),false);
+  assert.equal(matchesSyntheticEpochAckLoss(mode,{installationId:'another-installation'},request),false);
+  assert.equal(syntheticCustodyAllowed('recovery',{op:'flag',name:'epochAckLoss',value:mode,role:'owner'}),false);
+ }
+ assert.equal(matchesSyntheticEpochAckLoss('unknown',{installationId:'synthetic-native-epochs'},{method:'GET'}),false);
+});
 test('original synthetic epoch receipt binds sequence, source and checkpoint without accepting added IDs or recovered-ACK flags',()=>{
  const value={kind:'ORIGINAL_SYNTHETIC_EPOCH_ACK_V1',sequence:1,maintenanceEpoch:1,entrySha256:'a'.repeat(64),headRevision:'original-provider-revision',sourceSha:'b'.repeat(40)};
  assert.deepEqual(validateOriginalSyntheticEpochAck(value,1,value.sourceSha),value);

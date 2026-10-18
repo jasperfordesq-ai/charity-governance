@@ -63,6 +63,35 @@ separation are synthetic process boundaries on the same machine.
 
 ## Existing and remaining evidence
 
+### Native original-acknowledgement loss cohort
+
+`CHARITYPILOT_TEST_EPOCH_ACK_LOSS_NATIVE=1 node --test
+scripts/synthetic-epoch-loss.native.test.mjs` is a separate opt-in Linux cohort.
+It runs a two-epoch positive control and four distinct losses: epoch-2 entry PUT,
+entry exact readback, head PUT and head exact readback. Each case has fresh source
+and recovery processes and its own external custody keeper; both epochs within
+that case share one namespace. It uses the same real TLS SQL, canonical snapshot,
+isolated restore and kernel-contained source proof. It intentionally omits the
+unrelated legacy matrix through a guarded fixture-only IPC selector.
+
+The keeper completes the original signed SDK operation, then loses that one
+response across the process boundary. Its consumed fault record must be observed
+immediately after the original refusal, before the publisher's repeated call is
+shown to refuse without another write. Surviving bytes cannot substitute for the
+missing original receipt. The supervisor fsyncs the epoch-1 receipt and the
+original unresolved-publication notification, and pins recovery to that receipt.
+
+On entry-response loss, entry 2 survives as an orphan, head 1 remains current and
+the live closed epoch-2 control must fail the anchored comparison. On head-response
+loss, the chain can be read through entry 2 but has no original epoch-2 publication
+receipt and no epoch-2 capture. The reader must not call an empty current candidate
+list a completed capture. Both outcomes remain explicitly unresolved. The prior
+completed epoch-1 archive is independently discovered from its verified historical
+chain entry and remains readable only into quarantine, without caller IDs/pins.
+Recovery may not write, generate keys, reconstruct ACKs, retry or admit an archive.
+Source integration alone does not establish execution of these new cases; exact
+native results must be recorded separately.
+
 The original independent legacy/read-role/retired-control ACK-loss cohorts and
 genuine legacy/retired-control caller SIGKILL cases remain separate. Their
 22-current-candidate counts do not become multi-epoch evidence. The new shared
@@ -70,7 +99,7 @@ namespace reports its own two-entry chain and one latest-epoch root.
 
 The executed scope above is source-specific. Dated native results, receipts and
 failures belong in the ignored private handoff. New epoch
-entry/head ACK-loss, external-checkpoint rollback/version/list drift and genuine
+entry/head ACK-loss execution, external-checkpoint rollback/version/list drift and genuine
 caller loss within the shared two-epoch path still require their own native
 execution. Modelled SDK tests cover those store boundaries separately.
 
