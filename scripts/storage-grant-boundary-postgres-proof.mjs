@@ -47,7 +47,7 @@ async function proveReadRoleJwtCapture(admin,readerRole,boundary,readerBoundary)
 
 /** SQL semantics experiment in the EXISTING disposable TLS PostgreSQL fixture.
  * Not a Supabase migration, operator command, live ACL fence or release claim. */
-export async function proveStorageGrantBoundary({admin,url}){
+export async function proveStorageGrantBoundary({admin,url,prepareCatalogueTransaction}){
  const target=new URL(url);
  assert.ok(['127.0.0.1','localhost'].includes(target.hostname));
  assert.match(target.pathname,/^\/managed_writer_[a-f0-9]{32}$/);
@@ -256,7 +256,7 @@ export async function proveStorageGrantBoundary({admin,url}){
   assert.equal(visible[0].total,1);
   await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
   await proveReadRoleJwtCapture(admin,readerRole,boundary,new ManagedStorageDatabaseInventory(fencer,{...config,capture:readerRole}));
-  await proveCaptureRoleWindow({admin,fencer,actor,config,readerRole});
+  await proveCaptureRoleWindow({admin,fencer,actor,capture,config,readerRole,prepareCatalogueTransaction});
   await admin.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`;
   await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`;
   await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`;

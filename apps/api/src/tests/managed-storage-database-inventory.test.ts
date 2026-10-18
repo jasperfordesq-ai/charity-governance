@@ -47,12 +47,13 @@ function roleBoundaryFixture(){
  const grants=roles.map(r=>({...privileges,roleOid:r.oid,relationOid:'16386'}));
  const authority={ownsDatabase:false,ownsSchema:false,ownsRelation:false,ownsRoutine:false,databaseCreate:false,schemaCreate:false,systemDefinerExecute:false};
  const catalogues=['pg_attribute','pg_proc','pg_class','pg_authid','pg_auth_members','pg_database','pg_namespace','pg_policy'].map((name,i)=>({name,oid:String(1200+i),shared:['pg_authid','pg_auth_members','pg_database'].includes(name),held:true}));
- const state={identity,roles,relations,memberships:[] as unknown[],grants,definers:[] as unknown[],authority,catalogues,lockDenied:false,commitDelay:0};let queries=0;
+ const state={identity,roles,relations,memberships:[] as unknown[],grants,definers:[] as unknown[],authority,catalogues,lockDenied:false,pendingTransaction:false,commitDelay:0};let queries=0;
  const operations:string[]=[];
  const prisma={$transaction:async<T>(fn:(tx:unknown)=>Promise<T>)=>{const result=await fn({$executeRaw:async(parts:TemplateStringsArray)=>{
   const sql=parts.join('');operations.push(sql);if(state.lockDenied&&sql.startsWith('LOCK TABLE'))throw new Error('private permission detail');return 0;
  },$queryRaw:async(parts:TemplateStringsArray)=>{
   queries++;const sql=parts.join('');
+  if(sql.includes("locktype='transactionid'"))return[{pending:state.pendingTransaction}];
   if(sql.includes('transaction_isolation'))return[{pid:101,isolation:'read committed'}];
   if(sql.includes("l.mode='ShareLock'"))return state.catalogues;
   if(sql.includes(' AS database,'))return[state.identity];
@@ -99,12 +100,13 @@ test('SQL privilege window pins all eight catalogue locks, immutable role identi
 });
 
 test('SQL privilege window refuses absent locks, insufficient authority and unsafe identity before capture',async()=>{
- for(const mode of ['missing','not-held','wrong-name','denied','wrong-database','wrong-tls','write-grant']){
+ for(const mode of ['missing','not-held','wrong-name','denied','wrong-database','wrong-tls','write-grant','pending-transaction']){
   const f=roleBoundaryFixture();let called=0;
   if(mode==='missing')f.state.catalogues.pop();if(mode==='not-held')f.state.catalogues[0]!.held=false;
   if(mode==='wrong-name')f.state.catalogues[0]!.name='pg_type';if(mode==='denied')f.state.lockDenied=true;
   if(mode==='wrong-database')f.state.identity.databaseOid='1';if(mode==='wrong-tls')f.state.identity.encrypted=false;
   if(mode==='write-grant')f.state.grants[1]!.update=true;
+  if(mode==='pending-transaction')f.state.pendingTransaction=true;
   await assert.rejects(f.service().runCaptureRoleWindow(async()=>{called++;},{maxWindowMs:1000}),/^Error: Managed capture SQL privilege window is unresolved; discard the candidate result$/);assert.equal(called,0);
  }
 });

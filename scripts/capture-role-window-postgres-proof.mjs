@@ -3,10 +3,12 @@ import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed
 
 /** Runs only in the original disposable TLS writer fixture. All SQL below is
  * synthetic, fixed or derived from that fixture's validated database name. */
-export async function proveCaptureRoleWindow({admin,fencer,actor,config,readerRole}){
+export async function proveCaptureRoleWindow({admin,fencer,actor,capture,config,readerRole,prepareCatalogueTransaction}){
  assert.match(config.database,/^managed_writer_[a-f0-9]{32}$/);
  const service=new ManagedStorageDatabaseInventory(fencer,{...config,capture:readerRole});
  const options={maxWindowMs:5000};
+ let deniedCalls=0;await assert.rejects(new ManagedStorageDatabaseInventory(capture,{...config,observer:config.capture,capture:readerRole})
+  .runCaptureRoleWindow(async()=>{deniedCalls++;},options));assert.equal(deniedCalls,0);
  const cases=[
   ['table','GRANT INSERT ON public.synthetic_storage_boundary TO storage_probe_reader','REVOKE INSERT ON public.synthetic_storage_boundary FROM storage_probe_reader'],
   ['column','GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader','REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader'],
@@ -51,6 +53,12 @@ export async function proveCaptureRoleWindow({admin,fencer,actor,config,readerRo
  await ready;let callbacks=0;
  try{await assert.rejects(service.runCaptureRoleWindow(async()=>{callbacks++;},options));assert.equal(callbacks,0);}
  finally{release();await assert.rejects(prior,/synthetic rollback/);}
+ assert.equal(typeof prepareCatalogueTransaction,'function');prepareCatalogueTransaction();
+ try{
+  const [prepared]=await admin.$queryRaw`SELECT count(*)::integer AS total FROM pg_locks WHERE locktype='transactionid' AND mode='ExclusiveLock' AND granted AND pid IS NULL`;
+  assert.ok(prepared.total>0);let preparedCalls=0;
+  await assert.rejects(service.runCaptureRoleWindow(async()=>{preparedCalls++;},options));assert.equal(preparedCalls,0);
+ }finally{await admin.$executeRaw`ROLLBACK PREPARED 'synthetic-catalogue-grant'`;}
  // Cancellation, real deadline and loss of the actual lock-holding connection.
  for(const mode of ['cancel','expiry','connection-loss','callback-error']){
   const controller=new AbortController();let pid,observedSignal;
@@ -67,5 +75,5 @@ export async function proveCaptureRoleWindow({admin,fencer,actor,config,readerRo
   assert.equal((await admin.$queryRaw`SELECT count(*)::integer AS total FROM pg_locks WHERE pid=${pid} AND mode='ShareLock' AND granted`)[0].total,0);
  }
  const final=await service.runCaptureRoleWindow(async()=>true,options);assert.equal(final.value,true);
- console.log('PASS native SQL capture privilege window: nine concurrent DCL/DDL actors wait until release, prior DCL refuses before callback; cancellation, real expiry, holder termination and callback failure discard and release; no provider/global-authority claim');
+ console.log('PASS native SQL capture privilege window: nine concurrent DCL/DDL actors wait until release, prior uncommitted and prepared DCL plus insufficient lock authority refuse before callback; cancellation, real expiry, holder termination and callback failure discard and release; no provider/global-authority claim');
 }

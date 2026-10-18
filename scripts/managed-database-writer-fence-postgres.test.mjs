@@ -129,7 +129,8 @@ test('managed database fence closes real stale credentials and sessions while re
   assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
   await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'});
-  await proveStorageGrantBoundary({admin,url});
+  await proveStorageGrantBoundary({admin,url,prepareCatalogueTransaction:()=>docker(['exec',id,'psql','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1',
+   '-c',"BEGIN; GRANT UPDATE ON public.synthetic_storage_boundary TO storage_probe_reader; PREPARE TRANSACTION 'synthetic-catalogue-grant';"])});
  }finally{
   await writerA?.$disconnect();await writerB?.$disconnect();await admin?.$disconnect();
   try {if(id)docker(['rm','--force',id]);}

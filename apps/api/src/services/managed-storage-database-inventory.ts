@@ -64,6 +64,15 @@ export class ManagedStorageDatabaseInventory {
    await this.inspect(false,tx);
    active();
    await tx.$executeRaw`LOCK TABLE ONLY pg_catalog.pg_attribute,pg_catalog.pg_proc,pg_catalog.pg_class,pg_catalog.pg_authid,pg_catalog.pg_auth_members,pg_catalog.pg_database,pg_catalog.pg_namespace,pg_catalog.pg_policy IN SHARE MODE`;
+   // PostgreSQL DCL can close its catalogue relation lock at command end,
+   // before COMMIT. Such a writer retains its transaction-ID lock. After the
+   // catalogue locks block new DCL, refuse any foreign assigned transaction,
+   // including prepared transactions (pid NULL) and other databases because
+   // role/database catalogues are shared. A plain MVCC observation misses this.
+   const [prior]=z.array(z.object({pending:z.boolean()}).strict()).length(1).parse(await tx.$queryRaw`SELECT EXISTS(
+    SELECT 1 FROM pg_locks WHERE locktype='transactionid' AND mode='ExclusiveLock' AND granted
+     AND pid IS DISTINCT FROM pg_backend_pid()) AS pending`);
+   if(prior!.pending)throw windowFailure();active();
    const check=async(pid?:number)=>{
     active();const [identity]=z.array(z.object({pid:z.number().int().positive(),isolation:z.literal('read committed')}).strict()).length(1).parse(
      await tx.$queryRaw`SELECT pg_backend_pid() AS pid,current_setting('transaction_isolation') AS isolation`);
@@ -93,6 +102,7 @@ export class ManagedStorageDatabaseInventory {
      startedAt:start.identity.observedAt,finishedAt:end.identity.observedAt,maxWindowMs:options.maxWindowMs};
     return{value,evidence:{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
      scope:'LISTED_SQL_CATALOGUES_DURING_CALLBACK_ONLY' as const,configuredCaptureSqlReadOnlyObserved:true as const,
+     preexistingAssignedTransactionsExcludedAtEntry:true as const,
      listedCatalogueChangesExcludedDuringCallback:true as const,windowStillHeld:false as const,
      providerTokenRoleVerified:false as const,providerManagementActorsExcluded:false as const,unfilteredBucketVisibilityVerified:false as const,
      captureCredentialReadOnlyVerified:false as const,allWritersInventoried:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const}};

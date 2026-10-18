@@ -10,8 +10,14 @@ older Repeatable Read snapshot. The fixed lock order follows catalogue OIDs.
 The eight catalogues are pg_attribute, pg_proc, pg_class, pg_authid,
 pg_auth_members, pg_database, pg_namespace and pg_policy. They cover the role,
 membership, ownership, table/column ACL, routine, schema/database privilege and
-RLS metadata predicates inspected by the role boundary. Existing incompatible
-writers must finish before entry; lock acquisition times out rather than letting
+RLS metadata predicates inspected by the role boundary. DCL may release catalogue
+relation locks at command end before its transaction commits. After acquiring
+the locks, the window therefore refuses any other assigned transaction still
+holding its transaction-ID lock. This includes prepared transactions with no PID
+and transactions in other databases, because role catalogues are shared. A fresh
+Read Committed observation follows that entry barrier. This conservative check
+can also refuse unrelated active writes; it does not terminate or retry them.
+Existing incompatible writers must finish before entry; lock acquisition times out rather than letting
 the callback run without its locks. No function body or role password is read.
 
 The callback receives only frozen configured role identity and a cancellation
