@@ -59,6 +59,8 @@ export class ManagedReadRoleCapture {
      const prepared=await source(snapshot,signal);signal.throwIfAborted();this.assertComponents();
      if(typeof prepared?.visit!=='function')throw failure();
      const captured=await this.#capture.capture(prepared.visit,signal);signal.throwIfAborted();this.assertComponents();
+     if(captured.kind!=='SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1'||captured.credentialCapability!=='ASYMMETRIC_CUSTOM_ROLE_JWT'
+      ||captured.configurationDigest!==c.captureConfigurationDigest||captured.jwtVerification?.signatureVerified!==true)throw failure();
      return{captured,value:prepared.value};
     },privilegeSignal);
    },{maxWindowMs:c.maxWindowMs},signal);
