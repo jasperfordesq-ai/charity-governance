@@ -1,3 +1,13 @@
+## 18 October: actual fixed-owner service acceptance
+
+Read [independent request owner](managed-independent-request-owner.md). The fixed
+stdin worker is included in eleven-module canonical source verification and
+requires an actual user-service identity plus original OWNER/OUTCOME ACKs. An
+opt-in probe launches it from the original caller over private socket/stdin,
+using only fixed synthetic Docker work. The production helper is not yet routed
+through it. Custody-parent loss, provider IAM and physical host-loss proof remain
+open; exact native results and their limits are private.
+
 ## 18 October: ordered owner-outcome custody transport
 
 The fixed private channel/client supports original OWNER-bound OUTCOME ACKs and

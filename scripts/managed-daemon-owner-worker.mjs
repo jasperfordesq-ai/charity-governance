@@ -11,9 +11,6 @@ const no=()=>new Error('Original daemon owner unresolved; preserve intent withou
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');
 const hex=(v,n)=>typeof v==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(v);
 const artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
-// Activation requires ordered OUTCOME transport, exact worker source binding
-// and native service acceptance. No environment flag may bypass this gate.
-const OWNER_TRANSPORT_INTEGRATED=false;
 export function validateManagedDaemonOwnerInput(raw){
  if(!exact(raw,'format,kind,jobId,ownerId,sourceSha,inputDigest,descriptorPath,intent,args,environment,timeoutMs,maxBuffer')
   ||raw.format!==1||raw.kind!=='MANAGED_DAEMON_OWNER_INPUT_V1'||!hex(raw.sourceSha,40)||!hex(raw.inputDigest,64)
@@ -32,7 +29,6 @@ export function validateManagedDaemonOwnerInput(raw){
  return structuredClone(raw);
 }
 function actualIdentity(input){
- if(!OWNER_TRANSPORT_INTEGRATED)throw no();
  if(process.platform!=='linux'||process.getuid()===0)throw no();verifyContainedExecutorSource(input.sourceSha);
  const unit=containmentUnit(input.ownerId),v=inspectContainmentUnit(unit);
  if(v.MainPID!==String(process.pid)||v.InvocationID!==process.env.INVOCATION_ID||v.ActiveState!=='active'||v.SubState!=='running'
@@ -61,9 +57,9 @@ export async function runManagedDaemonOwner(raw,{identity=actualIdentity,acknowl
  return{status:Number.isSafeInteger(r.status)?r.status:null,transportError:!!r.error,signal:!!r.signal,stdout,stderr};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- process.stdout.on('error',()=>{});let bytes=0;const chunks=[];
+ process.stdout.on('error',()=>{});process.stderr.on('error',()=>{});let bytes=0;const chunks=[];
  try{
-  if(!OWNER_TRANSPORT_INTEGRATED||process.argv.length!==3||process.argv[2]!=='--stdin')throw no();
+  if(process.argv.length!==3||process.argv[2]!=='--stdin')throw no();
   for await(const chunk of process.stdin){bytes+=chunk.length;if(bytes>65536)throw no();chunks.push(chunk);}
   const body=Buffer.concat(chunks);let input;try{input=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(body));}finally{body.fill(0);for(const b of chunks)b.fill(0);}
   const result=await runManagedDaemonOwner(input);process.stdout.write(JSON.stringify(result)+'\n');

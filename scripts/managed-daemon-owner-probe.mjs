@@ -1,4 +1,5 @@
-import {spawnSync,execFileSync} from 'node:child_process';
+import {spawn,spawnSync,execFileSync} from 'node:child_process';
+import {createServer,createConnection} from 'node:net';
 import {randomUUID,createHash} from 'node:crypto';
 import {mkdtempSync,chmodSync,realpathSync,lstatSync,fstatSync,readFileSync,writeFileSync,openSync,closeSync,fsyncSync,existsSync,rmSync,constants} from 'node:fs';
 import {join,dirname,basename,resolve} from 'node:path';
@@ -9,7 +10,9 @@ import {containmentUnit,inspectContainmentUnit,observeOriginalControlGroup,verif
 import {verifyContainedExecutorSource} from './managed-proof-systemd-runner.mjs';
 import {createManagedDaemonCustodyChannel} from './managed-daemon-custody-channel.mjs';
 import {requestManagedDaemonCustody} from './managed-daemon-custody-client.mjs';
+import {validateManagedDaemonOwnerInput} from './managed-daemon-owner-worker.mjs';
 const self=fileURLToPath(import.meta.url),repo=resolve(dirname(self),'..'),no=()=>new Error('Synthetic independent daemon owner unresolved; preserve original scope');
+const ownerWorker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url));
 const hash=v=>createHash('sha256').update(v).digest('hex'),pause=ms=>new Promise(r=>setTimeout(r,ms));
 const safeEnv=()=>Object.fromEntries(['PATH','HOME','USER','LOGNAME','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS'].filter(k=>process.env[k]!==undefined).map(k=>[k,process.env[k]]));
 const command=(name,args)=>{const r=spawnSync(name,args,{env:safeEnv(),encoding:'utf8',timeout:15000,maxBuffer:65536});if(r.status!==0||r.error)throw no();return r.stdout.trim();};
@@ -41,8 +44,41 @@ function launch(unit,role,root){if(loaded(unit)!=='not-found')throw no();command
  '--property=UnsetEnvironment=NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH','--property=StandardOutput=null','--property=StandardError=null',process.execPath,self,role,root]);}
 function checkedScope(root){const v=read(root,'request.json');if(v.kind!=='SYNTHETIC_INDEPENDENT_OWNER_PROBE_V1'||v.sourceSha!==source()
  ||JSON.stringify(v.rootIdentity)!==JSON.stringify(rootIdentity(root))||v.ownerUnit!==containmentUnit(v.ownerId)||v.callerUnit!==containmentUnit(v.jobId)||v.ownerId===v.jobId)throw no();return v;}
+async function fixedWorkerCaller(root,v){
+ const path=join(root,'caller.sock');let socket,accepted=false,server;
+ const input=await new Promise((yes,reject)=>{
+  const timer=setTimeout(()=>{socket?.destroy();server.close();reject(no());},15000);
+  server=createServer({allowHalfOpen:true},s=>{
+   if(accepted){s.destroy();return;}accepted=true;socket=s;const chunks=[];let size=0;
+   const fail=()=>{for(const b of chunks)b.fill(0);clearTimeout(timer);s.destroy();server.close();reject(no());};
+   s.on('error',fail);s.on('data',b=>{size+=b.length;if(size>65536){fail();return;}chunks.push(b);});
+   s.on('end',()=>{try{const body=Buffer.concat(chunks);let value;try{value=validateManagedDaemonOwnerInput(JSON.parse(body.toString('utf8')));}finally{body.fill(0);for(const b of chunks)b.fill(0);}
+    if(value.jobId!==v.jobId||value.ownerId!==v.ownerId||value.sourceSha!==v.sourceSha||JSON.stringify(value.args)!==JSON.stringify(independentOwnerProbeArguments(v.jobId))||Object.keys(value.environment).length)throw no();
+    clearTimeout(timer);server.close();s.end('{"inputAccepted":true}\n');yes(value);
+   }catch{fail();}});
+  });server.once('error',()=>{clearTimeout(timer);reject(no());});server.listen(path,()=>{chmodSync(path,0o600);write(root,'caller.ready.json',{pid:process.pid,invocationId:process.env.INVOCATION_ID});});
+ });
+ if(loaded(v.ownerUnit)!=='not-found')throw no();
+ const child=spawn('systemd-run',['--user','--quiet','--pipe','--unit='+v.ownerUnit,'--service-type=exec',
+  '--property=KillMode=control-group','--property=Restart=no','--property=RuntimeMaxSec=30s','--property=TimeoutStopSec=2s',
+  '--property=NoNewPrivileges=yes','--property=MemoryMax=128M','--property=TasksMax=32','--property=CPUQuota=50%',
+  '--property=UnsetEnvironment=NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH',process.execPath,ownerWorker,'--stdin'],{env:safeEnv(),stdio:['pipe','pipe','pipe']});
+ const terminal=new Promise((yes,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>yes({code,signal}));});void terminal.catch(()=>{});
+ let stdout='',stderr='';child.stdout.on('data',b=>{stdout+=b;if(stdout.length>131072)child.kill('SIGKILL');});child.stderr.on('data',b=>{stderr+=b;if(stderr.length>131072)child.kill('SIGKILL');});
+ child.stdin.on('error',()=>{});const body=Buffer.from(JSON.stringify(input));child.stdin.once('close',()=>body.fill(0));child.stdin.end(body,()=>body.fill(0));
+ const result=await terminal;write(root,'worker.client-terminal.json',{...result,stdoutSha256:hash(stdout),stdoutBytes:Buffer.byteLength(stdout),stderrSha256:hash(stderr),stderrBytes:Buffer.byteLength(stderr)});
+ if(result.code!==0||result.signal)throw no();
+}
+async function deliverFixedWorkerInput(root,input){
+ rootIdentity(root);const path=join(root,'caller.sock'),s=lstatSync(path);if(!s.isSocket()||s.uid!==process.getuid()||(s.mode&0o777)!==0o600)throw no();
+ const body=Buffer.from(JSON.stringify(input));let result='';
+ try{await new Promise((yes,reject)=>{const socket=createConnection(path),timer=setTimeout(()=>{socket.destroy();reject(no());},15000);
+  socket.on('error',()=>{clearTimeout(timer);reject(no());});socket.once('connect',()=>socket.end(body));socket.on('data',b=>{result+=b;if(result.length>128){clearTimeout(timer);socket.destroy();reject(no());}});
+  socket.once('end',()=>{clearTimeout(timer);result==='{"inputAccepted":true}\n'?yes():reject(no());});
+ });}finally{body.fill(0);}
+}
 async function actor(role,root){const v=checkedScope(root);
- if(role==='--caller'){write(root,'caller.ready.json',{pid:process.pid,invocationId:process.env.INVOCATION_ID});launch(v.ownerUnit,'--owner',root);setInterval(()=>{},1000);return;}
+ if(role==='--caller'){if(v.fixedWorker===true)return await fixedWorkerCaller(root,v);write(root,'caller.ready.json',{pid:process.pid,invocationId:process.env.INVOCATION_ID});launch(v.ownerUnit,'--owner',root);setInterval(()=>{},1000);return;}
  if(role!=='--owner')throw no();const identity=inspectContainmentUnit(v.ownerUnit);
  if(Number(identity.MainPID)!==process.pid||identity.InvocationID!==process.env.INVOCATION_ID||identity.ActiveState!=='active')throw no();
  const ready={kind:'SYNTHETIC_DAEMON_OWNER_READY_V1',sourceSha:v.sourceSha,jobId:v.jobId,ownerId:v.ownerId,identity,bootId:readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim()};
@@ -131,6 +167,74 @@ export async function probeIndependentDaemonOwner(mode='caller-loss'){
   if(JSON.stringify(request.rootIdentity)!==JSON.stringify(rootIdentity(root)))throw no();
   if(completed)rmSync(root,{recursive:true,force:true});else process.stderr.write('Synthetic owner probe evidence preserved at '+root+'\n');
   if(!channelClosed)throw no();
+ }
+}
+/** Actual fixed worker under a separate service, launched from the caller.
+ * Original API custody remains in the test parent; this is not parent/VM loss. */
+export async function probeFixedDaemonOwner(mode='complete'){
+ if(!['complete','caller-loss','owner-ack-lost','outcome-ack-lost'].includes(mode)||process.platform!=='linux'||process.getuid()===0)throw no();
+ prepareLocalDockerCommand(['docker','version'],process.env);const sourceSha=source(),jobId=randomUUID(),ownerId=randomUUID();
+ const root=mkdtempSync(join(tmpdir(),'charitypilot-owner-probe-'));chmodSync(root,0o700);
+ process.stderr.write('Fixed worker probe original scope='+root+'\n');
+ const request={kind:'SYNTHETIC_INDEPENDENT_OWNER_PROBE_V1',jobId,ownerId,callerUnit:containmentUnit(jobId),ownerUnit:containmentUnit(ownerId),sourceSha,rootIdentity:rootIdentity(root),fixedWorker:true};
+ const args=independentOwnerProbeArguments(jobId),docker=args=>spawnLocalDockerCommand(['docker',...args],process.env,{encoding:'utf8',timeout:15000,maxBuffer:65536});
+ const inspect=target=>{const r=docker(['inspect',target]);if(r.status!==0){if(ownerProbeInspectAbsent(r,target))return null;throw no();}return JSON.parse(r.stdout)[0];};
+ const exact=v=>{if(!v||v.Name!=='/'+independentOwnerProbeTarget(jobId)||v.Config.Image!==DEFAULT_POSTGRES_IMAGE||v.Config.Labels['io.charitypilot.owner-probe']!==jobId
+  ||v.HostConfig.Privileged||v.HostConfig.NetworkMode!=='none'||v.HostConfig.ReadonlyRootfs!==true||v.Mounts.some(m=>m.Type!=='tmpfs'||m.Destination!=='/var/lib/postgresql/data'))throw no();return v;};
+ let custody,gate,caller,ownerReady,writer,input,container,outcomeStored=false,sourceClosed=false,completed=false,launched=false;
+ try{
+  write(root,'request.json',request);if(loaded(request.callerUnit)!=='not-found'||loaded(request.ownerUnit)!=='not-found')throw no();
+  launched=true;launch(request.callerUnit,'--caller',root);await waitFor(()=>existsSync(join(root,'caller.ready.json')));caller=inspectContainmentUnit(request.callerUnit);
+  const ready=read(root,'caller.ready.json');if(ready.pid!==Number(caller.MainPID)||ready.invocationId!==caller.InvocationID)throw no();
+  const {originalOwnerProbeCustody}=await import('./managed-daemon-owner-custody.fixture.mjs');custody=await originalOwnerProbeCustody(request,caller,args);
+  gate=await createManagedDaemonCustodyChannel({jobId,inputDigest:custody.inputDigest,sourceSha,requireIndependentOwner:true,requireIndependentOutcome:true,
+   onHeader:a=>custody.session.reserveDaemonHeader(a,custody.original),onIntent:a=>custody.session.reserveDaemonIntent(a,custody.original),
+   onOwner:async a=>{const value=JSON.parse(a.body),options={source:caller,sourceSha,ownerInputDigest:hash(JSON.stringify(input)),expectedCommandLine:[process.execPath,ownerWorker,'--stdin']};
+    verifyIndependentDaemonOwner(value,options);ownerReady={identity:inspectContainmentUnit(request.ownerUnit),local:a};
+    const saved=await custody.session.bindDaemonOwner(a,custody.original);verifyIndependentDaemonOwner(value,options);writer=custody.outcomeWriter();
+    if(mode==='owner-ack-lost')void gate.close();return saved;},
+   onOwnerOutcome:async a=>{if(!writer||mode!=='complete'&&!sourceClosed)throw no();const v=JSON.parse(a.body);
+    if(v.status!==0||v.transportError||v.signal||v.stdout.sha256!==hash('SYNTHETIC_OWNER_COMPLETE')||v.stdout.byteLength!==Buffer.byteLength('SYNTHETIC_OWNER_COMPLETE')
+     ||v.stderr.sha256!==hash('')||v.stderr.byteLength!==0)throw no();
+    const saved=await writer.publish(a);outcomeStored=true;if(mode==='outcome-ack-lost')void gate.close();return saved;},
+   onResponse:async()=>{throw no();},onEnd:async()=>{throw no();}});
+  const send=(kind,artifact)=>requestManagedDaemonCustody({kind,artifact,descriptorPath:gate.descriptorPath,jobId,inputDigest:custody.inputDigest,sourceSha});
+  await send('HEADER',custody.header);await send('INTENT',custody.intent);
+  input={format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',jobId,ownerId,sourceSha,inputDigest:custody.inputDigest,descriptorPath:gate.descriptorPath,
+   intent:custody.intent,args,environment:{},timeoutMs:15000,maxBuffer:65536};
+  await deliverFixedWorkerInput(root,input);
+  if(mode==='owner-ack-lost'){
+   await waitFor(()=>existsSync(join(root,'worker.client-terminal.json')));if(!ownerReady||outcomeStored||inspect(independentOwnerProbeTarget(jobId))!==null)throw no();
+   const client=read(root,'worker.client-terminal.json');if(client.code!==1||client.stdoutBytes!==0)throw no();writer.revoke();await custody.inspect(0);
+  }else{
+   container=await waitFor(()=>{const v=inspect(independentOwnerProbeTarget(jobId));return v?.State.Running?exact(v):null;});if(!ownerReady)throw no();
+   if(mode!=='complete'){
+    command('systemctl',['--user','stop',request.callerUnit]);sourceClosed=true;custody.closeSource();
+    if(observeOriginalControlGroup(caller.ControlGroup,caller.Id,process.getuid())==='POPULATED')throw no();
+    const v=inspectContainmentUnit(request.ownerUnit);if(v.InvocationID!==ownerReady.identity.InvocationID||v.MainPID!==ownerReady.identity.MainPID||v.ActiveState!=='active'||!exact(inspect(container.Id)).State.Running)throw no();
+   }
+   await waitFor(()=>outcomeStored);await waitFor(()=>observeOriginalControlGroup(ownerReady.identity.ControlGroup,request.ownerUnit,process.getuid())!=='POPULATED');
+   if(mode==='complete'){
+    await waitFor(()=>existsSync(join(root,'worker.client-terminal.json')));const client=read(root,'worker.client-terminal.json');
+    const expected=JSON.stringify({status:0,transportError:false,signal:false,stdout:'SYNTHETIC_OWNER_COMPLETE',stderr:''})+'\n';
+    if(client.code!==0||client.signal||client.stdoutSha256!==hash(expected)||client.stdoutBytes!==Buffer.byteLength(expected))throw no();
+   }else if(existsSync(join(root,'worker.client-terminal.json')))throw no();
+   await custody.inspect(1);
+  }
+  completed=true;return{kind:'SYNTHETIC_FIXED_OWNER_SERVICE_V1',mode,actualFixedWorker:true,originalOwnerServiceVerified:true,
+   sourceCallerStopped:sourceClosed,sourceContextClosedBeforeOutcome:sourceClosed,ownerOutcomeStored:outcomeStored,privateOutputReturned:mode==='complete',
+   ownerAckLossPreventedDispatch:mode==='owner-ack-lost',outcomeWireAckLost:mode==='outcome-ack-lost',originalAcknowledgementReconstructed:false,
+   productionIntegrated:false,independentProvider:false,sourceParentLossProven:false,sourceHostLossProven:false,pendingRequestResolved:false,cleanupAuthorized:false,actionAuthorized:false};
+ }finally{
+  let closed=true;try{await gate?.close();}catch{closed=false;completed=false;}finally{custody?.close();}
+  if(launched)for(const [unit,expected]of [[request.callerUnit,caller?.InvocationID],[request.ownerUnit,ownerReady?.identity.InvocationID]]){
+   if(loaded(unit)==='loaded'){const v=inspectContainmentUnit(unit);if(!expected||v.InvocationID!==expected)throw no();command('systemctl',['--user','stop',unit]);
+    if(v.ControlGroup&&observeOriginalControlGroup(v.ControlGroup,unit,process.getuid())==='POPULATED')throw no();}
+   const r=spawnSync('systemctl',['--user','reset-failed',unit],{env:safeEnv(),encoding:'utf8',timeout:15000,maxBuffer:4096});if(r.status!==0&&!/not loaded|not found/.test(r.stderr??''))throw no();
+  }
+  if(container){const v=inspect(container.Id);if(v){exact(v);if(docker(['rm','-f',container.Id]).status!==0)throw no();}if(inspect(container.Id)!==null)throw no();}
+  if(JSON.stringify(request.rootIdentity)!==JSON.stringify(rootIdentity(root)))throw no();
+  if(completed)rmSync(root,{recursive:true,force:true});else process.stderr.write('Fixed worker probe evidence preserved at '+root+'\n');if(!closed)throw no();
  }
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{

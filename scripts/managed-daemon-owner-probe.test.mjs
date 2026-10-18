@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {independentOwnerProbeArguments,probeIndependentDaemonOwner,ownerProbeInspectAbsent} from './managed-daemon-owner-probe.mjs';
+import {independentOwnerProbeArguments,probeIndependentDaemonOwner,probeFixedDaemonOwner,ownerProbeInspectAbsent} from './managed-daemon-owner-probe.mjs';
 import {DEFAULT_POSTGRES_IMAGE,PROOF_CLIENT_DATA_TMPFS} from './postgres-backup.mjs';
 test('independent owner acceptance exposes only fixed bounded synthetic Docker workload',()=>{
  const args=independentOwnerProbeArguments(randomUUID());assert.ok(args.includes(DEFAULT_POSTGRES_IMAGE));assert.ok(args.includes(PROOF_CLIENT_DATA_TMPFS));
@@ -52,4 +52,16 @@ test('stored OWNER binding with lost original channel ACK cannot release the ind
  assert.equal(value.ownerBindingStored,true);assert.equal(value.requestDispatched,false);assert.equal(value.originalOwnerAcknowledgementObserved,false);
  assert.equal(value.originalAcknowledgementReconstructed,false);assert.equal(value.pendingRequestResolved,false);assert.equal(value.actionAuthorized,false);
  console.log('ORIGINAL_OWNER_ACK_LOSS='+JSON.stringify(value));
+});
+
+test('actual fixed owner worker preserves custody through caller loss and unknown wire ACKs',{
+ skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_DAEMON_OWNER!=='1',timeout:120000
+},async()=>{
+ for(const mode of ['complete','caller-loss','owner-ack-lost','outcome-ack-lost']){
+  const v=await probeFixedDaemonOwner(mode);assert.equal(v.actualFixedWorker,true);assert.equal(v.originalOwnerServiceVerified,true);
+  assert.equal(v.ownerOutcomeStored,mode!=='owner-ack-lost');assert.equal(v.privateOutputReturned,mode==='complete');
+  assert.equal(v.sourceCallerStopped,['caller-loss','outcome-ack-lost'].includes(mode));
+  for(const key of ['productionIntegrated','independentProvider','sourceParentLossProven','sourceHostLossProven','pendingRequestResolved','cleanupAuthorized','actionAuthorized'])assert.equal(v[key],false);
+  console.log('ACTUAL_FIXED_OWNER_SERVICE='+JSON.stringify(v));
+ }
 });

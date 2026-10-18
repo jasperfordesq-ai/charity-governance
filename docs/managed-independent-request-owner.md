@@ -20,14 +20,33 @@ product worker remains source-disabled: its actual service adapter, exact source
 binding, source-parent-loss outcome transfer and provider/host-loss proof are
 separate unfinished integration gates. Exact execution results are private.
 
-## Inactive fixed worker component
+## Fixed worker service acceptance
 
-The bounded stdin worker and original-intent/argument/storage correlation are
-implemented as a component. Actual identity and CLI execution refuse through a
-source-level gate until ordered OUTCOME transport, exact worker source binding
-and native service acceptance are integrated. This gate has no environment
-override. Tests cover refusal before execution and original-ACK ordering through
-explicit test seams. The existing production dispatch path is unchanged.
+The fixed stdin worker validates original intent/arguments/storage and its actual
+Linux user-service identity. All eleven executor modules, including the worker,
+must match the exact canonical commit. Unbound startup refuses before dispatch.
+Original OWNER ACK precedes execution; original OUTCOME ACK precedes returning
+private output. Broken output pipes cannot trigger a repeated request.
+
+The opt-in native probe launches that actual worker from the source caller using
+a separate transient service. A protected socket forwards bounded input to its
+stdin without a payload file, command-line credential or service environment.
+Only fixed synthetic arguments and an empty credential environment are accepted
+by that test caller. Successful client output is compared by exact hash/count.
+Caller-loss cases stop the original caller group while the owner is executing;
+the remaining parent retains the original outcome through its SDK writer.
+OWNER-ACK loss must prevent dispatch; OUTCOME-ACK loss retains inspectable bytes.
+
+[systemd-run](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)
+documents service-manager ownership and `--pipe` forwarding. The worker service
+uses pipe mode without `RemainAfterExit`; original cgroup observations and
+retained outcome evidence remain distinct from queue finality. Actual native
+results, including any failure, belong in the private checkpoint.
+
+The product source helper still uses its existing dispatch path. The actual
+worker acceptance probe does not connect every product mutation to this owner,
+survive loss of the custody parent, establish provider IAM, or prove host-loss
+recovery. Those remain required integration/acceptance work.
 
 17 October 2026. This is a fixed synthetic acceptance probe for the next managed
 request-owner implementation. It does not change the production imported-proof
