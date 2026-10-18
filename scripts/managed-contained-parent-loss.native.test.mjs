@@ -108,14 +108,18 @@ for(const captureFormat of ['3','5'])test('format '+captureFormat+' real source 
   assert.equal(inspected.daemonRequests.declaredImageVolumesCovered,true);assert.equal(inspected.daemonRequests.completeResourceInventory,false);
   assert.ok(inspected.storage.containers.some(v=>v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));assert.equal(inspected.storage.cleanupAuthorized,false);
   console.log('PASS genuine format '+captureFormat+' source parent SIGKILL: empty original source cgroup, original independent owner/client survive, unresolved request/resources retained, source/control alive, fresh local reader refuses replay/cleanup; fixture teardown uses original ownership only; no provider/host-loss claim');
+ }catch(error){console.error('ORIGINAL_PARENT_TEST_FAILURE='+String(error?.stack??error)+'\nSOURCE_OUTPUT='+output.slice(-4096)+'\nSOURCE_ERRORS='+errors.slice(-1024));throw error;
  }finally{
   if(producer&&producer.exitCode===null&&producer.signalCode===null)producer.kill('SIGKILL');await producerTerminal?.catch(()=>{});
   if(unit){const state=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:10000,maxBuffer:4096});
    if(state.stdout?.trim()==='loaded'){const current=inspectContainmentUnit(unit);if(held)assert.equal(current.InvocationID,held.identity.invocationId);manager(['stop',unit]);}
    else assert.equal(state.stdout?.trim(),'not-found');spawnSync('systemctl',['--user','reset-failed',unit],{stdio:'ignore',timeout:10000});}
-  if(originalOwner){const owner=originalOwner.identity,current=inspectContainmentUnit(owner.unit);
-   assert.equal(current.InvocationID,owner.invocationId);assert.equal(current.ExecMainStartTimestampMonotonic,owner.mainStartMonotonic);
-   if(current.MainPID!=='0'){assert.equal(current.MainPID,String(owner.mainPid));assert.equal(current.ControlGroup,owner.controlGroup);manager(['stop',owner.unit]);}
+  if(originalOwner){const owner=originalOwner.identity;
+   const state=spawnSync('systemctl',['--user','show',owner.unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:10000,maxBuffer:4096});
+   if(state.stdout?.trim()==='loaded'){
+    const current=inspectContainmentUnit(owner.unit);assert.equal(current.InvocationID,owner.invocationId);assert.equal(current.ExecMainStartTimestampMonotonic,owner.mainStartMonotonic);
+    if(current.MainPID!=='0'){assert.equal(current.MainPID,String(owner.mainPid));assert.equal(current.ControlGroup,owner.controlGroup);manager(['stop',owner.unit]);}
+   }else assert.equal(state.stdout?.trim(),'not-found');
    assert.ok(!existsSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs','utf8').trim()==='');
    spawnSync('systemctl',['--user','reset-failed',owner.unit],{stdio:'ignore',timeout:10000});}
   for(const {custody:c,endpoint}of originalCustodies){
