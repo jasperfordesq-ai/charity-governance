@@ -34,7 +34,7 @@ export function validateOutcomeCustodianInput(raw){
   ||!raw.ticket||typeof raw.ticket!=='object'||Array.isArray(raw.ticket)||Buffer.byteLength(JSON.stringify(raw.ticket))>65536
   ||Buffer.byteLength(JSON.stringify(raw))>98304)throw no();endpointShape(raw.endpoint);return structuredClone(raw);
 }
-function actualIdentity(input,inputDigest){
+export function actualOutcomeCustodianIdentity(input,inputDigest){
  if(process.platform!=='linux'||process.getuid()===0)throw no();verifyContainedExecutorSource(input.sourceSha);
  const unit=containmentUnit(input.receiverId),v=inspectContainmentUnit(unit);
  if(v.MainPID!==String(process.pid)||v.InvocationID!==process.env.INVOCATION_ID||v.ActiveState!=='active'||v.SubState!=='running'
@@ -112,7 +112,7 @@ async function acceptSdk(ticket,claim){
 }
 /** Test seams are function arguments only; CLI always uses actual identity and
  * the existing fixed AWS SDK writer, with no endpoint or command selector. */
-export async function runOutcomeCustodian(bytes,{identity=actualIdentity,accept=acceptSdk,onReady}={}){
+export async function runOutcomeCustodian(bytes,{identity=actualOutcomeCustodianIdentity,accept=acceptSdk,onReady}={}){
  let grant,server;
  try{
   if(!Buffer.isBuffer(bytes)||bytes.length<1||bytes.length>98304)throw no();let input,digest;

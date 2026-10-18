@@ -37,7 +37,7 @@ function stopOriginal(receiver,environment){
 /** Called only by the original live context. Claim success is not SDK readiness:
  * no endpoint is returned until its single ready probe and fresh kernel check.
  * No generic executable, provider URL or recovery-ticket path is accepted. */
-export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,transfer,signal}){
+async function launchCustody({jobId,sourceSha,source,transfer,signal},synthetic){
  if(process.platform!=='linux'||process.getuid()===0||signal?.aborted||typeof transfer?.take!=='function'
   ||typeof transfer?.claim!=='function'||typeof transfer?.abandon!=='function')throw no();
  verifyContainedExecutorSource(sourceSha);
@@ -46,7 +46,7 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
  requireAbsent(unit,environment);
  let endpoint,channel,prepared,child,receiver,terminal,ended=false,failed=false,closing,cleanupPhase;
  const check=()=>{if(signal?.aborted||failed||ended)throw no();};
- const options={jobId,sourceSha,receiverId,source};
+ const options={jobId,sourceSha,receiverId,source,...(synthetic?{synthetic:true}:{})};
  const verify=value=>{const checked=verifyOutcomeCustodyReceiver(value,options);receiver=structuredClone(value);return checked;};
  const close=async()=>{
   let error=false;try{await channel?.close();}catch{error=true;cleanupPhase='claim-channel';}
@@ -61,6 +61,10 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
   channel=await createOriginalOutcomeClaimChannel({jobId,sourceSha,receiverId,ticketDigest,transfer,verifyReceiver:verify});
   prepared=prepareOutcomeCustodyLaunch({format:1,kind:'MANAGED_OUTCOME_CUSTODIAN_INPUT_V1',jobId,receiverId,sourceSha,
    claim:channel.binding(),endpoint:endpoint.binding(),ticket},environment);
+  if(synthetic){
+   prepared.input.fill(0);prepared.input=Buffer.from(JSON.stringify({input:{format:1,kind:'MANAGED_OUTCOME_CUSTODIAN_INPUT_V1',jobId,receiverId,sourceSha,claim:channel.binding(),endpoint:endpoint.binding(),ticket},synthetic}));
+   if(prepared.input.length>131072)throw no();prepared.args[prepared.args.length-2]=fileURLToPath(new URL('./managed-outcome-custodian.fixture.mjs',import.meta.url));
+  }
   options.inputDigest=hash(prepared.input);channel.bindInputDigest(options.inputDigest);check();
   child=spawn('systemd-run',prepared.args,{env:prepared.environment,stdio:['pipe','pipe','pipe']});
   terminal=new Promise((yes,reject)=>{child.once('error',()=>{failed=true;ended=true;reject(no());});child.once('close',(code,signal)=>{
@@ -80,4 +84,12 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
     return requestOutcomeCustody({endpoint:endpoint.binding(),receiver,artifact});},close:closeOnce});
  }catch{try{transfer.abandon();}catch{}try{await closeOnce();}catch{}const error=no();error.custodyDiagnostic={receiverVerified:!!receiver,cleanupPhase:cleanupPhase??null,unit};throw error;}
  finally{prepared?.input.fill(0);}
+}
+
+/** Production entry always uses the fixed SDK receiver. No selector in input. */
+export function launchOriginalOutcomeCustody(options){return launchCustody(options);}
+/** Internal source-fixture seam only; no CLI or environment activation. The
+ * synthetic adapter is fixed, source-pinned and verified as a different command. */
+export function launchSyntheticOutcomeCustodyFixture(options,synthetic){
+ if(!synthetic||typeof synthetic!=='object')throw no();return launchCustody(options,synthetic);
 }

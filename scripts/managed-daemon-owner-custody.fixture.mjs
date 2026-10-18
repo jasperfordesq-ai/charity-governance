@@ -7,8 +7,8 @@ import {DEFAULT_POSTGRES_IMAGE,planManagedProofStorage} from './postgres-backup.
 import {GetObjectCommand} from '@aws-sdk/client-s3';
 import {daemonOwnerCustodyScope} from '../apps/api/dist/services/managed-daemon-intent-custody.js';
 const hash=v=>createHash('sha256').update(v).digest('hex');
-export async function originalOwnerProbeCustody(request,source,args){
- const b=backend(),client=b.s3(),artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
+export async function originalOwnerProbeCustody(request,source,args,b=backend()){
+ const client=b.s3(),artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
  const binding={format:3,kind:'MANAGED_QUARANTINED_COMMON_CAPTURE_V3',installationId:config.installationId,sourceSha:request.sourceSha,maintenanceEpoch:1,
   candidateId:randomUUID(),attemptId:randomUUID(),controlRevision:'1'.repeat(64),captureConfigurationDigest:'2'.repeat(64),metadataWindowConfigurationDigest:'3'.repeat(64),
   journalConfigurationDigest:'4'.repeat(64),archiveConfigurationDigest:'5'.repeat(64),planDigest:'6'.repeat(64)};
@@ -29,7 +29,7 @@ export async function originalOwnerProbeCustody(request,source,args){
   const header=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId:request.jobId,inputDigest,image:DEFAULT_POSTGRES_IMAGE,imageVolumeTargets:['/var/lib/postgresql/data']});
   const intent=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:request.jobId,sequence:1,previousDigest:header.sha256,
    operation:'run',target:args[args.indexOf('--name')+1],storagePlan:planManagedProofStorage(args,request.jobId),argumentsDigest:hash('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+request.jobId+'\n'+JSON.stringify(args))});
-  return{header,intent,inputDigest,artifact,session,original,
+  return{header,intent,inputDigest,artifact,session,original,binding,
    outcomeWriter:()=>session.createDaemonOwnerOutcomeWriter(original),outcomeTransfer:()=>session.createDaemonOwnerOutcomeTransfer(original),closeSource(){live=false;session.closeExecution();},writes:()=>b.writes,
    loseOutcomeAck(value){loseOutcomeAck=value;},
    outcome:(owner,reply)=>artifact({format:1,kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId:request.jobId,sequence:1,

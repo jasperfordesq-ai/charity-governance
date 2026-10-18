@@ -138,3 +138,17 @@ dispatch. The new service uses `--collect`; cleanup observes exact original unit
 absence across collection races without adopting a recovered identity. Earlier
 failed runs and the repair are retained privately. This is a negative live
 handshake proof, not successful SDK activation or original-issuer-death proof.
+
+## 18 October: positive outcome-transfer native fixture
+
+A separate source-pinned synthetic SDK receiver fixture and opt-in native test
+now exercise the intended positive original-issuer handoff. The production
+launcher keeps its fixed SDK entry; no input or environment selector enables the
+fixture. The internal fixture binds its whole private stdin digest to actual
+kernel verification. The native test launches original issuer and owner actors,
+uses a separate synthetic storage keeper, kills the original issuer after SDK
+readiness, and checks one receiver outcome plus read-only cold discovery.
+Canonical executor verification pins fifteen modules. Exact execution results
+and limitations belong to the private checkpoint; test source alone is not proof.
+Default source integration, actual provider authority and physical-host-loss
+acceptance remain unfinished. The fixture dispatches no real daemon request.

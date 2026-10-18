@@ -92,7 +92,7 @@ export function assertOutcomeCustodyObservation(receiver,options,actual){
 }
 export function verifyOutcomeCustodyReceiver(receiver,options){
  if(process.platform!=='linux'||process.getuid()===0)throw failure();
- const entry=fileURLToPath(new URL('./managed-outcome-custodian.mjs',import.meta.url));
+ const entry=fileURLToPath(new URL(options.synthetic===true?'./managed-outcome-custodian.fixture.mjs':'./managed-outcome-custodian.mjs',import.meta.url));
  const expected=[process.execPath,entry,'--stdin'];
  const parsed=validateOutcomeReceiverMetadata(receiver,options.jobId,options.sourceSha,options.receiverId,options.inputDigest);
  const bound={...options,expectedCommandLine:expected};return assertOutcomeCustodyObservation(parsed,bound,observeIndependentProcess(custodyKernelValue(parsed),bound));
