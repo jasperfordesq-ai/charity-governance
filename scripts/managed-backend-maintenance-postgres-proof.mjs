@@ -224,7 +224,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   if(scenario==='s3-post-stale-gateway')s3Current.mode.stalePostGateway=true;
   const readRoleFixture=['read-role-success','retired-control-success'].includes(scenario)?await createReadRoleSnapshotFixture({admin,url,operation,scope:actualStorage.candidateCaptureScope(),
    ...(scenario==='retired-control-success'?{retiredControl:{credential:controlCredential,isPresent:()=>controlKeyPresent,events}}:{})}):undefined;
-  const retirementFor=control=>readRoleFixture?.comparison?new ManagedCaptureControlRetirement(storage,credentials,control,store,sdk,readRoleFixture.comparison):undefined;
+  const retirementFor=control=>readRoleFixture?.comparison?new ManagedCaptureControlRetirement(storage,control,store,credentials,sdk,readRoleFixture.comparison):undefined;
   const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,actualStorage,newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile,retirementFor(actualStorage));
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
