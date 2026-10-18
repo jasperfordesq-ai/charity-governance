@@ -15,12 +15,12 @@ function docker(args,input){const p=prepareLocalDockerCommand(['docker',...args]
 function manager(args){const r=spawnSync('systemctl',['--user',...args],{encoding:'utf8',timeout:15000,maxBuffer:4096});assert.equal(r.status,0,'Synthetic manager operation refused');return r.stdout;}
 async function until(fn){for(let i=0;i<100;i++){const value=await fn();if(value)return value;await pause(100);}throw new Error('Synthetic original source observation expired');}
 function protectedRemove(path,prefix){if(!existsSync(path))return;assert.equal(dirname(path),resolve(tmpdir()));assert.ok(basename(path).startsWith(prefix));assert.equal(realpathSync(path),path);assert.equal(lstatSync(path).uid,process.getuid());assert.equal(lstatSync(path).mode&0o777,0o700);rmSync(path,{recursive:true,force:true});}
-test('real source caller loss stops contained worker and exact daemon clients while fresh local reader and separate job survive',{
+test('real source caller loss stops its cohort while the original independent request owner and unresolved quarantine survive',{
  skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_CONTAINED_PARENT!=='1',timeout:120000
 },async()=>{
  assert.notEqual(process.getuid(),0);const helper=captureHelperImplementationBinding();assert.equal(helper.sourceMatchesCommit,true);assert.equal(helper.canonicalRepositoryMatched,true);
  const root=mkdtempSync(join(tmpdir(),'charitypilot-parent-observer-'));chmodSync(root,0o700);
- let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,verifiedSource,channelRoot,originalGroup,daemonGateBinding,output='',errors='';const observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
+ let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,originalOwner,verifiedSource,channelRoot,originalGroup,daemonGateBinding,output='',errors='';const observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
  const saveOwnership=(name,value)=>{writeFileSync(join(root,name),JSON.stringify(value),{flag:'wx',mode:0o600});const fd=openSync(join(root,name),'r');try{fsyncSync(fd);}finally{closeSync(fd);}const dir=openSync(root,'r');try{fsyncSync(dir);}finally{closeSync(dir);}};
  try{
   const otherJob=randomUUID(),controlName=`charitypilot-isolated-restore-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
@@ -33,6 +33,7 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['NODE_TEST_CONTEXT','NODE_OPTIONS','NODE_PATH'].includes(key)));
   producer=fork(fileURLToPath(new URL('./managed-database-writer-fence-postgres.test.mjs',import.meta.url)),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE:'1'},stdio:['ignore','pipe','pipe','ipc']});
   producer.stdout.on('data',b=>{output+=b.toString();if(output.length>65536)producer.kill('SIGKILL');});producer.stderr.on('data',b=>{errors+=b.toString();if(errors.length>65536)producer.kill('SIGKILL');});
+  producer.on('message',value=>{if(value?.kind==='ORIGINAL_CONTAINED_OWNER_READY_V1'&&!originalOwner)originalOwner=value.owner;});
   producerTerminal=new Promise((yes,no)=>{producer.once('error',no);producer.once('close',(code,signal)=>yes({code,signal}));});void producerTerminal.catch(()=>{});
   ready=await new Promise((yes,no)=>{const timer=setTimeout(()=>no(new Error('Original source barrier missing: '+output.slice(-2000))),30000);
    producer.once('message',value=>{clearTimeout(timer);yes(value);});producer.once('exit',()=>{clearTimeout(timer);no(new Error('Original source exited before barrier: '+output.slice(-2000)));});});
@@ -69,6 +70,10 @@ test('real source caller loss stops contained worker and exact daemon clients wh
    lastWaiterCount=Number(waiting);return rows.length>0&&lastWaiterCount>0;
   });}catch(error){throw new Error('Original work observation failed: clients='+lastClientCount+' waiters='+lastWaiterCount+'; '+error.message+'; '+output.slice(-4096)+' '+errors.slice(-1024));}
   const live=inspectContainmentUnit(unit);assert.equal(live.InvocationID,held.identity.invocationId);assert.notEqual(Number(live.MainPID),producer.pid);
+  assert.equal(originalOwner?.jobId,ready.jobId);assert.equal(originalOwner.sequence,1);const owner=originalOwner.identity;
+  assert.equal(owner.sourceSha,helper.commitSha);assert.notEqual(owner.unit,unit);assert.notEqual(owner.controlGroup,originalGroup);
+  const liveOwner=inspectContainmentUnit(owner.unit);assert.equal(liveOwner.InvocationID,owner.invocationId);assert.equal(liveOwner.MainPID,String(owner.mainPid));assert.equal(liveOwner.ActiveState,'active');
+  saveOwnership('original-owner.json',originalOwner);
   const storage=inspectOriginalProofStorage({root:ready.workspaceRoot,jobId:ready.jobId,inputDigest:ready.identity.inputDigest});
   assert.ok(storage.containers.some(v=>observedClientIds.includes(v.id)&&v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));
   assert.equal(storage.completeResourceInventory,false);assert.ok(storage.volumes.every(v=>v.cleanupAuthorized===false));
@@ -80,7 +85,9 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   const terminal=await until(()=>{try{const value=inspectContainmentUnit(unit);return value.MainPID==='0'&&value.ActiveState==='failed'?value:null;}catch{return null;}});
   assert.equal(terminal.InvocationID,held.identity.invocationId);assert.equal(terminal.ExecMainStartTimestampMonotonic,held.identity.mainStartMonotonic);
   assert.ok(!existsSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs','utf8').trim()==='');
-  assert.equal(docker(['ps','-a','--no-trunc','--filter','label=charitypilot.restore-proof=true','--filter','label=charitypilot.managed-proof-job='+ready.jobId,'--format','{{.ID}}']),'');
+  const survivingOwner=inspectContainmentUnit(owner.unit);assert.equal(survivingOwner.InvocationID,owner.invocationId);assert.equal(survivingOwner.MainPID,String(owner.mainPid));assert.equal(survivingOwner.ActiveState,'active');
+  const retained=docker(['ps','-a','--no-trunc','--filter','label=charitypilot.restore-proof=true','--filter','label=charitypilot.managed-proof-job='+ready.jobId,'--format','{{.ID}}']).split(/\r?\n/);
+  assert.ok(observedClientIds.every(id=>retained.includes(id)));assert.ok(retained.length>0);
   assert.equal(docker(['inspect','--format','{{.State.Running}}',ready.sourceId]),'true');assert.equal(docker(['inspect','--format','{{.State.Running}}',control]),'true');
   const after=inspectProofContainerInventory({jobId:otherJob});assert.equal(after.containers.length,1);assert.equal(after.containers[0].id,control);assert.equal(after.containers[0].running,true);assert.equal(after.completeResourceInventory,false);assert.equal(after.executionAuthorized,false);
   const code=`import {openManagedCaptureWorkspace} from './scripts/managed-capture-workspace.mjs';import {inspectManagedProofJob} from './scripts/managed-proof-job.mjs';import {inspectOriginalProofCohort} from './scripts/managed-proof-orphan.mjs';let input='';for await(const b of process.stdin)input+=b;const v=JSON.parse(input),w=await openManagedCaptureWorkspace(v.parentDirectory,v.workspaceRoot);try{const r=await inspectManagedProofJob(w,{requestPin:v.requestPin,expectedScope:v.scope,servicePin:v.servicePin});let denied=false;try{await w.createCiphertextDestination('replay-refused.json');}catch{denied=true;}process.stdout.write(JSON.stringify({...r,cohort:inspectOriginalProofCohort(r.serviceIdentity),replayWriteRefused:denied}));}finally{await w.close();}`;
@@ -92,13 +99,18 @@ test('real source caller loss stops contained worker and exact daemon clients wh
   const inspected=JSON.parse(operator.stdout);assert.equal(inspected.cohort.state,'ORIGINAL_COHORT_EMPTY');assert.equal(inspected.cleanupAuthorized,false);assert.equal(inspected.executionAuthorized,false);
   assert.equal(inspected.daemonRequests.state,'UNRESOLVED_REQUESTS');assert.equal(inspected.daemonRequests.mutatingRequestsObservedSuccessful,false);assert.ok(inspected.daemonRequests.requestCount>=1);
   assert.equal(inspected.daemonRequests.declaredImageVolumesCovered,true);assert.equal(inspected.daemonRequests.completeResourceInventory,false);
-  assert.ok(inspected.storage.containers.some(v=>v.state==='NOT_LISTED_AT_BOUNDARY'));assert.equal(inspected.storage.cleanupAuthorized,false);
-  console.log('PASS genuine source parent SIGKILL: original service ACK, observed blocked TLS SQL/client, empty original cgroup, exact client cleanup, original source/control alive, fresh process local pins read-only; no provider/host-loss claim');
+  assert.ok(inspected.storage.containers.some(v=>v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));assert.equal(inspected.storage.cleanupAuthorized,false);
+  console.log('PASS genuine source parent SIGKILL: empty original source cgroup, original independent owner/client survive, unresolved request/resources retained, source/control alive, fresh local reader refuses replay/cleanup; fixture teardown uses original ownership only; no provider/host-loss claim');
  }finally{
   if(producer&&producer.exitCode===null&&producer.signalCode===null)producer.kill('SIGKILL');await producerTerminal?.catch(()=>{});
   if(unit){const state=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:10000,maxBuffer:4096});
    if(state.stdout?.trim()==='loaded'){const current=inspectContainmentUnit(unit);if(held)assert.equal(current.InvocationID,held.identity.invocationId);manager(['stop',unit]);}
    else assert.equal(state.stdout?.trim(),'not-found');spawnSync('systemctl',['--user','reset-failed',unit],{stdio:'ignore',timeout:10000});}
+  if(originalOwner){const owner=originalOwner.identity,current=inspectContainmentUnit(owner.unit);
+   assert.equal(current.InvocationID,owner.invocationId);assert.equal(current.ExecMainStartTimestampMonotonic,owner.mainStartMonotonic);
+   if(current.MainPID!=='0'){assert.equal(current.MainPID,String(owner.mainPid));assert.equal(current.ControlGroup,owner.controlGroup);manager(['stop',owner.unit]);}
+   assert.ok(!existsSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs','utf8').trim()==='');
+   spawnSync('systemctl',['--user','reset-failed',owner.unit],{stdio:'ignore',timeout:10000});}
   for(const id of observedClientIds){const listed=docker(['ps','-a','--no-trunc','--filter','id='+id,'--format','{{.ID}}']);if(listed)docker(['rm','--force',id]);}
   if(channelRoot){assert.ok(!existsSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs','utf8').trim()==='');protectedRemove(channelRoot,'charitypilot-managed-channel-');}
   if(daemonGateBinding&&existsSync(dirname(daemonGateBinding.descriptorPath))){const path=dirname(daemonGateBinding.descriptorPath),s=requireDaemonGateDirectory(path);

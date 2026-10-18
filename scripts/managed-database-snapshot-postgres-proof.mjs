@@ -45,6 +45,10 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeWriter','observeDaemonResponse','finishDaemonRequests'].map(name=>[name,async artifact=>{
    if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ENTER');
    const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');
+   if(name==='bindDaemonOwner'&&process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE==='1'){
+    assert.equal(typeof process.send,'function');assert.equal(process.connected,true);
+    await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_OWNER_READY_V1',owner:JSON.parse(artifact.body)},error=>error?no(error):yes()));
+   }
    if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal});
    return saved;
   }])));
