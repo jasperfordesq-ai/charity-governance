@@ -1,3 +1,15 @@
+## 18 October: current managed provider configuration compiler
+
+A pure stdin-only compiler now joins the V2 mesh, exact reviewed image metadata,
+current build/runtime capability flags, four-service maintenance registry and
+four-key recovery requirements. It preserves compiled startup loaders and emits
+secret requirements without secret values. Tests use the actual gateway/web
+binding parsers and build-pin helpers; the generated synthetic Blueprint passed
+Render's current schema offline. Read [the operator gates](managed-provider-plan.md).
+Actual provider identities, image provenance, secret/control-plane custody,
+database compatibility, bootstrap and physical-host recovery remain unproved.
+No provisioning, purchase, grant, deployment or tenant action is authorised by
+this artifact. Source and evidence details remain in the private checkpoint.
 ## 18 October: operator-facing read-only database compatibility job
 
 The compiled API now provides `jobs:preflight-managed-database` with bounded
