@@ -59,7 +59,8 @@ and suspension. Public HTTP health proves only an inert placeholder is running.
 
 ## Required before real use
 
-This is not yet a supported provisioning executor. No creation, spending, terms,
+An explicit creation executor is available below. It is not complete managed
+provisioning or activation. No creation, spending, terms,
 registry publication/access grant, real data or application secret upload is
 authorised by a compiled artifact. The operator must first review the actual
 account, plan, isolated environment, image custody and approved activation scope.
@@ -74,11 +75,78 @@ Then build the final mesh/TLS images and use the existing provider readback and
 database compatibility procedures. Initial placeholder health is not release,
 maintenance, recovery or whole-backend acceptance.
 
+## Explicit creation and original receipts
+
+After actual account, plan, image access/provenance and activation approval,
+review the compiler's four complete request bodies and obtain their digest:
+
+```sh
+node scripts/execute-managed-bootstrap.mjs --review < /protected/operator/bootstrap-review.json
+```
+
+This reads the same configuration as the compiler and emits `expectedPlanSha256`
+and the exact confirmation phrase. It verifies no human review or authority.
+The digest covers the entire deterministic plan, including the image digest,
+four requests, source, bootstrap UUID and expiry. A later image/configuration
+change requires a new review. An expired binding must not be extended by editing
+its runtime environment; its immutable image pin would no longer match.
+
+The execution command is Linux/non-root only. Its existing absolute state parent
+must be owned by the operator, mode0700, without symlinks and outside the checkout:
+
+```sh
+node scripts/execute-managed-bootstrap.mjs --execute /protected/operator/provisioning < /protected/operator/bootstrap-execution.json
+```
+
+Execution input is bounded16KiB UTF-8, with exactly `format: 1`, `configuration`,
+`expectedPlanSha256`, `token` and `confirmation`. Configuration is the exact
+reviewed bootstrap input. Token is an existing, separately authorised Render
+credential; never place it in arguments, tracked files or logs. The literal
+confirmation is a consistency guard, not evidence of spending/legal/access
+approval. The CLI has no endpoint, transport, timeout, retry or adoption override.
+
+The executor exclusively creates a new UUID operation directory. Existing
+directories, even empty ones, refuse. Original parent/directory descriptors and
+identities remain checked. New records use exclusive/no-follow mode0600 writes,
+file and directory fsync and final named-file identity checks. It saves the
+non-secret configuration/plan digest and an intent before each of at most four
+fixed-origin POSTs. Requests are sequential, redirect/retry-free, at most5seconds
+each and90seconds total; expiry/cancellation is checked before dispatch. Response
+bodies are bounded64KiB with strict UTF-8. Late/stalled bodies are cancelled.
+
+Each matching201 service/deployment response is recorded before the next POST.
+Receipts retain only valid returned IDs, role, plan digest, time and match result;
+they omit raw responses, deploy hooks, API tokens and error bodies. Matching
+requires expected owner, environment, name, type, image, region, plan and instance
+count, with unique returned service/deployment IDs. A received mismatching identity
+is recorded as unverified, never as a resource-adoption or cleanup grant.
+
+Any HTTP/body/identity, deadline, cancellation or receipt-write/acknowledgement
+problem stops creation. A saved intent is conservatively unresolved even when
+failure might have preceded dispatch. No POST is retried, no operation is resumed,
+and no resource is automatically suspended or deleted. A delivered response can
+be retained after expiry, but cannot authorise another dispatch. Completion
+reports only original creation responses recorded; application readiness, actual
+provider compatibility and cleanup authority remain false.
+
+Preserve partial journals and reconcile with the provider/account owner. Never
+choose a new state root or UUID to bypass an uncertain prior creation. This local
+operation fence cannot exclude other operators/controllers or survive physical
+host loss as independent custody. Recovered journal bytes do not reconstruct a
+lost execution acknowledgement or authorise further creation. Separate exact-ID
+readback and approved suspension/final configuration remain required.
+
 ## Verification
 
 `node --test scripts/managed-bootstrap.test.mjs` exercises binding substitution,
 expiry, credential/preload refusal, compiler requests, bounded CLI and real local
 HTTP responses. The production-check test entry includes these tests.
+
+`node --test scripts/execute-managed-bootstrap.test.mjs` additionally tests
+modelled provider responses, original-intent/response ordering, lost acknowledgements,
+substitution, expiry, cancellation and timeout/body limits. Linux runs also exercise
+actual protected files, reuse/symlink/permission refusals and a genuine caller
+SIGKILL after a durable synthetic intent. No real cloud request occurs in tests.
 
 The explicit native fixture runs only in a clean canonical Linux checkout as a
 non-root operator, with the verified local Unix Docker daemon:

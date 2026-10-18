@@ -1,3 +1,13 @@
+## 18 October: explicit managed bootstrap creation with original receipts
+
+A bounded creation executor now fences a reviewed bootstrap plan with an exclusive
+protected local operation journal. Each durable intent precedes one fixed-origin
+POST; a matching original response is recorded before the next role. Unknown
+transport or receipt acknowledgements stop without retry, adoption or cleanup.
+Read [the creation contract](managed-identity-bootstrap.md#explicit-creation-and-original-receipts).
+Its review phrase is not spending/legal/access approval. Tests use synthetic
+provider transport; actual provider creation/configuration, private DNS, independent
+custody and physical-host-loss acceptance remain open. Native results are private.
 ## 18 October: inert initial managed-service identity bootstrap
 
 A separate expiring synthetic bootstrap image and pure request compiler address
