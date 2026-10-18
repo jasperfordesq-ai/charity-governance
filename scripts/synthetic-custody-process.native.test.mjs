@@ -50,9 +50,10 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
   assert.equal((await readerTerminal).code,0,readLog().slice(-4000));assert.equal(reportCount,1);assert.equal(result.kind,'SYNTHETIC_COLD_CUSTODY_READER_V1');assert.ok(result.verifiedRoots>=1);assert.ok(result.killedSourceServiceRecords>=1);assert.equal(result.suppliedSourceIdsOrPins,false);assert.equal(result.executionAuthorized,false);
   console.log('CURRENT_INSPECTION_COUNTS='+JSON.stringify({inspected:result.currentInspections,verifiedRoots:result.currentVerifiedRoots,unresolved:result.currentUnresolved}));
-  // Ten normal ACK-fault cases plus the original current control retained by
-  // the genuinely killed caller. That eleventh attempt must remain unresolved.
-  assert.equal(result.currentInspections,11);assert.equal(result.currentVerifiedRoots,2);assert.equal(result.currentUnresolved,9);
+  // Ten legacy and five read-role ACK-fault cases plus the original control retained by
+  // the genuinely killed caller. The killed attempt remains unresolved.
+  assert.equal(result.currentInspections,16);assert.equal(result.currentVerifiedRoots,4);assert.equal(result.currentUnresolved,12);
+  assert.equal(result.readRoleCurrentInspections,5);assert.equal(result.readRoleCurrentVerifiedRoots,2);assert.equal(result.readRoleCurrentUnresolved,3);
    assert.ok(result.daemonCatalogues>=2);assert.ok(result.daemonCompleted>=2);assert.ok(result.daemonUnresolved>=1);
    assert.equal(result.daemonCatalogues,result.daemonCompleted+result.daemonUnresolved);
    console.log('COLD_DAEMON_DISCOVERY_COUNTS='+JSON.stringify({catalogues:result.daemonCatalogues,completed:result.daemonCompleted,unresolved:result.daemonUnresolved}));
