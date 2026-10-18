@@ -1,3 +1,19 @@
+## 18 October: bounded custody native failure acceptance passed
+
+The actual service cohort passed consumed original claim/unknown ACK, original
+120-second expiry without clock mocking, and preservation of a second custody
+job. Lost claim ACK yields no SDK-ready handoff or post-claim provider reads or
+writes. Expired authority cannot publish an outcome. The second job retains its
+distinct issuer, receiver, candidate and storage state when the first issuer is
+killed, then publishes its own single outcome successfully. Existing successful,
+accepted-write/unknown-readback-ACK and receiver-death cases also passed.
+
+This closes those native synthetic custody cases, not real provider IAM/current
+authority or physical-host-loss acceptance. The fixed test owner dispatches no
+Docker request; the full integrated source/SQL native evidence is separate.
+Exact source, test durations, CI, deployment and retained uncertainty are recorded
+in the private checkpoint. Cold readers gain no retry, cleanup or reopening.
+
 ## 18 October: retained outcome source path verified natively
 
 Kernel-contained common-candidate execution now requires the explicit retained
