@@ -2,10 +2,17 @@ import {readFileSync} from 'node:fs';
 import {dirname,basename} from 'node:path';
 import {createHash} from 'node:crypto';
 const refuse=()=>new Error('Synthetic contained parent barrier refused');
+export function containedParentBarrierRequested(maintenanceEpoch){
+ const legacy=process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE,epoch=process.env.CHARITYPILOT_TEST_EPOCH_PARENT_FIXTURE;
+ if(legacy!==undefined&&legacy!=='1'||epoch!==undefined&&epoch!=='1'||legacy&&epoch)throw refuse();
+ if(epoch){if(![1,2].includes(maintenanceEpoch))throw refuse();return maintenanceEpoch===2;}
+ return legacy==='1';
+}
 /** Source fixture only. The surviving test driver receives original pins before
  * it kills its owned producer; this creates no production execution lease. */
-export async function pauseContainedSourceForParentLoss({sourceId,database,certificate,parentDirectory,workspaceRoot,signal,candidateFormat}){
- if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!=='1')return;
+export async function pauseContainedSourceForParentLoss({sourceId,database,certificate,parentDirectory,workspaceRoot,signal,candidateFormat,maintenanceEpoch}){
+ if(!containedParentBarrierRequested(maintenanceEpoch))return;
+ if(process.env.CHARITYPILOT_TEST_EPOCH_PARENT_FIXTURE==='1'&&candidateFormat!==5)throw refuse();
  if(![3,5].includes(candidateFormat)||process.platform!=='linux'||process.getuid()===0||typeof process.send!=='function'||!process.connected
   ||!/^managed_writer_[a-f0-9]{32}$/.test(database)||!/^[a-f0-9]{64}$/.test(sourceId)
   ||!/^charitypilot-imported-proof-[A-Za-z0-9]{6}$/.test(basename(parentDirectory))||dirname(workspaceRoot)!==parentDirectory)throw refuse();
@@ -20,7 +27,7 @@ export async function pauseContainedSourceForParentLoss({sourceId,database,certi
   process.on('message',stop);process.once('disconnect',disconnected);signal.addEventListener('abort',aborted,{once:true});timer=setTimeout(fail,10000);
  });void release.catch(()=>{});
  try{
-  await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_SOURCE_READY_V1',candidateFormat,jobId:original.jobId,sourceSha:original.sourceSha,
+  await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_SOURCE_READY_V1',candidateFormat,...(process.env.CHARITYPILOT_TEST_EPOCH_PARENT_FIXTURE==='1'?{maintenanceEpoch:2}:{}),jobId:original.jobId,sourceSha:original.sourceSha,
    sourceId,database,certificate,parentDirectory,workspaceRoot,scope:original.scope,requestPin:service.requestPin,
    servicePin:{sha256:createHash('sha256').update(bytes).digest('hex'),byteLength:bytes.length},identity:service.identity,
    executionAuthorized:false,actionAuthorized:false},error=>error?no(refuse()):yes()));

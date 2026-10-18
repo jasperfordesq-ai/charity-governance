@@ -102,6 +102,13 @@ export async function proveManagedEpochLifecycle(args){
   else console.log('PASS two native epochs: shared original SDK custody, original publication ACKs exported before cold recovery; no production reopening');
  }finally{custody.close();}
 }
+async function verifySyntheticHistoricalEpoch1(observed,reader,journal,archive){
+ const first=observed.latest.sequence===1?observed.latest:managedRecoveryEpochSchemas.entry.parse(JSON.parse((await reader.readEntry(1,JSON.parse(observed.latest.previousHead.body).entryPin,new AbortController().signal)).artifact.body));
+ assert.equal(first.sequence,1);assert.equal(first.plan.maintenanceEpoch,1);
+ const prior=await journal.discoverCandidates({attemptId:first.closedControl.value.attemptId,planDigest:first.closedControl.value.planDigest,sourceSha:first.plan.sourceSha,maintenanceEpoch:1,controlRevision:first.closedControl.revision});
+ assert.equal(prior.records.length,1);const verified=await journal.verifyDiscoveredCommonRoot(prior.records[0].binding,archive);
+ assert.equal(verified.root.restoreMode,'QUARANTINE_ONLY');assert.equal(verified.originalAcknowledgementReconstructed,false);assert.equal(verified.actionAuthorized,false);
+}
 /** Inspect surviving bytes after an original publication response was lost.
  * Readback may verify history, but cannot create the missing original receipt. */
 export async function inspectSyntheticEpochLossRecovery(descriptor,path,mode){
@@ -128,14 +135,28 @@ export async function inspectSyntheticEpochLossRecovery(descriptor,path,mode){
   }else await assert.rejects(journal.inspectAnchoredCurrentRecovery(catalogue,control,archive));
   // The verified closed-epoch chain supplies historical discovery context;
   // no candidate ID or archive pin arrives from the source process.
-  const first=observed.latest.sequence===1?observed.latest:managedRecoveryEpochSchemas.entry.parse(JSON.parse((await reader.readEntry(1,JSON.parse(observed.latest.previousHead.body).entryPin,new AbortController().signal)).artifact.body));
-  assert.equal(first.sequence,1);assert.equal(first.plan.maintenanceEpoch,1);
-  const prior=await journal.discoverCandidates({attemptId:first.closedControl.value.attemptId,planDigest:first.closedControl.value.planDigest,sourceSha:first.plan.sourceSha,maintenanceEpoch:1,controlRevision:first.closedControl.revision});
-  assert.equal(prior.records.length,1);const verified=await journal.verifyDiscoveredCommonRoot(prior.records[0].binding,archive);
-  assert.equal(verified.root.restoreMode,'QUARANTINE_ONLY');assert.equal(verified.originalAcknowledgementReconstructed,false);assert.equal(verified.actionAuthorized,false);
+  await verifySyntheticHistoricalEpoch1(observed,reader,journal,archive);
   assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
   return{entries:observed.entryCount,checkpointSequence:1,savedEntry2Visible:true,head2Published:headPublished,verifiedHistoricalRoots:1,currentControlMismatchRefused:!headPublished,
    originalPublicationUnresolved:true,originalAcknowledgementReconstructed:false,executionAuthorized:false,sourceHostLossProven:false};
+ }finally{clients.s3.destroy();clients.kms.destroy();}
+}
+/** Recovery after the original epoch-2 caller was genuinely killed. Current
+ * recovery must stay unresolved; an earlier root is historical, not a fallback. */
+export async function inspectSyntheticEpochCallerLossRecovery(descriptor,path){
+ const bootstrap=readSyntheticEpochBootstrap(path);assert.equal(bootstrap.trustedCheckpoint.sequence,2);
+ const b=connectSyntheticCustody(descriptor,bootstrap.sessionId,bootstrap.archiveConfiguration),before={writes:b.writes,generates:b.generates},clients={s3:b.s3(),kms:b.kms()};
+ try{
+  const s=storage(bootstrap.archiveConfiguration),reader=new S3ManagedRecoveryEpochReader(s,credentials,clients.s3),catalogue=new ManagedRecoveryEpochCatalogue(epochCatalogueConfiguration(bootstrap),reader),journal=new ManagedCandidateCaptureJournal(s,credentials,clients.s3),archive=new ArchivedRecoverySets(bootstrap.archiveConfiguration,credentials,clients);
+  const observed=await journal.inspectAnchoredCurrentRecovery(catalogue,new S3ManagedMaintenanceControl(s,credentials,clients.s3),archive);
+  assert.equal(observed.epochCatalogue.entryCount,2);assert.equal(observed.bootstrap.plan.maintenanceEpoch,2);assert.equal(observed.records.length,1);assert.equal(observed.unresolvedCommonCandidates,1);
+  const record=observed.records[0];assert.equal(record.rootStatus,'NOT_LISTED_AT_BOUNDARY');assert.equal(record.unresolved,true);assert.equal(record.job.state,'REQUESTED_ONLY');assert.equal(record.job.serviceIdentity.format,2);
+  const daemon=record.job.daemon;assert.equal(daemon.state,'UNRESOLVED_REQUESTS');assert.equal(daemon.responseCount,0);assert.equal(daemon.ownerBindingCount,1);assert.ok(daemon.ownerOutcomeCount<=1);assert.equal(daemon.endPin,null);
+  for(const field of ['pendingRequestResolved','completeResourceInventory','originalAcknowledgementReconstructed','cleanupAuthorized','actionAuthorized'])assert.equal(daemon[field],false);
+  for(const field of ['currentTenantAuthorityVerified','sourceHostLossProven','actionAuthorized','reopeningAuthorized','independentEpochProviderVerified'])assert.equal(observed[field],false);
+  await verifySyntheticHistoricalEpoch1(observed.epochCatalogue,reader,journal,archive);
+  assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
+  return{entries:2,latestEpoch:2,checkpointSequence:2,currentUnresolvedCandidates:1,currentVerifiedRoots:0,verifiedHistoricalRoots:1,originalAcknowledgementReconstructed:false,cleanupAuthorized:false,executionAuthorized:false,sourceHostLossProven:false};
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
 /** New clients and the recovery-only capability; checkpoint is supplied by the

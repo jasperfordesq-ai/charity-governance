@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {readSyntheticCustodyDescriptor} from './synthetic-custody-wire.mjs';
-import {inspectSyntheticEpochRecovery,inspectSyntheticEpochLossRecovery,observeSyntheticEpochCatalogue} from './managed-epoch-native.fixture.mjs';
+import {inspectSyntheticEpochRecovery,inspectSyntheticEpochLossRecovery,observeSyntheticEpochCatalogue,inspectSyntheticEpochCallerLossRecovery} from './managed-epoch-native.fixture.mjs';
 import {syntheticEpochAckLossModes} from './synthetic-epoch-ack-loss.mjs';
 assert.equal(process.platform,'linux');assert.equal(process.connected,true);assert.equal(process.argv.length,2);
 const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE),path=process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE,mode=process.env.CHARITYPILOT_TEST_EPOCH_ACK_LOSS;
 assert.ok(mode===undefined||syntheticEpochAckLossModes.includes(mode));
 const probe=process.env.CHARITYPILOT_TEST_EPOCH_CATALOGUE_PROBE;assert.ok(probe===undefined||probe==='1'&&mode===undefined);
-const result=probe?await observeSyntheticEpochCatalogue(descriptor,path):mode?await inspectSyntheticEpochLossRecovery(descriptor,path,mode):await inspectSyntheticEpochRecovery(descriptor,path);
+const callerLoss=process.env.CHARITYPILOT_TEST_EPOCH_CALLER_LOSS;assert.ok(callerLoss===undefined||callerLoss==='1'&&mode===undefined&&probe===undefined);
+const result=callerLoss?await inspectSyntheticEpochCallerLossRecovery(descriptor,path):probe?await observeSyntheticEpochCatalogue(descriptor,path):mode?await inspectSyntheticEpochLossRecovery(descriptor,path,mode):await inspectSyntheticEpochRecovery(descriptor,path);
 await new Promise((yes,no)=>process.send({kind:'SYNTHETIC_COLD_EPOCH_RESULT_V1',mode:mode??'NONE',result},error=>error?no(error):yes()));process.disconnect();

@@ -1,3 +1,12 @@
+## 18 October: shared epoch-2 caller-loss source integration
+
+The dedicated epoch caller-loss test now reuses the original live cgroup/owner/
+resource fixture. It completes epoch1, retains original publication ACK2, then
+kills the epoch2 caller during observed blocked work. A fresh recovery process
+must keep epoch2 unresolved and verify epoch1 only as historical quarantine.
+See [the native proof contract](managed-recovery-epoch-native.md). Exact-source
+native execution and existing format3/5 regression are still required; source
+integration is not a passing proof or physical-host-loss/provider acceptance.
 ## 18 October: native loss, read-refusal and failure-evidence checks passed
 
 Exact source `5bc0cb00` passed the five-case original publication loss cohort,

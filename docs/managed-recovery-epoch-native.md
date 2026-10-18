@@ -63,6 +63,37 @@ separation are synthetic process boundaries on the same machine.
 
 ## Existing and remaining evidence
 
+### Shared epoch-2 caller-loss cohort
+
+`CHARITYPILOT_TEST_EPOCH_PARENT_NATIVE=1 node --test
+scripts/synthetic-epoch-parent-loss.native.test.mjs` uses the same contained
+caller-loss fixture as the existing format-3/5 tests. Epoch 1 must complete native
+capture and custody first. The original epoch publisher then emits receipt 2,
+which the surviving supervisor validates and fsyncs outside the source workspace.
+Only the epoch-2 service binding pauses; mixed legacy/epoch or ACK-loss selectors
+refuse before a new source test can run. The original ten-second release barrier
+is preserved; readiness allows time for the first epoch's genuine native capture.
+
+The surviving driver verifies the original service, cgroup, independent owner and
+outcome custodian. It takes the existing synthetic SQL lock, releases the original
+worker, observes its actual blocked Docker/SQL work and sends real SIGKILL to its
+owned caller. It must prove that the original source cgroup becomes empty while
+the independent owner/custody and original resources survive. Unrelated control
+resources remain unaffected. Existing original-identity teardown gates stay in
+the shared fixture; neither recovery observations nor saved labels grant cleanup.
+
+A new recovery-only process gets the external checkpoint from original receipt 2
+and provider routing/configuration. It receives no source candidate IDs, archive
+pins or local job pins. Current epoch 2 must have one unresolved candidate and no
+verified current root, with requested-only job/service/daemon history. Epoch 1's
+root is discovered separately through the verified historical chain and checked
+into quarantine. It cannot become an automatic current fallback. New writes,
+data-key generation, replay, admission and recovered ACKs remain forbidden.
+
+This source integration requires exact-source native execution and regression of
+the existing format-3/5 caller-loss paths before it is counted as passed. It is
+not physical-host loss, actual independent cloud IAM or current tenant authority.
+
 ### Native original-acknowledgement loss cohort
 
 Exact source `1c330ecf387157432f41754d9a5e8f337dc7eca0` passed all five cases

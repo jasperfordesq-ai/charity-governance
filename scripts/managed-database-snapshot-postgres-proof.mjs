@@ -1,7 +1,7 @@
 import {launchSyntheticOutcomeCustodyFixture} from './managed-outcome-custody-launcher.mjs';
 import {readSyntheticCustodyDescriptor} from './synthetic-custody-wire.mjs';
 import {inspectManagedProofJob} from './managed-proof-job.mjs';
-import {pauseContainedSourceForParentLoss} from './managed-contained-parent-barrier.mjs';
+import {pauseContainedSourceForParentLoss,containedParentBarrierRequested} from './managed-contained-parent-barrier.mjs';
 import {runManagedImportedProof} from './managed-proof-runner.mjs';
 import {createManagedCaptureWorkspace,openManagedCaptureWorkspace} from './managed-capture-workspace.mjs';
 import {fileURLToPath} from 'node:url';
@@ -40,6 +40,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
  const verifyOutput=()=>{assert.equal(dirname(resolve(parent)),resolve(tmpdir()));assert.ok(basename(parent).startsWith('charitypilot-imported-proof-'));
   assert.equal(dirname(resolve(output)),resolve(parent));assert.ok(basename(output).startsWith('capture-'));};verifyOutput();
   let sourceFailure='',preserveSourceFailure=false;
+ const parentFixture=containedParentBarrierRequested(managed?.operation.maintenanceEpoch);
  const prove=async(snapshot,identity,signal,captureConfigurationDigest,scope,jobCustody)=>{
   const source=new URL(captureUrl(database));source.searchParams.set('sslrootcert',certificate);
   const args=['prove-restore','--source-container-id='+id,'--recovery-set-id=synthetic-imported-'+randomUUID(),
@@ -47,11 +48,11 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
   const observedCustody=jobCustody&&Object.freeze(Object.fromEntries(['reserve','bindService','observe','reserveDaemonHeader','reserveDaemonIntent','bindDaemonOwner','createDaemonOwnerOutcomeWriter','createDaemonOwnerOutcomeTransfer','observeDaemonResponse','finishDaemonRequests'].map(name=>[name,async artifact=>{
    if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ENTER');
    const saved=await jobCustody[name](artifact);if(sourceExecutionMode==='KERNEL_CONTAINED')console.log('CONTAINED_JOB_PHASE='+name+':ACK');
-   if(name==='bindDaemonOwner'&&process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE==='1'){
+   if(name==='bindDaemonOwner'&&parentFixture){
     assert.equal(typeof process.send,'function');assert.equal(process.connected,true);
     await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_OWNER_READY_V1',owner:JSON.parse(artifact.body)},error=>error?no(error):yes()));
    }
-   if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal,candidateFormat:managed?.retirement?5:3});
+   if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal,candidateFormat:managed?.retirement?5:3,maintenanceEpoch:managed?.operation.maintenanceEpoch});
    return saved;
   }])));
   let supervised;
@@ -59,7 +60,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    assert.ok(cloud?.b.sessionId,'Kernel-contained synthetic handoff requires separate original SDK keeper');
    const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
    const retained=await launchSyntheticOutcomeCustodyFixture(options,{descriptor,id:cloud.b.sessionId,config:cloud.config});
-   if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE==='1'){
+   if(parentFixture){
     const {capability,...endpoint}=retained.binding();
     await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_CUSTODY_READY_V1',custody:retained.receiver,endpoint},error=>error?no(error):yes()));
    }

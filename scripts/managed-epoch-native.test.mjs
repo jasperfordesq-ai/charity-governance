@@ -8,6 +8,16 @@ import {readSyntheticEpochBootstrap,validateOriginalSyntheticEpochAck} from './m
 import {syntheticEpochAckLossModes,matchesSyntheticEpochAckLoss} from './synthetic-epoch-ack-loss.mjs';
 import {syntheticCustodyAllowed} from './synthetic-custody-policy.mjs';
 import {syntheticEpochReadFaultModes,applySyntheticEpochReadFault} from './synthetic-epoch-read-fault.mjs';
+import {containedParentBarrierRequested} from './managed-contained-parent-barrier.mjs';
+test('shared parent-loss barrier applies only to epoch2 and refuses mixed or malformed fixture selectors',()=>{
+ const names=['CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE','CHARITYPILOT_TEST_EPOCH_PARENT_FIXTURE'],saved=names.map(name=>process.env[name]);
+ try{
+  for(const name of names)delete process.env[name];assert.equal(containedParentBarrierRequested(1),false);
+  process.env[names[1]]='1';assert.equal(containedParentBarrierRequested(1),false);assert.equal(containedParentBarrierRequested(2),true);assert.throws(()=>containedParentBarrierRequested(3));
+  process.env[names[0]]='1';assert.throws(()=>containedParentBarrierRequested(2));delete process.env[names[1]];assert.equal(containedParentBarrierRequested(1),true);
+  process.env[names[0]]='0';assert.throws(()=>containedParentBarrierRequested(1));
+ }finally{for(let i=0;i<names.length;i++){if(saved[i]===undefined)delete process.env[names[i]];else process.env[names[i]]=saved[i];}}
+});
 test('synthetic epoch read faults preserve bytes/ETag, scope and first observations while changing only the named provider boundary',()=>{
  const config={installationId:'synthetic-native-epochs'},prefix=`managed-maintenance/${config.installationId}/recovery-epochs/heads/`,headers={'x-amz-version-id':'physical-original',etag:'"same-etag"'};
  const listed=Buffer.from('<ListBucketResult><KeyCount>3</KeyCount>'+[0,1,2].map(n=>`<Contents><Key>${prefix}${String(n).padStart(5,'0')}.json</Key></Contents>`).join('')+'</ListBucketResult>');
