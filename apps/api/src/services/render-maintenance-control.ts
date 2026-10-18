@@ -89,13 +89,15 @@ export class RenderMaintenanceControl {
   }
   const jobs:z.infer<typeof job>[]=[],liveDeployments:Array<{serviceId:string;deployId:string;imagePath:string;sha:string}>=[];
   for(const current of services){
-   const deployments=await this.list(`/services/${current.id}/deploys`,{status:[...activeDeploys,'live'].join(',')},'deploy',deploy,budget,
+   // Read the bounded complete history rather than relying on a provider's
+   // multi-value status filtering or allowing it to hide unfamiliar work.
+   const deployments=await this.list(`/services/${current.id}/deploys`,{},'deploy',deploy,budget,
     d=>{if(activeDeploys.includes(d.status))throw new Error();});
    const live=deployments.filter(d=>d.status==='live'),expected=c.services.find(s=>s.id===current.id)!;
    if(live.length!==1||live[0]!.image?.ref!==expected.imagePath
     ||live[0]!.image?.sha?.replace(/^sha256:/,'')!==expected.imagePath.split('@sha256:')[1])throw new Error();
    liveDeployments.push({serviceId:current.id,deployId:live[0]!.id,imagePath:live[0]!.image!.ref!,sha:live[0]!.image!.sha!.replace(/^sha256:/,'')});
-   const currentJobs=await this.list(`/services/${current.id}/jobs`,{status:'pending,running'},'job',job,budget);
+   const currentJobs=await this.list(`/services/${current.id}/jobs`,{},'job',job,budget);
    if(currentJobs.some(j=>j.serviceId!==current.id))throw new Error();
    jobs.push(...currentJobs.filter(j=>j.status==='pending'||j.status==='running'));
   }

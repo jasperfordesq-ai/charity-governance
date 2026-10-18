@@ -113,7 +113,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    }
    if(parts[4]==='deploys')return Response.json([{deploy:{id:'dep-'+id.slice(4),status:'live',image:{ref:image,sha:image.split('@')[1]}},cursor:'live'}]);
    if(parts[6]==='cancel'){assert.equal(options.method,'POST');commands++;events.push('cancel');job='canceled';return Response.json({status:'canceled'});}
-   if(parts[4]==='jobs')return Response.json(id===ids[3]&&job==='running'?
+   if(parts[4]==='jobs')return Response.json(id===ids[3]?
     [{job:{id:'job-'+ 'd'.repeat(20),serviceId:id,status:job},cursor:'last-job'}]:[]);
    throw new Error('unexpected synthetic endpoint');
   });

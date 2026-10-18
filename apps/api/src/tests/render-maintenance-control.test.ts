@@ -24,6 +24,7 @@ function fixture(){
  const transport:typeof fetch=async(input,options)=>{
   const url=new URL(String(input)),method=options?.method??'GET';calls.push({path:url.pathname+url.search,method});
   assert.equal(url.origin,'https://api.render.com');assert.equal(options?.redirect,'error');
+  if(/\/(?:deploys|jobs)$/.test(url.pathname))assert.equal(url.searchParams.has('status'),false);
   assert.equal(new Headers(options?.headers).get('Authorization'),'Bearer synthetic-token');
   assert.ok(options?.signal);const response=fault?.(url,method);if(response)return response;
   const parts=url.pathname.split('/'),id=parts[3];
@@ -38,7 +39,7 @@ function fixture(){
    assert.equal(method,'POST');const job=jobs.get(id!)!.find(j=>j.id===parts[5]);assert.ok(job);
    job.status='canceled';return Response.json(job);
   }
-  if(parts[4]==='jobs')return Response.json(url.searchParams.has('cursor')?[]:jobs.get(id!)!.filter(j=>['pending','running'].includes(j.status)).map(job=>({job,cursor:job.id})));
+  if(parts[4]==='jobs')return Response.json(url.searchParams.has('cursor')?[]:jobs.get(id!)!.map(job=>({job,cursor:job.id})));
   throw new Error('unexpected request');
  };
  return{services,calls,jobs,transport,setFault:(value:typeof fault)=>{fault=value;}};

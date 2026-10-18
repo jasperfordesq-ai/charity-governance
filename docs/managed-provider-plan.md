@@ -126,7 +126,7 @@ required before actual use.
 All service, deployment and job lists now follow every non-empty page's final
 cursor, including short pages, to an empty page. Duplicates, cursor cycles, unknown
 states, truncation, more than1000rows, more than11pages, or the existing96request/
-60second budget refuse the observation. Active deploys stop before any shutdown.
+60second budget refuse the observation. Deployment and job histories are read without status filters, so differing array-query conventions or filtered unfamiliar states cannot justify absence. Large histories that exceed the bounds remain unresolved. Active deploys stop before any shutdown.
 For every service, exactly one current `live` deploy must name the configured
 immutable image reference and its matching resolved SHA-256. Missing/ambiguous
 live records and a different resolved image refuse. A configured service image
