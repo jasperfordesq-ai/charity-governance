@@ -1,3 +1,17 @@
+## 18 October: capture role SQL boundary executed
+
+Native TLS PostgreSQL execution passed for the dedicated NOLOGIN/NOINHERIT
+SELECT-only role, including positive RLS reads and actual write denial. The
+observer rejects column writes, role-switch membership, executable definer,
+schema CREATE and BYPASSRLS counterexamples. No role or provider changes are
+performed by the observer itself. Read [scope and provider research](managed-capture-read-role-boundary.md).
+
+This is a bounded SQL observation, with privilege-interval, JWT/provider,
+unfiltered visibility and global-writer claims still false. Existing capture
+continues to use its original authentication until an explicit verified JWT lane
+and guarded interval are implemented. Exact native, CI and deployment evidence
+are recorded privately. Real provider and physical-host-loss gates remain open.
+
 ## 18 October: capture SQL read-role boundary
 
 The remaining capture credential is still a privileged server key. Official
