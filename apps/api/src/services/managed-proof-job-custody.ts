@@ -49,6 +49,7 @@ export class ManagedProofJobCustody{
  async reserveDaemonIntent(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).reserveIntent(local,signal);}
  async bindDaemonOwner(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).bindOwner(local,signal);}
  createDaemonOwnerOutcomeWriter(original:unknown){return this.daemonCustody(original).createOwnerOutcomeWriter();}
+ createDaemonOwnerOutcomeTransfer(original:unknown,signal?:AbortSignal){return this.daemonCustody(original).createOwnerOutcomeTransfer(signal);}
  async observeDaemonResponse(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).observeResponse(local,signal);}
  async finishDaemonRequests(local:unknown,original:unknown,signal?:AbortSignal){return this.daemonCustody(original).finishRequests(local,signal);}
  async observe(local:unknown,original:unknown,signal?:AbortSignal){

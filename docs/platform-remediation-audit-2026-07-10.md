@@ -1,3 +1,12 @@
+## 18 October: original outcome-transfer component
+
+Read [outcome transfer](managed-original-outcome-transfer.md). The original live
+context can issue one nonce-bound private transfer without extending its
+deadline; a trusted original claim precedes receiver SDK reads. Source default
+still uses the existing writer. Private child/kernel authentication, actual
+parent-death handoff and provider/physical-host-loss proof remain unfinished.
+Exact tests and release state belong to the private checkpoint.
+
 ## 18 October: cold owner/source result agreement
 
 Independent daemon discovery now refuses individually valid owner/source records

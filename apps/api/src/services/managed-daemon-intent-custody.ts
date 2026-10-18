@@ -1,9 +1,11 @@
 import {z} from 'zod';
-import {ListObjectsV2Command,type S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
+import {randomBytes} from 'node:crypto';
+import {ListObjectsV2Command,S3Client,type S3ClientConfig} from '@aws-sdk/client-s3';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
 import {commonCandidateBindingSchema} from './managed-common-candidate-contract.js';
 import {localJobArtifact,localJobArtifactSchema,parseJobRequest,parseJobService,assertJobServicePair} from './managed-proof-job-contract.js';
 import {S3MaintenanceArtifactStore} from './maintenance-artifact-store.js';
+import {managedMaintenanceStorageConfigurationSchema} from './managed-maintenance-control.js';
 const sha=z.string().regex(/^[a-f0-9]{64}$/),image=z.string().regex(/^postgres@sha256:[a-f0-9]{64}$/);
 const uuid=z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
 const header=z.object({format:z.literal(2),kind:z.literal('MANAGED_DAEMON_REQUEST_HEADER_V2'),jobId:uuid,inputDigest:sha,image,
@@ -46,6 +48,24 @@ const ownerOutcomeEnvelope=ownerEnvelope.extend({kind:z.literal('MANAGED_DAEMON_
  localIntent:localJobArtifactSchema,pendingRequestResolved:z.literal(false)}).strict();
 type Pin=z.infer<typeof candidatePinSchema>;
 type Artifact={body:string;sha256:string};
+const transferArtifact=z.object({body:z.string().min(1).max(16384),sha256:sha}).strict();
+const transferCredential=z.string().min(1).max(8192).regex(/^[\x21-\x7e]+$/);
+const ownerTransfer=z.object({format:z.literal(1),kind:z.literal('ORIGINAL_DAEMON_OUTCOME_TRANSFER_V1'),nonce:sha,
+ issuedMonotonicNs:z.string().regex(/^[0-9]{1,24}$/),expiresMonotonicNs:z.string().regex(/^[0-9]{1,24}$/),
+ storage:managedMaintenanceStorageConfigurationSchema,binding:commonCandidateBindingSchema,
+ requestArtifact:transferArtifact,requestPin:candidatePinSchema,serviceArtifact:transferArtifact,servicePin:candidatePinSchema,
+ headerPin:candidatePinSchema,intentPin:candidatePinSchema,ownerPin:candidatePinSchema,localIntent:localJobArtifactSchema,
+ credentials:z.object({accessKeyId:transferCredential.max(128),secretAccessKey:transferCredential.max(256),sessionToken:transferCredential.optional()}).strict(),
+}).strict();
+const transferActive=(value:z.infer<typeof ownerTransfer>)=>{
+ const now=process.hrtime.bigint(),issued=BigInt(value.issuedMonotonicNs),expires=BigInt(value.expiresMonotonicNs);
+ return issued<=now&&expires-issued===120000000000n&&now<expires;
+};
+async function boundedTransfer<T>(work:Promise<T>,signal:AbortSignal){
+ let stop=()=>{};
+ const cancelled=new Promise<never>((_,reject)=>{stop=()=>reject(failure());signal.addEventListener('abort',stop,{once:true});if(signal.aborted)stop();});
+ try{return await Promise.race([work,cancelled]);}finally{signal.removeEventListener('abort',stop);}
+}
 export const daemonCustodyScope=(candidateId:string,sequence:number)=>{
  z.string().uuid().parse(candidateId);z.number().int().min(0).max(64).parse(sequence);
  return candidateHash('CHARITYPILOT_DAEMON_INTENT_CUSTODY_V1\n'+candidateId+'\n'+sequence);
@@ -68,7 +88,7 @@ export class ManagedDaemonIntentCustody{
  private readonly outcomeGrantAttempts=new Set<number>();
  constructor(private readonly storage:{installationId:string;bucket:string;accountId:string;kmsKeyArn:string},binding:unknown,
   private readonly credentials:NonNullable<S3ClientConfig['credentials']>,private readonly client:S3Client,
-  requestArtifact:Artifact,private readonly requestPin:Pin,serviceArtifact:Artifact,private readonly servicePin:Pin,
+  private readonly requestArtifact:Artifact,private readonly requestPin:Pin,private readonly serviceArtifact:Artifact,private readonly servicePin:Pin,
   private readonly live:()=>boolean){
   this.binding=commonCandidateBindingSchema.parse(binding);this.request=parseJobRequest(this.binding,requestArtifact);this.service=parseJobService(this.binding,serviceArtifact);
   assertJobServicePair(this.binding,requestArtifact,serviceArtifact);
@@ -78,6 +98,7 @@ export class ManagedDaemonIntentCustody{
   }
   if(JSON.stringify(this.service.value.jobRequestPin)!==JSON.stringify(requestPin))throw failure();
   this.storage={...storage};this.requestPin=candidatePinSchema.parse(requestPin);this.servicePin=candidatePinSchema.parse(servicePin);
+  this.requestArtifact={body:requestArtifact.body,sha256:requestArtifact.sha256};this.serviceArtifact={body:serviceArtifact.body,sha256:serviceArtifact.sha256};
  }
  private checked(raw:unknown,sequence:number){
   const record=localJobArtifact(raw),value=sequence===0?header.parse(JSON.parse(record.body)):intent.parse(JSON.parse(record.body));
@@ -165,6 +186,66 @@ export class ManagedDaemonIntentCustody{
     return{pin:saved,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,pendingRequestResolved:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
    }catch{this.failed=true;throw failure();}
   }});
+ }
+ /** Private live-authority transfer, never a saved recovery artifact. The
+  * future process adapter must authenticate its original child before claim.
+  * Credentials stay on protected stdin/IPC and must never be logged or stored. */
+ async createOwnerOutcomeTransfer(signal?:AbortSignal){
+  const sequence=this.sequence,ack=this.acknowledgedOwners.get(sequence),issued=process.hrtime.bigint();
+  try{
+   if(this.failed||this.busy||!this.live()||this.endAttempted||!ack||!this.savedHeader||!this.latestIntent
+    ||this.responseAttempts.has(sequence)||this.outcomeGrantAttempts.has(sequence))throw failure();
+   this.outcomeGrantAttempts.add(sequence);this.busy=true;
+   const expiry=AbortSignal.timeout(120000),bounded=signal?AbortSignal.any([signal,expiry]):expiry;
+   const owner=await this.ownerStore(sequence).inspectCandidateArtifact('BASELINE',bounded),header=await this.inspectHeader(bounded),intent=await this.store(sequence).inspectCandidateArtifact('BASELINE',bounded);
+   if(JSON.stringify(owner.pin)!==JSON.stringify(ack.pin)||JSON.stringify(header.pin)!==JSON.stringify(this.savedHeader)
+    ||JSON.stringify(intent.pin)!==JSON.stringify(this.latestIntent)||!this.live()||this.failed)throw failure();
+   bounded.throwIfAborted();const credential=await boundedTransfer(Promise.resolve(typeof this.credentials==='function'?this.credentials():this.credentials),bounded);
+   const value=ownerTransfer.parse({format:1,kind:'ORIGINAL_DAEMON_OUTCOME_TRANSFER_V1',nonce:randomBytes(32).toString('hex'),
+    issuedMonotonicNs:issued.toString(),expiresMonotonicNs:(issued+120000000000n).toString(),storage:this.storage,binding:this.binding,
+    requestArtifact:this.requestArtifact,requestPin:this.requestPin,serviceArtifact:this.serviceArtifact,servicePin:this.servicePin,
+    headerPin:this.savedHeader,intentPin:this.latestIntent,ownerPin:ack.pin,localIntent:ack.localIntent,
+    credentials:{accessKeyId:credential.accessKeyId,secretAccessKey:credential.secretAccessKey,...(credential.sessionToken?{sessionToken:credential.sessionToken}:{})}});
+   if(this.failed||!this.live()||!transferActive(value)||Buffer.byteLength(JSON.stringify(value))>65536)throw failure();this.busy=false;
+   const digest=candidateHash(JSON.stringify(value));let taken=false,claimed=false;
+   return Object.freeze({abandon:()=>{taken=true;claimed=true;this.failed=true;},take:()=>{
+    if(taken||this.failed||!this.live()||!transferActive(value)){this.failed=true;throw failure();}taken=true;return structuredClone(value);
+   },claim:(nonce:string,bodyDigest:string)=>{
+    if(claimed)return false;claimed=true;
+    if(!taken||this.failed||!this.live()||!transferActive(value)||nonce!==value.nonce||bodyDigest!==digest){this.failed=true;return false;}return true;
+   }});
+  }catch{this.failed=true;throw failure();}
+ }
+ /** Internal receiving half. The required claim callback must contact the
+  * still-live original issuer over authenticated private IPC. Reads alone,
+  * stored pins or a caller-selected CLI flag cannot supply that authority. */
+ static async acceptOwnerOutcomeTransfer(raw:unknown,claim:(nonce:string,bodyDigest:string,signal:AbortSignal)=>Promise<boolean>,client?:S3Client){
+  let ownedClient:S3Client|undefined;
+  try{
+   const value=ownerTransfer.parse(raw);if(Buffer.byteLength(JSON.stringify(value))>65536||typeof claim!=='function'||!transferActive(value))throw failure();
+   const remaining=()=>Math.max(1,Number((BigInt(value.expiresMonotonicNs)-process.hrtime.bigint())/1000000n));
+   const expiry=AbortSignal.timeout(remaining());
+   const activeClient=client??(ownedClient=new S3Client({region:'eu-west-1',endpoint:'https://s3.eu-west-1.amazonaws.com',
+    credentials:value.credentials,maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:15000,throwOnRequestTimeout:true}}));
+   const writer=new ManagedDaemonIntentCustody(value.storage,value.binding,value.credentials,activeClient,
+    value.requestArtifact,value.requestPin,value.serviceArtifact,value.servicePin,()=>true);
+   const local=localJobArtifact(value.localIntent),sequence=intent.parse(JSON.parse(local.body)).sequence;
+   // Consume the original live claim before any provider read or write.
+   if(await boundedTransfer(claim(value.nonce,candidateHash(JSON.stringify(value)),expiry),expiry)!==true||!transferActive(value))throw failure();
+   const h=await writer.inspectHeader(expiry),i=await writer.inspectIntent(sequence,JSON.parse(local.body).previousDigest,expiry),o=await writer.inspectOwner(sequence,JSON.parse(local.body).previousDigest,expiry);
+   if(JSON.stringify(h.pin)!==JSON.stringify(value.headerPin)||JSON.stringify(i.pin)!==JSON.stringify(value.intentPin)||JSON.stringify(o.pin)!==JSON.stringify(value.ownerPin)
+    ||JSON.stringify(i.localRecord)!==JSON.stringify(local)||!transferActive(value))throw failure();
+   writer.sequence=sequence;writer.acknowledgedOwners.set(sequence,{pin:value.ownerPin,localIntent:local});
+   const original=writer.createOwnerOutcomeWriter();let attempted=false;
+   const revoke=()=>{attempted=true;original.revoke();ownedClient?.destroy();};
+   const deadline=setTimeout(revoke,remaining());deadline.unref();
+   return Object.freeze({revoke:()=>{clearTimeout(deadline);revoke();},publish:async(outcome:unknown,caller?:AbortSignal)=>{
+    if(attempted||!transferActive(value))throw failure();attempted=true;
+    try{const result=await original.publish(outcome,caller?AbortSignal.any([caller,expiry]):expiry);
+     if(!transferActive(value))throw failure();return result;
+    }finally{clearTimeout(deadline);ownedClient?.destroy();}
+   }});
+  }catch{ownedClient?.destroy();throw failure();}
  }
  private assertOwnerIntent(local:z.infer<typeof owner>,original:ReturnType<ManagedDaemonIntentCustody['parse']>){
   if(local.intentPin.sha256!==original.value.localRecord.sha256||local.intentPin.byteLength!==original.value.localRecord.byteLength)throw failure();

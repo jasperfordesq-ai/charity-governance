@@ -133,7 +133,7 @@ async function daemonFixture(){
  const intent=(sequence=1,previousDigest=header.sha256,change={})=>f.local({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:f.request.jobId,sequence,previousDigest,
   operation:'run',target:'charitypilot-source-snapshot-123-456-abcdef12',storagePlan:{format:2,kind:'MANAGED_PROOF_STORAGE_PLAN_V2',image,
    mounts:[{target:'/var/lib/postgresql/data',type:'tmpfs',readOnly:false,tmpfsOptions:'rw,noexec,nosuid,size=1m'}],declaredImageVolumesCovered:true},argumentsDigest:'e'.repeat(64),...change});
- const custody=(live=()=>false)=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,credentials,f.client,
+ const custody=(live=()=>false,sourceCredentials:typeof credentials|(()=>Promise<typeof credentials>)=credentials)=>new ManagedDaemonIntentCustody({installationId:config.installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn},f.binding,sourceCredentials,f.client,
   jobRequestArtifact(f.binding,f.original,f.input),request.pin,jobServiceArtifact(f.binding,request.pin,localService),bound.pin,live);
  const reader=()=>custody();
  const response=(local:ReturnType<typeof f.local>,change={})=>f.local({format:1,kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId:f.request.jobId,
@@ -153,6 +153,96 @@ async function daemonFixture(){
   stdout:{sha256:hash('marker'),byteLength:6},stderr:{sha256:hash(''),byteLength:0},...change});
  return{...f,header,intent,reader,custody,response,end,owner,ownerOutcome};
 }
+
+async function transferFixture(){
+ const f=await daemonFixture(),live={value:true},writer=f.custody(()=>live.value),local=f.intent(),bound=f.owner(local);
+ await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+ return{...f,writer,live,local,bound};
+}
+
+test('original live outcome authority transfers once and publishes after source closure without recreating a cold grant',async()=>{
+ const f=await transferFixture();try{
+  const transfer=await f.writer.createOwnerOutcomeTransfer();assert.equal(Object.isFrozen(transfer),true);assert.equal(JSON.stringify(transfer),'{}');
+  const input=transfer.take(),writes=f.b.writes;
+  assert.equal(input.kind,'ORIGINAL_DAEMON_OUTCOME_TRANSFER_V1');assert.equal(input.credentials.accessKeyId,credentials.accessKeyId);
+  assert.throws(()=>f.writer.createOwnerOutcomeWriter());await assert.rejects(f.writer.createOwnerOutcomeTransfer());
+  // A separate issuer is required after the deliberately invalid repeat above.
+  assert.equal(f.b.writes,writes);
+ }finally{f.close();}
+ const g=await transferFixture();let grant;
+ try{
+  const transfer=await g.writer.createOwnerOutcomeTransfer(),input=transfer.take();
+  grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(nonce,digest)=>transfer.claim(nonce,digest),g.client);
+  g.live.value=false;const outcome=g.ownerOutcome(g.local,g.bound),saved=await grant.publish(outcome);
+  assert.equal(saved.pin.kind,'OBSERVATION');assert.equal(saved.pendingRequestResolved,false);
+  const writes=g.b.writes,read=await g.reader().inspectOwnerOutcome(1,g.header.sha256);
+  assert.equal(read.localRecord.sha256,outcome.sha256);assert.equal(read.originalAcknowledgementReconstructed,false);
+  await assert.rejects(grant.publish(outcome));await assert.rejects(g.reader().createOwnerOutcomeTransfer());assert.equal(g.b.writes,writes);
+ }finally{grant?.revoke();g.close();}
+});
+
+test('private outcome transfer refuses modified input, repeated/lost claims and source closure before claim without provider writes',async()=>{
+ for(const mode of ['modified','repeat-take','closed','claim-lost','abandoned']){
+  const f=await transferFixture();try{
+   const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take(),writes=f.b.writes;
+   if(mode==='modified')input.ownerPin.versionId='substituted';if(mode==='repeat-take')assert.throws(()=>transfer.take());if(mode==='closed')f.live.value=false;if(mode==='abandoned')transfer.abandon();
+   let calls=0;const original=f.client.send.bind(f.client);mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand|ListObjectsV2Command)=>{calls++;return original(command as never);});
+   await assert.rejects(ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(nonce,digest)=>{
+    const accepted=transfer.claim(nonce,digest);if(mode==='claim-lost')throw new Error('synthetic original claim ACK lost');return accepted;
+   },f.client));
+   assert.equal(calls,0);assert.equal(f.b.writes,writes);
+   await assert.rejects(ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(nonce,digest)=>transfer.claim(nonce,digest),f.client));assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+ }
+});
+
+test('outcome transfer keeps the original monotonic deadline across activation and never extends it',async(t)=>{
+ let now=process.hrtime.bigint();t.mock.method(process.hrtime,'bigint',()=>now);
+ for(const stage of ['before-take','before-claim','before-publish']){
+  const f=await transferFixture();let grant;
+  try{
+   const transfer=await f.writer.createOwnerOutcomeTransfer(),writes=f.b.writes;
+   if(stage==='before-take'){now+=120000000001n;assert.throws(()=>transfer.take());}
+   else{const input=transfer.take();
+    if(stage==='before-claim'){now+=120000000001n;await assert.rejects(ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client));}
+    else{grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);now+=120000000001n;await assert.rejects(grant.publish(f.ownerOutcome(f.local,f.bound)));}
+   }
+   assert.equal(f.b.writes,writes);
+  }finally{grant?.revoke();f.close();}
+ }
+});
+
+test('transferred writer preserves an accepted outcome with lost readback ACK and cannot be replaced or retried',async()=>{
+ const f=await transferFixture();let grant;
+ try{
+  const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();
+  grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);f.live.value=false;
+  const original=f.client.send.bind(f.client);let lost=true;
+  mock.method(f.client,'send',async(command:GetObjectCommand|PutObjectCommand)=>{
+   if(lost&&command instanceof GetObjectCommand&&command.input.Key?.includes('/'+daemonOwnerCustodyScope(f.binding.candidateId,1)+'/observation.json'))throw new Error('synthetic delegated outcome ACK lost');
+   return original(command as never);
+  });
+  const outcome=f.ownerOutcome(f.local,f.bound);await assert.rejects(grant.publish(outcome));const writes=f.b.writes;
+  await assert.rejects(grant.publish(outcome));await assert.rejects(ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client));lost=false;
+  const found=await f.reader().inspectOwnerOutcome(1,f.header.sha256);assert.equal(found.localRecord.sha256,outcome.sha256);
+  assert.equal(found.originalAcknowledgementReconstructed,false);assert.equal(found.pendingRequestResolved,false);assert.equal(f.b.writes,writes);
+ }finally{grant?.revoke();f.close();}
+});
+
+test('stalled credential resolution and original claim are bounded and cannot renew transfer authority',{timeout:3000},async(t)=>{
+ const actualTimeout=AbortSignal.timeout.bind(AbortSignal);t.mock.method(AbortSignal,'timeout',(ms:number)=>actualTimeout(Math.min(ms,100)));
+ const hold=setTimeout(()=>{},2000);
+ try{
+  const f=await daemonFixture();try{
+   const writer=f.custody(()=>true,()=>new Promise(()=>{})),local=f.intent();await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(f.owner(local));
+   const writes=f.b.writes;await assert.rejects(writer.createOwnerOutcomeTransfer());await assert.rejects(writer.createOwnerOutcomeTransfer());assert.equal(f.b.writes,writes);
+  }finally{f.close();}
+  const g=await transferFixture();try{
+   const transfer=await g.writer.createOwnerOutcomeTransfer(),input=transfer.take(),writes=g.b.writes;
+   await assert.rejects(ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,()=>new Promise(()=>{}),g.client));assert.equal(g.b.writes,writes);
+  }finally{g.close();}
+ }finally{clearTimeout(hold);}
+});
 
 test('cold discovery refuses contradictory owner and source results without repairing or writing history',async()=>{
  for(const field of ['status','transportError','signal','removalAlreadyAbsent','matching-success','matching-failure']){

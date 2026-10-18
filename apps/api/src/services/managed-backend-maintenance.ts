@@ -175,7 +175,7 @@ export class ManagedBackendMaintenance {
   * root write, so an unknown final ACK remains discoverable without replay. */
  async captureCommonQuarantined(raw:unknown,capture:SupabaseRecoveryCapture,window:ManagedStorageMetadataWindow,
   journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
-  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string;jobCustody:Readonly<{reserve:(artifact:unknown)=>Promise<unknown>;observe:(artifact:unknown)=>Promise<unknown>;bindService:(artifact:unknown)=>Promise<unknown>;reserveDaemonHeader:(artifact:unknown)=>Promise<unknown>;reserveDaemonIntent:(artifact:unknown)=>Promise<unknown>;bindDaemonOwner:(artifact:unknown)=>Promise<unknown>;createDaemonOwnerOutcomeWriter:()=>Promise<Readonly<{publish:(artifact:unknown,signal?:AbortSignal)=>Promise<unknown>;revoke:()=>void}>>;observeDaemonResponse:(artifact:unknown)=>Promise<unknown>;finishDaemonRequests:(artifact:unknown)=>Promise<unknown>}>}>)=>Promise<{
+  source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string;jobCustody:Readonly<{reserve:(artifact:unknown)=>Promise<unknown>;observe:(artifact:unknown)=>Promise<unknown>;bindService:(artifact:unknown)=>Promise<unknown>;reserveDaemonHeader:(artifact:unknown)=>Promise<unknown>;reserveDaemonIntent:(artifact:unknown)=>Promise<unknown>;bindDaemonOwner:(artifact:unknown)=>Promise<unknown>;createDaemonOwnerOutcomeWriter:()=>Promise<Readonly<{publish:(artifact:unknown,signal?:AbortSignal)=>Promise<unknown>;revoke:()=>void}>>;createDaemonOwnerOutcomeTransfer:()=>Promise<Readonly<{take:()=>Promise<unknown>;claim:(nonce:string,digest:string)=>Promise<boolean>;abandon:()=>void}>>;observeDaemonResponse:(artifact:unknown)=>Promise<unknown>;finishDaemonRequests:(artifact:unknown)=>Promise<unknown>}>}>)=>Promise<{
    visit:Parameters<SupabaseRecoveryCapture['capture']>[0];
    prepareArchiveInput:(captured:Awaited<ReturnType<SupabaseRecoveryCapture['capture']>>,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
   }>,caller?:AbortSignal){
@@ -201,6 +201,11 @@ export class ManagedBackendMaintenance {
       reserveDaemonIntent:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.reserveSourceDaemonIntent(artifact,requestPin,signal);await check();return saved;},
       bindDaemonOwner:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.bindSourceDaemonOwner(artifact,requestPin,signal);await check();return saved;},
       createDaemonOwnerOutcomeWriter:async()=>{await check();signal.throwIfAborted();const writer=session!.createSourceDaemonOwnerOutcomeWriter(requestPin);try{await check();return writer;}catch(error){writer.revoke();throw error;}},
+      createDaemonOwnerOutcomeTransfer:async()=>{await check();signal.throwIfAborted();const transfer=await session!.createSourceDaemonOwnerOutcomeTransfer(requestPin,signal);
+       const checked=async<T>(run:()=>T)=>{try{await check();signal.throwIfAborted();const value=run();await check();signal.throwIfAborted();return value;}catch(error){transfer.abandon();throw error;}};
+       try{await check();return Object.freeze({take:()=>checked(()=>transfer.take()),claim:(nonce:string,digest:string)=>checked(()=>transfer.claim(nonce,digest)),abandon:()=>transfer.abandon()});}
+       catch(error){transfer.abandon();throw error;}
+      },
       observeDaemonResponse:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.observeSourceDaemonResponse(artifact,requestPin,signal);await check();return saved;},
       finishDaemonRequests:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.finishSourceDaemonRequests(artifact,requestPin,signal);await check();return saved;},
       observe:async(artifact:unknown)=>{await check();signal.throwIfAborted();const saved=await session!.observeSourceJob(artifact,requestPin,signal);await check();return saved;}

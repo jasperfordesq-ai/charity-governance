@@ -160,6 +160,7 @@ class CandidateSession {
  reserveSourceDaemonIntent(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().reserveDaemonIntent(local,pin,signal);}
  bindSourceDaemonOwner(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().bindDaemonOwner(local,pin,signal);}
  createSourceDaemonOwnerOutcomeWriter(pin:unknown){return this.jobCustody().createDaemonOwnerOutcomeWriter(pin);}
+ createSourceDaemonOwnerOutcomeTransfer(pin:unknown,signal?:AbortSignal){return this.jobCustody().createDaemonOwnerOutcomeTransfer(pin,signal);}
  observeSourceDaemonResponse(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().observeDaemonResponse(local,pin,signal);}
  finishSourceDaemonRequests(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().finishDaemonRequests(local,pin,signal);}
  observeSourceJob(local:unknown,pin:unknown,signal?:AbortSignal){return this.jobCustody().observe(local,pin,signal);}

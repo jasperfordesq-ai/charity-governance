@@ -1,3 +1,13 @@
+## 18 October: original outcome-transfer component
+
+The original live job context can issue one bounded private outcome-authority
+transfer, mutually exclusive with its old process-local writer. A receiving
+custody process must consume the original nonce/digest claim before provider
+reads and retain the original deadline and exact SDK evidence checks. The
+default source runner is unchanged. Private IPC, actual child/kernel validation
+and parent-death acceptance remain unfinished. See [outcome transfer](managed-original-outcome-transfer.md).
+This creates no provider grant or physical-host-loss proof.
+
 ## 18 October: owner routing and independent recovery readback
 
 Managed COMMON_CANDIDATE mutations now use the fixed independent request worker

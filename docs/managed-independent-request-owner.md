@@ -1,3 +1,11 @@
+## 18 October: original outcome-transfer component
+
+The original job/session/frozen parent context exposes a one-time private
+outcome transfer with an original live claim and non-extendable deadline.
+The receiving component retains the existing conditional SDK writer checks.
+Actual independent custody-process bootstrap and source integration are not
+enabled yet. See [outcome transfer](managed-original-outcome-transfer.md).
+
 ## 18 October: independent saved-result agreement
 
 Cold daemon discovery validates owner results and source responses against their
