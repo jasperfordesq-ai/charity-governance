@@ -64,3 +64,22 @@ opens relation/attribute catalogues with RowExclusiveLock for grants, and
 uses the role catalogues for role changes. Executable native tests, rather than
 these source references alone, establish the bounded behavior in the disposable
 PostgreSQL fixture. Hosted provider proof remains separate.
+
+## Executed synthetic verification — 18 October 2026
+
+The native TLS PostgreSQL cohort passed the configured asymmetric JWT/SQL role
+join, exact-OID mismatch refusal before HTTP, visitor-buffer clearing on
+cancellation, positive RLS reads and actual mutation refusal. Nine concurrent
+DCL/DDL actors were observed waiting on the catalogue locks until callback
+completion. A previously completed but uncommitted GRANT, a prepared GRANT and
+an observer lacking catalogue-lock permission all refused before callback entry.
+Real deadline expiry, caller cancellation, termination of the actual holding
+backend and callback failure discarded the result and released its locks.
+
+The first native attempt exposed the command-end lock release gap; the assigned
+transaction barrier was implemented and the same counterexample then passed.
+All previous SQL writer/metadata-window/managed-capture regressions passed in
+the final cohort. These are original disposable database observations, not
+hosted Supabase or physical-host-loss evidence. Exact source revisions and logs
+are recorded in the ignored private handoff; the running release is recorded
+separately. No provider privilege is inferred from these tests.

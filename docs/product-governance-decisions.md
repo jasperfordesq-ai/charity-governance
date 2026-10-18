@@ -710,3 +710,16 @@ The [common S3 mode selector](managed-s3-maintenance-evidence.md) now requires a
 [Protocol9 mandatory S3 coordinator integration](durable-s3-maintenance.md) is now implemented locally for both modes. Exact original head acknowledgement precedes shutdown; fresh paired S3 evidence is required for final recording. Earlier protocol8/no-dispatch next-work notes are historical. Actual provider/whole-backend and current tenant authority gates remain open.
 
 The [writer/capture audit](managed-writer-capture-audit-2026-10-17.md) confirms retained modern server-key authority is not excluded by read-only request code or RLS alone. Candidate provenance now binds the declared credential ID/hash; a supported least-privilege capture lane and actual grants/issuer/in-flight/control-plane proof remain required before complete common capture.
+
+## Bounded capture privilege interval
+
+The explicit JWT role can be joined to a live SQL observation while PostgreSQL
+holds the listed privilege catalogues. Require the entry barrier for pending
+assigned transactions, including prepared and cross-database transactions; a
+catalogue lock alone misses DCL that has finished its command but not committed.
+Keep this an explicit, bounded operation and refuse insufficient permission.
+Do not grant catalogue UPDATE or broader provider privileges merely to enable
+this implementation. Actual managed-provider compatibility and authority must
+be observed before activation. The native fixture is not evidence of that
+compatibility. The [window contract](managed-capture-privilege-window.md) keeps
+provider/key currency, full visibility and external/global writer claims false.

@@ -1,3 +1,14 @@
+## 18 October: capture privilege window verified natively
+
+Native TLS PostgreSQL tests passed the bounded JWT/SQL role join and nine
+concurrent DCL/DDL waits. The first native counterexample exposed a completed
+GRANT with an uncommitted transaction; an assigned-transaction entry barrier
+now refuses it and prepared transactions. Cancellation, real expiry, connection
+loss and insufficient lock authority also refuse. See [the scope and limits](managed-capture-privilege-window.md).
+Hosted provider authority, complete visibility, global writer closure, legacy
+protocol integration and physical-host-loss proof remain separate open work.
+Exact source, CI and deployed revisions are recorded privately.
+
 ## 18 October: bounded capture privilege window
 
 An explicit internal SQL catalogue window now joins the configured asymmetric
