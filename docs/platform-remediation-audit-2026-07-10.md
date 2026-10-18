@@ -1,3 +1,15 @@
+## 18 October: inert initial managed-service identity bootstrap
+
+A separate expiring synthetic bootstrap image and pure request compiler address
+initial service identity assignment before the permanent mesh can be built.
+The image has no application code, credentials or outbound client; only explicit
+placeholder health succeeds, business routes refuse, and the worker is inert.
+An immutable source/binding pin and bounded lifetime keep this separate from
+permanent runtime readiness. Read [the bootstrap contract](managed-identity-bootstrap.md).
+The compiler performs no HTTP, publication, grant or provisioning. Actual account,
+creation receipts, private DNS, isolation, provider compatibility, image custody,
+final TLS configuration and independent host recovery remain open. Native and
+source-bound execution evidence, including schema limits, is retained privately.
 ## 18 October: declared provider settings and stored-secret readback
 
 A bounded stdin-only GET inspector now reconciles the compiled synthetic plan

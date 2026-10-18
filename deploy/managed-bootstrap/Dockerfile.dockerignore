@@ -1,0 +1,13 @@
+**
+!deploy/
+!deploy/managed-bootstrap/
+!deploy/managed-bootstrap/Dockerfile
+!deploy/managed-bootstrap/Dockerfile.dockerignore
+!deploy/managed-bootstrap/binding.mjs
+!deploy/managed-bootstrap/start.mjs
+!deploy/managed-bootstrap/entrypoint.sh
+!packages/
+!packages/shared/
+!packages/shared/runtime/
+!packages/shared/runtime/managed-service-image-pin.mjs
+!packages/shared/runtime/protected-tls-material.mjs
