@@ -114,3 +114,17 @@ prove an actual custody service surviving issuer death or activate this path in
 the source runner. Actual service launch, original SDK-ready integration and
 provider/independent host-loss acceptance remain open. Exact release state is
 recorded privately.
+
+## 18 October: original custody launch adapter
+
+The fixed systemd user-service adapter transfers the ticket on stdin with an
+OS-only environment and requires original claim, actual receiver kernel checks,
+and a separate SDK-ready probe before returning its endpoint. Canonical source
+verification now pins fourteen modules. Original unit cleanup checks boot,
+invocation, process start and cgroup; unknown identities are preserved.
+Portable tests cover private input, selector refusal and pre-consumption cancel.
+The opt-in native owner probe adds an actual fixed receiver whose original claim
+is deliberately denied; native results and exact revisions are recorded privately.
+This adapter is not activated by the default source runner. Successful provider
+activation, original-issuer death, outcome delivery and source integration remain
+required, along with the independent provider and host-loss gates.

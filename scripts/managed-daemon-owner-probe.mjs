@@ -10,6 +10,7 @@ import {containmentUnit,inspectContainmentUnit,observeOriginalControlGroup,verif
 import {verifyContainedExecutorSource} from './managed-proof-systemd-runner.mjs';
 import {createManagedDaemonCustodyChannel} from './managed-daemon-custody-channel.mjs';
 import {requestManagedDaemonCustody} from './managed-daemon-custody-client.mjs';
+import {launchOriginalOutcomeCustody} from './managed-outcome-custody-launcher.mjs';
 import {validateManagedDaemonOwnerInput} from './managed-daemon-owner-worker.mjs';
 const self=fileURLToPath(import.meta.url),repo=resolve(dirname(self),'..'),no=()=>new Error('Synthetic independent daemon owner unresolved; preserve original scope');
 const ownerWorker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url));
@@ -172,7 +173,7 @@ export async function probeIndependentDaemonOwner(mode='caller-loss'){
 /** Actual fixed worker under a separate service, launched from the caller.
  * Original API custody remains in the test parent; this is not parent/VM loss. */
 export async function probeFixedDaemonOwner(mode='complete'){
- if(!['complete','caller-loss','owner-ack-lost','outcome-ack-lost'].includes(mode)||process.platform!=='linux'||process.getuid()===0)throw no();
+ if(!['complete','caller-loss','owner-ack-lost','outcome-ack-lost','custody-claim-denied'].includes(mode)||process.platform!=='linux'||process.getuid()===0)throw no();
  prepareLocalDockerCommand(['docker','version'],process.env);const sourceSha=source(),jobId=randomUUID(),ownerId=randomUUID();
  const root=mkdtempSync(join(tmpdir(),'charitypilot-owner-probe-'));chmodSync(root,0o700);
  process.stderr.write('Fixed worker probe original scope='+root+'\n');
@@ -181,7 +182,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
  const inspect=target=>{const r=docker(['inspect',target]);if(r.status!==0){if(ownerProbeInspectAbsent(r,target))return null;throw no();}return JSON.parse(r.stdout)[0];};
  const exact=v=>{if(!v||v.Name!=='/'+independentOwnerProbeTarget(jobId)||v.Config.Image!==DEFAULT_POSTGRES_IMAGE||v.Config.Labels['io.charitypilot.owner-probe']!==jobId
   ||v.HostConfig.Privileged||v.HostConfig.NetworkMode!=='none'||v.HostConfig.ReadonlyRootfs!==true||v.Mounts.some(m=>m.Type!=='tmpfs'||m.Destination!=='/var/lib/postgresql/data'))throw no();return v;};
- let custody,gate,caller,ownerReady,writer,input,container,outcomeStored=false,sourceClosed=false,completed=false,launched=false;
+ let custody,gate,caller,ownerReady,writer,input,container,deniedCustodyClaims=0,outcomeStored=false,sourceClosed=false,completed=false,launched=false;
  try{
   write(root,'request.json',request);if(loaded(request.callerUnit)!=='not-found'||loaded(request.ownerUnit)!=='not-found')throw no();
   launched=true;launch(request.callerUnit,'--caller',root);await waitFor(()=>existsSync(join(root,'caller.ready.json')));caller=inspectContainmentUnit(request.callerUnit);
@@ -191,7 +192,12 @@ export async function probeFixedDaemonOwner(mode='complete'){
    onHeader:a=>custody.session.reserveDaemonHeader(a,custody.original),onIntent:a=>custody.session.reserveDaemonIntent(a,custody.original),
    onOwner:async a=>{const value=JSON.parse(a.body),options={source:caller,sourceSha,ownerInputDigest:hash(JSON.stringify(input)),expectedCommandLine:[process.execPath,ownerWorker,'--stdin']};
     verifyIndependentDaemonOwner(value,options);ownerReady={identity:inspectContainmentUnit(request.ownerUnit),local:a};
-    const saved=await custody.session.bindDaemonOwner(a,custody.original);verifyIndependentDaemonOwner(value,options);writer=custody.outcomeWriter();
+    const saved=await custody.session.bindDaemonOwner(a,custody.original);verifyIndependentDaemonOwner(value,options);if(mode==='custody-claim-denied'){
+     const transfer=await custody.outcomeTransfer();
+     try{await launchOriginalOutcomeCustody({jobId,sourceSha,source:caller,transfer:{take:()=>transfer.take(),abandon:()=>transfer.abandon(),claim:()=>{deniedCustodyClaims++;return false;}}});throw new Error('Unexpected custody launch success');}
+     catch{if(deniedCustodyClaims!==1)throw no();throw no();}
+    }
+    writer=custody.outcomeWriter();
     if(mode==='owner-ack-lost')void gate.close();return saved;},
    onOwnerOutcome:async a=>{if(!writer||mode!=='complete'&&!sourceClosed)throw no();const v=JSON.parse(a.body);
     if(v.status!==0||v.transportError||v.signal||v.stdout.sha256!==hash('SYNTHETIC_OWNER_COMPLETE')||v.stdout.byteLength!==Buffer.byteLength('SYNTHETIC_OWNER_COMPLETE')
@@ -203,9 +209,9 @@ export async function probeFixedDaemonOwner(mode='complete'){
   input={format:1,kind:'MANAGED_DAEMON_OWNER_INPUT_V1',jobId,ownerId,sourceSha,inputDigest:custody.inputDigest,descriptorPath:gate.descriptorPath,
    intent:custody.intent,args,environment:{},timeoutMs:15000,maxBuffer:65536};
   await deliverFixedWorkerInput(root,input);
-  if(mode==='owner-ack-lost'){
+  if(mode==='owner-ack-lost'||mode==='custody-claim-denied'){
    await waitFor(()=>existsSync(join(root,'worker.client-terminal.json')));if(!ownerReady||outcomeStored||inspect(independentOwnerProbeTarget(jobId))!==null)throw no();
-   const client=read(root,'worker.client-terminal.json');if(client.code!==1||client.stdoutBytes!==0)throw no();writer.revoke();await custody.inspect(0);
+   const client=read(root,'worker.client-terminal.json');if(client.code!==1||client.stdoutBytes!==0)throw no();writer?.revoke();if(mode==='custody-claim-denied'&&deniedCustodyClaims!==1)throw no();await custody.inspect(0);
   }else{
    container=await waitFor(()=>{const v=inspect(independentOwnerProbeTarget(jobId));return v?.State.Running?exact(v):null;});if(!ownerReady)throw no();
    if(mode!=='complete'){
@@ -223,7 +229,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
   }
   completed=true;return{kind:'SYNTHETIC_FIXED_OWNER_SERVICE_V1',mode,actualFixedWorker:true,originalOwnerServiceVerified:true,
    sourceCallerStopped:sourceClosed,sourceContextClosedBeforeOutcome:sourceClosed,ownerOutcomeStored:outcomeStored,privateOutputReturned:mode==='complete',
-   ownerAckLossPreventedDispatch:mode==='owner-ack-lost',outcomeWireAckLost:mode==='outcome-ack-lost',originalAcknowledgementReconstructed:false,
+   ownerAckLossPreventedDispatch:mode==='owner-ack-lost',actualKernelCustodyClaimDenied:deniedCustodyClaims===1,outcomeWireAckLost:mode==='outcome-ack-lost',originalAcknowledgementReconstructed:false,
    productionIntegrated:false,independentProvider:false,sourceParentLossProven:false,sourceHostLossProven:false,pendingRequestResolved:false,cleanupAuthorized:false,actionAuthorized:false};
  }finally{
   let closed=true;try{await gate?.close();}catch{closed=false;completed=false;}finally{custody?.close();}

@@ -30,7 +30,7 @@ export async function originalOwnerProbeCustody(request,source,args){
   const intent=artifact({format:2,kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId:request.jobId,sequence:1,previousDigest:header.sha256,
    operation:'run',target:args[args.indexOf('--name')+1],storagePlan:planManagedProofStorage(args,request.jobId),argumentsDigest:hash('CHARITYPILOT_DAEMON_ARGUMENTS_V1\n'+request.jobId+'\n'+JSON.stringify(args))});
   return{header,intent,inputDigest,artifact,session,original,
-   outcomeWriter:()=>session.createDaemonOwnerOutcomeWriter(original),closeSource(){live=false;session.closeExecution();},writes:()=>b.writes,
+   outcomeWriter:()=>session.createDaemonOwnerOutcomeWriter(original),outcomeTransfer:()=>session.createDaemonOwnerOutcomeTransfer(original),closeSource(){live=false;session.closeExecution();},writes:()=>b.writes,
    loseOutcomeAck(value){loseOutcomeAck=value;},
    outcome:(owner,reply)=>artifact({format:1,kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId:request.jobId,sequence:1,
     intentPin:{sha256:intent.sha256,byteLength:intent.byteLength},ownerPin:{sha256:owner.sha256,byteLength:owner.byteLength},ownerInputDigest:inputDigest,

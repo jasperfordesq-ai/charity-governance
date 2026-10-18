@@ -65,3 +65,12 @@ test('actual fixed owner worker preserves custody through caller loss and unknow
   console.log('ACTUAL_FIXED_OWNER_SERVICE='+JSON.stringify(v));
  }
 });
+
+test('actual fixed custody receiver with denied original claim never releases daemon dispatch',{
+ skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_DAEMON_OWNER!=='1',timeout:45000
+},async()=>{
+ const v=await probeFixedDaemonOwner('custody-claim-denied');assert.equal(v.actualKernelCustodyClaimDenied,true);
+ assert.equal(v.ownerOutcomeStored,false);assert.equal(v.privateOutputReturned,false);assert.equal(v.pendingRequestResolved,false);
+ assert.equal(v.originalAcknowledgementReconstructed,false);assert.equal(v.actionAuthorized,false);
+ console.log('ACTUAL_CUSTODY_CLAIM_DENIED='+JSON.stringify(v));
+});
