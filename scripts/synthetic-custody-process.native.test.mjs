@@ -31,6 +31,10 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   for(const name of ['managed-database-writer-fence-postgres.test.mjs','managed-contained-parent-loss.native.test.mjs']){
    source=spawn(process.execPath,['--test',file(name)],{env:{...env,...(name.includes('parent-loss')?{CHARITYPILOT_TEST_CONTAINED_PARENT:'1'}:{})},stdio:['ignore','pipe','pipe']});sourceTerminal=terminal(source);const log=childOutput(source);
    assert.equal((await sourceTerminal).code,0,'Synthetic original source refused: '+log().slice(-6000));assert.equal(service.exitCode,null);
+   if(name.includes('parent-loss')){
+    for(const format of [3,5])assert.ok(log().includes('PASS genuine format '+format+' source parent SIGKILL:'),'Missing actual caller-loss proof for format '+format);
+    console.log('GENUINE_CALLER_SIGKILL_FORMATS=3|5');
+   }
   }
   const states=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(states.length>=2);
   const selected=states[0],owner=connectSyntheticCustody(descriptor,selected.id,selected.config),recovery=connectSyntheticCustody(recoveryDescriptor,selected.id,selected.config);
