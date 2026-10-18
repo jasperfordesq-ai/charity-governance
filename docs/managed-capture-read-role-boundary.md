@@ -52,11 +52,13 @@ routine is executed. Failures are sanitised and grant no authority.
 
 ## Proof limits and next integration
 
-`configuredCaptureSqlReadOnlyObserved` describes these catalogue predicates at
-one snapshot. The result still reports false for provider-token role verification,
+`configuredCaptureSqlReadOnlyObserved` describes the predicates returned by the
+bounded catalogue observation. Effective permission lookups are not a lock on
+concurrent DCL; this does not establish an atomic privilege interval. The result still reports false for provider-token role verification,
 full bucket visibility, capture-credential read-only verification, all-writer
 inventory, global quiescence and action authority. It is not a held privilege
-fence: an administrator can change grants after the observation.
+fence: an administrator can change grants during or after the observation.
+`privilegeIntervalHeld` and `privilegeChangesExcluded` remain explicitly false.
 
 This does not prove RLS row coverage, arbitrary invoker-routine/external effects,
 provider control-plane exclusion, JWT issuer shutdown, in-flight drainage,

@@ -56,7 +56,7 @@ function roleBoundaryFixture(){
 test('SQL capture-role boundary requires exact SELECT-only NOLOGIN/NOINHERIT role without upgrading provider claims',async()=>{
  const f=roleBoundaryFixture(),result=await f.service().observeCaptureRoleBoundary();assert.equal(f.queries(),7);
  assert.equal(result.configuredCaptureSqlReadOnlyObserved,true);assert.deepEqual(result.capture,configuration.capture);
- for(const key of ['captureCredentialReadOnlyVerified','providerTokenRoleVerified','unfilteredBucketVisibilityVerified','allWritersInventoried','wholeBackendQuiesced','actionAuthorized'] as const)assert.equal(result[key],false);
+ for(const key of ['privilegeIntervalHeld','privilegeChangesExcluded','captureCredentialReadOnlyVerified','providerTokenRoleVerified','unfilteredBucketVisibilityVerified','allWritersInventoried','wholeBackendQuiesced','actionAuthorized'] as const)assert.equal(result[key],false);
  assert.match(result.observationDigest,/^[a-f0-9]{64}$/);
 });
 

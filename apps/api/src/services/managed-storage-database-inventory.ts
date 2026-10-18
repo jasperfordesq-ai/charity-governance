@@ -35,7 +35,8 @@ export class ManagedStorageDatabaseInventory {
     inventoryObservationDigest:observed.observationDigest,capture:observed.capture,relations:observed.relations.map(r=>({schema:r.schema,name:r.name,oid:r.oid})),
     observedAt:observed.identity.observedAt,authority:observed.captureRoleBoundary};
    return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
-    configuredCaptureSqlReadOnlyObserved:true as const,providerTokenRoleVerified:false as const,unfilteredBucketVisibilityVerified:false as const,
+    scope:'CONFIGURED_SQL_ROLE_PREDICATES_ONLY' as const,configuredCaptureSqlReadOnlyObserved:true as const,privilegeIntervalHeld:false as const,privilegeChangesExcluded:false as const,
+    providerTokenRoleVerified:false as const,unfilteredBucketVisibilityVerified:false as const,
     captureCredentialReadOnlyVerified:false as const,allWritersInventoried:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
   }catch{throw new Error('Managed capture SQL role boundary is unverified');}
  }

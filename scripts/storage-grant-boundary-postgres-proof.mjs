@@ -209,7 +209,7 @@ export async function proveStorageGrantBoundary({admin,url}){
   const [readerRole]=await admin.$queryRaw`SELECT rolname AS name,oid::text AS oid FROM pg_roles WHERE rolname='storage_probe_reader'`;
   const readerBoundary=new ManagedStorageDatabaseInventory(admin,{...config,capture:readerRole});
   const boundary=await readerBoundary.observeCaptureRoleBoundary();assert.equal(boundary.configuredCaptureSqlReadOnlyObserved,true);
-  assert.equal(boundary.captureCredentialReadOnlyVerified,false);assert.equal(boundary.providerTokenRoleVerified,false);assert.equal(boundary.wholeBackendQuiesced,false);
+  assert.equal(boundary.privilegeIntervalHeld,false);assert.equal(boundary.privilegeChangesExcluded,false);assert.equal(boundary.captureCredentialReadOnlyVerified,false);assert.equal(boundary.providerTokenRoleVerified,false);assert.equal(boundary.wholeBackendQuiesced,false);
   const visible=await admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;return tx.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_storage_boundary WHERE value='synthetic-reader-control'`;});
   assert.equal(visible[0].total,1);
   await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
