@@ -22,6 +22,7 @@ test('request environment retains explicit safety and snapshot operands while ex
  assert.throws(()=>managedDaemonOwnerEnvironment(['run','-e','AWS_SECRET_ACCESS_KEY'],source));
  assert.throws(()=>managedDaemonOwnerEnvironment(args,{}));
  assert.deepEqual(managedDaemonOwnerEnvironment(['rm','synthetic'],source),{});
+ assert.deepEqual(managedDaemonOwnerEnvironment(['run','-e','CHARITYPILOT_DUMP_FILE'],{CHARITYPILOT_DUMP_FILE:'synthetic.dump'}),{CHARITYPILOT_DUMP_FILE:'synthetic.dump'});
 });
 test('fixed owner validates exact original arguments, storage and bounded secret transport before custody or dispatch',async()=>{
  const base=fixture();assert.deepEqual(validateManagedDaemonOwnerInput(base),base);
