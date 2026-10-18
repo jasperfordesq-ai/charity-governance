@@ -60,3 +60,13 @@ test('timeout during verification cannot consume a late claim and another origin
   assert.equal(await claimOriginalOutcomeAuthority({...b,binding:second.binding()}),true);await second.result;assert.equal(claimsB,1);
  }finally{await first?.close();await second?.close();}
 });
+test('a synchronous verifier cannot delay the timeout callback and then consume expired authority',{skip:!enabled,timeout:10000},async()=>{
+ const s=scope();let claims=0,channel;
+ try{
+  channel=await createOriginalOutcomeClaimChannel({...s,timeoutMs:50,transfer:{claim:()=>{claims++;return true;},abandon(){}},verifyReceiver:async()=>{
+   const until=performance.now()+120;while(performance.now()<until){/* simulate a blocked synchronous kernel probe */}return verified;
+  }});
+  channel.bindInputDigest(s.inputDigest);await assert.rejects(claimOriginalOutcomeAuthority({...s,binding:channel.binding()}));
+  await assert.rejects(channel.result);assert.equal(claims,0);
+ }finally{await channel?.close();}
+});

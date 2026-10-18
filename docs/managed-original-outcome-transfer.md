@@ -86,6 +86,10 @@ attempt can revive it. The parent reports an acknowledgement as sent; only the
 receiving client can report observing the exact nonce-bound reply. Neither
 observation means the SDK writer is ready or a daemon request may run.
 
+Both sides check monotonic deadlines directly. A synchronous kernel verifier
+cannot postpone a timer callback and thereby consume an expired claim; the
+deadline is checked before/after verification, before claim and before ACK.
+
 Cleanup applies only to the original directory inode and expected socket name;
 uncertain pending callbacks preserve the directory. No unit, PID, Docker object
 or other job is removed. The service adapter must close the channel explicitly.

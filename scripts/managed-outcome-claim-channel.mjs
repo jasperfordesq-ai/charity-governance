@@ -34,13 +34,15 @@ export async function createOriginalOutcomeClaimChannel({jobId,sourceSha,receive
   ||!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>15000)throw refuse();
  if(process.platform!=='linux'||process.getuid()===0)throw refuse();
  const root=mkdtempSync(join(tmpdir(),'charitypilot-outcome-claim-'));chmodSync(root,0o700);const original=requireOutcomeClaimDirectory(root),path=join(root,'claim.sock'),capability=randomBytes(32).toString('hex');
+ const deadline=performance.now()+timeoutMs;
  let open=true,attempted=false,claimed=false,sent=false,failed=false,inputDigest,connection,resolveResult,rejectResult;
+ const active=()=>open&&!failed&&performance.now()<deadline;
  const pending=new Set(),result=new Promise((yes,no)=>{resolveResult=yes;rejectResult=no;});void result.catch(()=>{});
  const unchanged=()=>{const s=requireOutcomeClaimDirectory(root);if(s.dev!==original.dev||s.ino!==original.ino)throw refuse();};
  const fail=()=>{if(sent)return;failed=true;open=false;clearTimeout(timer);try{transfer.abandon();}catch{}connection?.destroy();rejectResult(refuse());};
- const verified=async receiver=>{const v=await verifyReceiver(receiver);if(v?.liveCustodyIdentityVerified!==true||v?.executionAuthorized!==false||v?.actionAuthorized!==false)throw refuse();};
+ const verified=async receiver=>{if(!active())throw refuse();const v=await verifyReceiver(receiver);if(!active()||v?.liveCustodyIdentityVerified!==true||v?.executionAuthorized!==false||v?.actionAuthorized!==false)throw refuse();};
  const server=createServer(socket=>{
-  if(!open||attempted||!inputDigest){socket.destroy();fail();return;}attempted=true;connection=socket;let body=Buffer.alloc(0),received=false;
+  if(!active()||attempted||!inputDigest){socket.destroy();fail();return;}attempted=true;connection=socket;let body=Buffer.alloc(0),received=false;
   socket.setTimeout(timeoutMs,fail);socket.on('error',fail);socket.on('close',()=>{body.fill(0);if(!sent)fail();});
   socket.on('data',chunk=>{
    if(received){fail();return;}const next=Buffer.concat([body,chunk]);body.fill(0);body=next;
@@ -51,10 +53,10 @@ export async function createOriginalOutcomeClaimChannel({jobId,sourceSha,receive
      ||v.jobId!==jobId||v.sourceSha!==sourceSha||v.receiverId!==receiverId||v.ticketDigest!==ticketDigest||!hex(v.capability)||!hex(v.nonce)||!hex(v.exchangeNonce)
      ||!timingSafeEqual(Buffer.from(v.capability),Buffer.from(capability)))throw refuse();
     const receiver=receiverMetadata(v.receiver,jobId,sourceSha,receiverId,inputDigest);await verified(receiver);
-    if(!open||failed||socket.destroyed)throw refuse();if(await transfer.claim(v.nonce,ticketDigest)!==true)throw refuse();claimed=true;
-    await verified(receiver);if(!open||failed||socket.destroyed)throw refuse();unchanged();
+    if(!active()||socket.destroyed)throw refuse();if(await transfer.claim(v.nonce,ticketDigest)!==true)throw refuse();claimed=true;
+    await verified(receiver);if(!active()||socket.destroyed)throw refuse();unchanged();
     await new Promise((yes,no)=>socket.end(JSON.stringify(acknowledgement(v))+'\n',error=>error?no(error):yes()));
-    if(!open||failed)throw refuse();sent=true;open=false;clearTimeout(timer);
+    if(!active())throw refuse();sent=true;open=false;clearTimeout(timer);
     resolveResult({claimConsumed:true,acknowledgementSent:true,acknowledgementObservedByReceiver:false,receiver,
      originalAcknowledgementReconstructed:false,executionAuthorized:false,actionAuthorized:false});
    }catch{fail();}finally{body.fill(0);}})();pending.add(task);void task.finally(()=>pending.delete(task));
@@ -69,7 +71,7 @@ export async function createOriginalOutcomeClaimChannel({jobId,sourceSha,receive
   const settled=await Promise.race([Promise.allSettled([...pending]).then(()=>true),new Promise(r=>{wait=setTimeout(()=>r(false),15000);})]);clearTimeout(wait);
   if(!settled)throw refuse();unchanged();if(readdirSync(root).some(n=>n!=='claim.sock'))throw refuse();rmSync(root,{recursive:true,force:true});
  };
- return{binding:()=>({path,capability}),bindInputDigest:value=>{if(!open||attempted||inputDigest||!hex(value))throw refuse();inputDigest=value;},
+ return{binding:()=>({path,capability}),bindInputDigest:value=>{if(!active()||attempted||inputDigest||!hex(value))throw refuse();inputDigest=value;},
   result,snapshot:()=>({attempted,claimConsumed:claimed,acknowledgementSent:sent,failed,inFlight:pending.size}),close:()=>closing??=close()};
 }
 /** Credential-free client. It sends only the transfer nonce/digest and receiver
@@ -83,9 +85,10 @@ export async function claimOriginalOutcomeAuthority({binding,jobId,sourceSha,rec
  if(before.dev!==after.dev||before.ino!==after.ino)throw refuse();
  const request={format:1,kind:'MANAGED_OUTCOME_CLAIM_V1',jobId,sourceSha,receiverId,capability:binding.capability,nonce,ticketDigest,
   exchangeNonce:randomBytes(32).toString('hex'),receiver:metadata},packet=Buffer.from(JSON.stringify(request)+'\n');if(packet.length>8192)throw refuse();
+ const deadline=performance.now()+15000;
  try{return await new Promise((yes,no)=>{
   const socket=createConnection(binding.path);let response='',done=false;
-  const finish=ok=>{if(done)return;done=true;clearTimeout(timer);socket.destroy();ok?yes(true):no(refuse());};
+  const finish=ok=>{if(done)return;done=true;clearTimeout(timer);socket.destroy();ok&&performance.now()<deadline?yes(true):no(refuse());};
   const timer=setTimeout(()=>finish(false),15000);socket.once('error',()=>finish(false));socket.once('connect',()=>socket.write(packet));
   socket.on('data',b=>{response+=b.toString('utf8');if(Buffer.byteLength(response)>2048)finish(false);});
   socket.once('end',()=>finish(response===JSON.stringify(acknowledgement(request))+'\n'));socket.once('close',()=>{if(!done)finish(false);});
