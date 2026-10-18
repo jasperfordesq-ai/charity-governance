@@ -1,3 +1,13 @@
+## 18 October: independent saved-result agreement
+
+Cold daemon discovery validates owner results and source responses against their
+respective original records, then compares their intent pins, status, transport
+error, signal and already-absent fields. A disagreement refuses the discovery;
+it cannot be hidden by a successful source response or end marker. Matching
+failure records remain unresolved. Owner-only results and legacy source-only
+records retain their existing explicit absence and uncertainty; no observation
+backfills a missing ACK, enables retry or grants cleanup authority.
+
 ## 18 October: mandatory managed mutation routing
 
 COMMON_CANDIDATE kernel-contained restore proofs route mutating Docker requests
@@ -40,8 +50,9 @@ The synthetic service probe now sends outcomes through this channel after source
 context closure, including both SDK readback-ACK loss and original wire-ACK loss
 after storage. The test parent still holds the writer and credentials. The actual
 fixed worker and its source binding are now exercised as described below. Product
-helper routing, custody-parent-loss outcome transfer and provider/host-loss proof
-remain separate unfinished gates. Exact execution results are private.
+helper routing has since been integrated as described above. Custody-parent-loss
+outcome transfer and provider/host-loss proof remain unfinished. Exact results
+are private.
 
 ## Fixed worker service acceptance
 
@@ -66,10 +77,10 @@ uses pipe mode without `RemainAfterExit`; original cgroup observations and
 retained outcome evidence remain distinct from queue finality. Actual native
 results, including any failure, belong in the private checkpoint.
 
-The product source helper still uses its existing dispatch path. The actual
-worker acceptance probe does not connect every product mutation to this owner,
-survive loss of the custody parent, establish provider IAM, or prove host-loss
-recovery. Those remain required integration/acceptance work.
+The product source helper now routes required common-candidate mutations through
+this owner as described above. The acceptance probe alone does not establish
+custody-parent survival, provider IAM or host-loss recovery. Those remain required
+integration/acceptance work.
 
 17 October 2026. This is a fixed synthetic acceptance probe for the next managed
 request-owner implementation. It does not change the production imported-proof

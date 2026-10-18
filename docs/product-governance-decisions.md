@@ -1,3 +1,19 @@
+## 18 October: owner routing and independent recovery readback
+
+Managed COMMON_CANDIDATE mutations now use the fixed independent request worker
+with original OWNER/OUTCOME acknowledgements. Current cold discovery also compares
+every saved owner result with its corresponding source response: intent pin,
+status, transport-error, signal and already-absent fields must agree. Individually
+valid but contradictory records refuse readback and remain quarantined.
+Matching records grant no replay, cleanup, recovered acknowledgement or tenant
+authority. Missing records stay missing. See [request owner](managed-independent-request-owner.md).
+
+Actual release and native evidence are recorded privately. The original outcome
+writer remains process-local; loss of its custody parent can still leave an
+independent worker without a result sink. A separately retained outcome handoff,
+real provider/IAM observations and independent physical-host-loss proof remain
+unfinished. Earlier dated entries below describe their original checkpoints.
+
 ## 17 October: fixed helper daemon custody barrier
 
 Read [daemon intent custody](managed-daemon-intent-custody.md). Kernel-contained

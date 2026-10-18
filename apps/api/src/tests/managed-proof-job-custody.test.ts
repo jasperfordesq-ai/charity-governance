@@ -154,6 +154,26 @@ async function daemonFixture(){
  return{...f,header,intent,reader,custody,response,end,owner,ownerOutcome};
 }
 
+test('cold discovery refuses contradictory owner and source results without repairing or writing history',async()=>{
+ for(const field of ['status','transportError','signal','removalAlreadyAbsent','matching-success','matching-failure']){
+  const f=await daemonFixture();try{
+   const removal=field==='removalAlreadyAbsent',local=f.intent(1,f.header.sha256,removal?{operation:'rm',storagePlan:null}:{}),bound=f.owner(local),writer=f.custody(()=>true);
+   await writer.reserveHeader(f.header);await writer.reserveIntent(local);await writer.bindOwner(bound);
+   const ownerChange=field==='status'||field==='matching-failure'?{status:1}:field==='transportError'?{transportError:true}:field==='signal'?{signal:true}:removal?{status:1,removalAlreadyAbsent:true}:{};
+   await writer.createOwnerOutcomeWriter().publish(f.ownerOutcome(local,bound,ownerChange));
+   await writer.observeResponse(f.response(local,field==='matching-failure'||removal?{status:1}:{}));
+   if(field==='matching-success')await writer.finishRequests(f.end(1,local.sha256));
+   f.setLive(false);const writes=f.b.writes,generates=f.b.generates;
+   if(field.startsWith('matching-')){
+    const found=await f.reader().discover();assert.equal(found.ownerOutcomeCount,1);assert.equal(found.responseCount,1);
+    assert.equal(found.state,field==='matching-success'?'RECORDED_CLIENT_RESPONSES':'UNRESOLVED_REQUESTS');
+    assert.equal(found.pendingRequestResolved,false);assert.equal(found.cleanupAuthorized,false);assert.equal(found.actionAuthorized,false);
+   }else await assert.rejects(f.reader().discover());
+   assert.equal(f.b.writes,writes);assert.equal(f.b.generates,generates);
+  }finally{f.close();}
+ }
+});
+
 test('original one-shot outcome writer survives source closure while fresh reads cannot recreate it',async()=>{
  const f=await daemonFixture();try{
   const local=f.intent(),bound=f.owner(local);await f.session.reserveDaemonHeader(f.header,f.original);await f.session.reserveDaemonIntent(local,f.original);

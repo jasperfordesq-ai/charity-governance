@@ -371,15 +371,22 @@ export class ManagedDaemonIntentCustody{
      ||v.storagePlan&&v.storagePlan.image!==header.parse(JSON.parse(h.localRecord.body)).image)throw failure();
     if(boundOwner){const bound=this.parseOwner(boundOwner.artifact,sequence);this.assertOwnerIntent(bound.local,this.parse(saved.artifact,sequence));
      if(JSON.stringify(bound.value.intentCustodyPin)!==JSON.stringify(saved.pin)||JSON.stringify(bound.value.headerCustodyPin)!==JSON.stringify(savedHeader.pin))throw failure();ownerBindingCount++;}
+    let ownerResultLocal:z.infer<typeof ownerOutcome>|undefined;
     if(ownerResult&&boundOwner){const result=this.parseOwnerOutcome(ownerResult.artifact,sequence);this.assertOwnerOutcomePair(boundOwner.artifact,ownerResult.artifact,sequence);
      if(JSON.stringify(result.value.ownerCustodyPin)!==JSON.stringify(boundOwner.pin)||JSON.stringify(result.value.intentCustodyPin)!==JSON.stringify(saved.pin)
-      ||result.value.localIntent.sha256!==original.localRecord.sha256||result.value.localIntent.byteLength!==original.localRecord.byteLength)throw failure();ownerOutcomeCount++;}
+      ||result.value.localIntent.sha256!==original.localRecord.sha256||result.value.localIntent.byteLength!==original.localRecord.byteLength)throw failure();ownerOutcomeCount++;ownerResultLocal=result.local;}
     previous=original.localRecord.sha256;
     let outcome:'RECORDED_CLIENT_SUCCESS'|'RECORDED_CLIENT_UNCERTAINTY'|'NOT_LISTED_AT_BOUNDARY'='NOT_LISTED_AT_BOUNDARY';
     if(observed){
      const r=this.parseResponse(observed.artifact,sequence);
      if(JSON.stringify(r.value.baselineCustodyPin)!==JSON.stringify(saved.pin))throw failure();
      this.assertResponsePair(saved.artifact,observed.artifact,sequence);responseCount++;
+     // Independently retained pairs must agree even when no original process
+     // or wire ACK survives. Matching bytes still grant no request finality.
+     if(ownerResultLocal){
+      for(const field of ['status','transportError','signal','removalAlreadyAbsent'] as const)if(r.local[field]!==ownerResultLocal[field])throw failure();
+      if(JSON.stringify(r.local.intentPin)!==JSON.stringify(ownerResultLocal.intentPin))throw failure();
+     }
      outcome=(r.local.status===0||r.local.removalAlreadyAbsent)&&!r.local.transportError&&!r.local.signal?'RECORDED_CLIENT_SUCCESS':'RECORDED_CLIENT_UNCERTAINTY';
     }
     if(outcome!=='RECORDED_CLIENT_SUCCESS')uncertain=true;

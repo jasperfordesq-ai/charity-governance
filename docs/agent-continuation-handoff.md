@@ -1,3 +1,12 @@
+## 18 October: cold owner/source result agreement
+
+Independent daemon discovery now refuses individually valid owner/source records
+with conflicting result fields. Matching results retain quarantine/no-action
+semantics; absent outcomes are not reconstructed. See [request owner](managed-independent-request-owner.md).
+The outcome sink still depends on its original custody parent. Transfer beyond
+that lifetime and actual provider/physical-host-loss proof remain open. Exact
+test and release states belong to the private checkpoint.
+
 ## 18 October: managed mutation owner routing
 
 COMMON_CANDIDATE kernel-contained mutations now require the independent fixed
