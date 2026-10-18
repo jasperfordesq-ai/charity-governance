@@ -1770,7 +1770,7 @@ test('SDK epoch cancellation discards a late GET response and starts no exact re
 });
 
 test('SDK epoch head pagination is complete and repeated tokens or listing drift cannot yield a head',async()=>{
- for(const mode of ['complete','repeated-token','drift']){
+ for(const mode of ['complete','repeated-token','drift','more-than-max']){
   const sdk=await sdkEpochFixture(),genesis=sdk.backend.objects.get(sdk.prefix+'heads/00000.json')!;
   // Synthetic historical slots only; this is list geometry, not original ACK proof.
   for(let n=1;n<=1000;n++){
@@ -1782,6 +1782,11 @@ test('SDK epoch head pagination is complete and repeated tokens or listing drift
   mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{
    if(args[0].query['list-type']==='2'&&++listings===3&&mode==='drift')sdk.backend.objects.delete(sdk.prefix+'heads/01000.json');
    const result=await original(...args);
+   if(mode==='more-than-max'&&args[0].query['list-type']==='2'){
+    const rows=[...sdk.backend.objects].filter(([key])=>key.startsWith(sdk.prefix+'heads/')).sort(([a],[b])=>a<b?-1:1);
+    const xml='<ListBucketResult><Name>'+sdk.storage.bucket+'</Name><Prefix>'+sdk.prefix+'heads/</Prefix><MaxKeys>1000</MaxKeys><KeyCount>'+rows.length+'</KeyCount><IsTruncated>false</IsTruncated>'+rows.map(([key,row])=>'<Contents><Key>'+key+'</Key><Size>'+row.body.length+'</Size><ETag>"'+row.version+'"</ETag></Contents>').join('')+'</ListBucketResult>';
+    result.response.body?.destroy();result.response.body=Readable.from([Buffer.from(xml)]);
+   }
    if(mode==='repeated-token'&&args[0].query['continuation-token']){
     const chunks:Buffer[]=[];for await(const chunk of result.response.body)chunks.push(Buffer.from(chunk));
     const xml=Buffer.concat(chunks).toString().replace('<IsTruncated>false</IsTruncated>','<IsTruncated>true</IsTruncated>').replace('</ListBucketResult>','<NextContinuationToken>1000</NextContinuationToken></ListBucketResult>');

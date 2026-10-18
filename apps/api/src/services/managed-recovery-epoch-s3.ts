@@ -75,7 +75,7 @@ class EpochObjects {
   for(let page=0;page<11;page++){
    signal.throwIfAborted();const v=await this.send(new ListObjectsV2Command({Bucket:this.#config.bucket,ExpectedBucketOwner:this.#config.accountId,Prefix:prefix,MaxKeys:1000,...(token?{ContinuationToken:token}:{})}),signal);
    if(!('Contents'in v)||v.Name!==this.#config.bucket||v.Prefix!==prefix||v.MaxKeys!==1000||v.KeyCount!==(v.Contents??[]).length||typeof v.IsTruncated!=='boolean'
-    ||v.Delimiter||v.StartAfter||v.EncodingType||v.CommonPrefixes?.length||v.ContinuationToken!==token||!Array.isArray(v.Contents))throw failure();
+    ||v.Delimiter||v.StartAfter||v.EncodingType||v.CommonPrefixes?.length||v.ContinuationToken!==token||!Array.isArray(v.Contents)||v.Contents.length>1000)throw failure();
    for(const raw of v.Contents){const row={Key:z.string().parse(raw.Key),Size:z.number().int().min(1).max(65536).parse(raw.Size),ETag:tag.parse(raw.ETag)};
     const n=rows.length;if(n>10000||row.Key!==this.key('heads',n))throw failure();rows.push(row);}
    if(!v.IsTruncated){if(v.NextContinuationToken!==undefined||!rows.length)throw failure();return rows;}
