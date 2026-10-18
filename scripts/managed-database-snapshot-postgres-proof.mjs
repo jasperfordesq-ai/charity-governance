@@ -51,7 +51,7 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
     assert.equal(typeof process.send,'function');assert.equal(process.connected,true);
     await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_OWNER_READY_V1',owner:JSON.parse(artifact.body)},error=>error?no(error):yes()));
    }
-   if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal});
+   if(name==='bindService')await pauseContainedSourceForParentLoss({sourceId:id,database,certificate,parentDirectory:parent,workspaceRoot:output,signal,candidateFormat:managed?.retirement?5:3});
    return saved;
   }])));
   let supervised;

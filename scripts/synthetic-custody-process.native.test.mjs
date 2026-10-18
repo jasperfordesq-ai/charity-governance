@@ -50,11 +50,11 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
   assert.equal((await readerTerminal).code,0,readLog().slice(-4000));assert.equal(reportCount,1);assert.equal(result.kind,'SYNTHETIC_COLD_CUSTODY_READER_V1');assert.ok(result.verifiedRoots>=1);assert.ok(result.killedSourceServiceRecords>=1);assert.equal(result.suppliedSourceIdsOrPins,false);assert.equal(result.executionAuthorized,false);
   console.log('CURRENT_INSPECTION_COUNTS='+JSON.stringify({inspected:result.currentInspections,verifiedRoots:result.currentVerifiedRoots,unresolved:result.currentUnresolved}));
-  // Ten legacy, five read-role and five retired-control ACK-fault cases plus the original control retained by
-  // the genuinely killed caller. The killed attempt remains unresolved.
-  assert.equal(result.currentInspections,21);assert.equal(result.currentVerifiedRoots,6);assert.equal(result.currentUnresolved,15);
+  // Ten legacy, five read-role and five retired-control ACK-fault cases plus
+  // the original controls retained by two genuinely killed callers (formats 3/5).
+  assert.equal(result.currentInspections,22);assert.equal(result.currentVerifiedRoots,6);assert.equal(result.currentUnresolved,16);
   assert.equal(result.readRoleCurrentInspections,5);assert.equal(result.readRoleCurrentVerifiedRoots,2);assert.equal(result.readRoleCurrentUnresolved,3);
-  assert.equal(result.retiredControlCurrentInspections,5);assert.equal(result.retiredControlCurrentVerifiedRoots,2);assert.equal(result.retiredControlCurrentUnresolved,3);
+  assert.equal(result.retiredControlCurrentInspections,6);assert.equal(result.retiredControlCurrentVerifiedRoots,2);assert.equal(result.retiredControlCurrentUnresolved,4);
    assert.ok(result.daemonCatalogues>=2);assert.ok(result.daemonCompleted>=2);assert.ok(result.daemonUnresolved>=1);
    assert.equal(result.daemonCatalogues,result.daemonCompleted+result.daemonUnresolved);
    console.log('COLD_DAEMON_DISCOVERY_COUNTS='+JSON.stringify({catalogues:result.daemonCatalogues,completed:result.daemonCompleted,unresolved:result.daemonUnresolved}));

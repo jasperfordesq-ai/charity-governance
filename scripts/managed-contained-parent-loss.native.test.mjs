@@ -15,7 +15,7 @@ function docker(args,input){const p=prepareLocalDockerCommand(['docker',...args]
 function manager(args){const r=spawnSync('systemctl',['--user',...args],{encoding:'utf8',timeout:15000,maxBuffer:4096});assert.equal(r.status,0,'Synthetic manager operation refused');return r.stdout;}
 async function until(fn){for(let i=0;i<100;i++){const value=await fn();if(value)return value;await pause(100);}throw new Error('Synthetic original source observation expired');}
 function protectedRemove(path,prefix){if(!existsSync(path))return;assert.equal(dirname(path),resolve(tmpdir()));assert.ok(basename(path).startsWith(prefix));assert.equal(realpathSync(path),path);assert.equal(lstatSync(path).uid,process.getuid());assert.equal(lstatSync(path).mode&0o777,0o700);rmSync(path,{recursive:true,force:true});}
-test('real source caller loss stops its cohort while the original independent request owner and unresolved quarantine survive',{
+for(const captureFormat of ['3','5'])test('format '+captureFormat+' real source caller loss stops its cohort while the original independent request owner and unresolved quarantine survive',{
  skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_CONTAINED_PARENT!=='1',timeout:120000
 },async()=>{
  assert.notEqual(process.getuid(),0);const helper=captureHelperImplementationBinding();assert.equal(helper.sourceMatchesCommit,true);assert.equal(helper.canonicalRepositoryMatched,true);
@@ -31,13 +31,13 @@ test('real source caller loss stops its cohort while the original independent re
    '--label','charitypilot.restore-proof=true','--label','charitypilot.proof-created-at-ms='+(Date.now()-7_200_000),'--label','charitypilot.managed-proof-job='+otherJob,'--entrypoint','sh',DEFAULT_POSTGRES_IMAGE,'-eu','-c','sleep 120']);assert.match(control,/^[a-f0-9]{64}$/);
   const before=inspectProofContainerInventory({jobId:otherJob});assert.equal(before.containers.length,1);assert.equal(before.containers[0].id,control);assert.equal(before.containers[0].ageClass,'OLDER_THAN_PROOF_TIMEOUT');assert.equal(before.cleanupAuthorized,false);
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['NODE_TEST_CONTEXT','NODE_OPTIONS','NODE_PATH'].includes(key)));
-  producer=fork(fileURLToPath(new URL('./managed-database-writer-fence-postgres.test.mjs',import.meta.url)),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE:'1'},stdio:['ignore','pipe','pipe','ipc']});
+  producer=fork(fileURLToPath(new URL('./managed-database-writer-fence-postgres.test.mjs',import.meta.url)),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE:'1',CHARITYPILOT_TEST_PARENT_CAPTURE_FORMAT:captureFormat},stdio:['ignore','pipe','pipe','ipc']});
   producer.stdout.on('data',b=>{output+=b.toString();if(output.length>65536)producer.kill('SIGKILL');});producer.stderr.on('data',b=>{errors+=b.toString();if(errors.length>65536)producer.kill('SIGKILL');});
   producer.on('message',value=>{if(value?.kind==='ORIGINAL_CONTAINED_OWNER_READY_V1'&&!originalOwner)originalOwner=value.owner;if(value?.kind==='ORIGINAL_CONTAINED_CUSTODY_READY_V1')originalCustodies.push(value);});
   producerTerminal=new Promise((yes,no)=>{producer.once('error',no);producer.once('close',(code,signal)=>yes({code,signal}));});void producerTerminal.catch(()=>{});
   ready=await new Promise((yes,no)=>{const timer=setTimeout(()=>no(new Error('Original source barrier missing: '+output.slice(-2000))),30000);
    producer.once('message',value=>{clearTimeout(timer);yes(value);});producer.once('exit',()=>{clearTimeout(timer);no(new Error('Original source exited before barrier: '+output.slice(-2000)));});});
-  assert.equal(ready.kind,'ORIGINAL_CONTAINED_SOURCE_READY_V1');assert.equal(ready.sourceSha,helper.commitSha);assert.match(ready.sourceId,/^[a-f0-9]{64}$/);assert.match(ready.database,/^managed_writer_[a-f0-9]{32}$/);
+  assert.equal(ready.kind,'ORIGINAL_CONTAINED_SOURCE_READY_V1');assert.equal(ready.candidateFormat,Number(captureFormat));assert.equal(ready.sourceSha,helper.commitSha);assert.match(ready.sourceId,/^[a-f0-9]{64}$/);assert.match(ready.database,/^managed_writer_[a-f0-9]{32}$/);
   assert.equal(ready.executionAuthorized,false);assert.equal(ready.actionAuthorized,false);unit=containmentUnit(ready.jobId);assert.equal(ready.identity.unit,unit);
   const original=inspectContainmentUnit(unit);assert.equal(original.InvocationID,ready.identity.invocationId);assert.equal(Number(original.MainPID),ready.identity.mainPid);assert.equal(original.ActiveState,'active');assert.ok(original.ControlGroup);
   assert.equal(ready.identity.format,2);assert.equal(ready.identity.controlGroup,original.ControlGroup);assert.match(ready.identity.bootId,/^[a-f0-9-]{36}$/);
@@ -107,7 +107,7 @@ test('real source caller loss stops its cohort while the original independent re
   assert.equal(inspected.daemonRequests.state,'UNRESOLVED_REQUESTS');assert.equal(inspected.daemonRequests.mutatingRequestsObservedSuccessful,false);assert.ok(inspected.daemonRequests.requestCount>=1);
   assert.equal(inspected.daemonRequests.declaredImageVolumesCovered,true);assert.equal(inspected.daemonRequests.completeResourceInventory,false);
   assert.ok(inspected.storage.containers.some(v=>v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));assert.equal(inspected.storage.cleanupAuthorized,false);
-  console.log('PASS genuine source parent SIGKILL: empty original source cgroup, original independent owner/client survive, unresolved request/resources retained, source/control alive, fresh local reader refuses replay/cleanup; fixture teardown uses original ownership only; no provider/host-loss claim');
+  console.log('PASS genuine format '+captureFormat+' source parent SIGKILL: empty original source cgroup, original independent owner/client survive, unresolved request/resources retained, source/control alive, fresh local reader refuses replay/cleanup; fixture teardown uses original ownership only; no provider/host-loss claim');
  }finally{
   if(producer&&producer.exitCode===null&&producer.signalCode===null)producer.kill('SIGKILL');await producerTerminal?.catch(()=>{});
   if(unit){const state=spawnSync('systemctl',['--user','show',unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:10000,maxBuffer:4096});
