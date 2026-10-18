@@ -7,6 +7,7 @@ import {ArchivedRecoverySets} from '../apps/api/dist/services/archived-recovery-
 import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
 import {S3ManagedMaintenanceControl} from '../apps/api/dist/services/managed-maintenance-control.js';
 import {credentials} from '../apps/api/dist/tests/fixtures/archived-custody.js';
+import {inspectSyntheticEpochRecovery} from './managed-epoch-native.fixture.mjs';
 const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
 const sessions=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(sessions.length>=1&&sessions.length<=32);
 let roots=0,records=0,services=0,killedSourceServices=0,currentInspections=0,currentVerifiedRoots=0,currentUnresolved=0,daemonCatalogues=0,daemonCompleted=0,daemonUnresolved=0,readRoleCurrentInspections=0,readRoleCurrentVerifiedRoots=0,readRoleCurrentUnresolved=0;
@@ -65,7 +66,8 @@ for(const session of sessions){
   assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
-const report={kind:'SYNTHETIC_COLD_CUSTODY_READER_V1',sessions:sessions.length,records,verifiedRoots:roots,verifiedSourceServiceRecords:services,killedSourceServiceRecords:killedSourceServices,
+const epochRecovery=process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE?await inspectSyntheticEpochRecovery(descriptor,process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE):undefined;
+const report={kind:'SYNTHETIC_COLD_CUSTODY_READER_V1',sessions:sessions.length,records,verifiedRoots:roots,verifiedSourceServiceRecords:services,killedSourceServiceRecords:killedSourceServices,...(epochRecovery?{epochRecovery}:{}),
  currentInspections,currentVerifiedRoots,currentUnresolved,readRoleCurrentInspections,readRoleCurrentVerifiedRoots,readRoleCurrentUnresolved,
  retiredControlCurrentInspections,retiredControlCurrentVerifiedRoots,retiredControlCurrentUnresolved,daemonCatalogues,daemonCompleted,daemonUnresolved,
  suppliedSourceIdsOrPins:false,executionAuthorized:false,realProvider:false,sourceHostLossProven:false};

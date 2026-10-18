@@ -1,3 +1,11 @@
+## 18 October: dedicated two-epoch native source integration
+
+The separate-custody native cohort now has an opt-in shared namespace, original
+publication receipts retained by its supervisor and a fresh anchored recovery
+reader. The integration must be executed before claiming native two-epoch proof.
+See [fixture scope and remaining gates](managed-recovery-epoch-native.md).
+Existing caller-SIGKILL/ACK-loss cases remain separate. Actual provider IAM,
+current tenant authority and physical-host-loss acceptance remain open.
 ## 18 October: preparatory native epoch fixture plumbing
 
 The native synthetic proof helpers accept an explicit shared custody backend and

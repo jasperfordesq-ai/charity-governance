@@ -266,7 +266,7 @@ jobs:
         run: node --test apps/api/dist/tests/application-prisma-client.test.js apps/api/dist/tests/production-runtime-database-role.test.js apps/api/dist/tests/runtime-role-probe-job.test.js scripts/production-runtime-role-postgres.test.mjs scripts/prisma-database-url.test.mjs scripts/prisma-database-tls.test.mjs scripts/production-runtime-role-gate.test.mjs scripts/production-runtime-compose.test.mjs
 
       - name: Verify configured managed database writer closure with disposable PostgreSQL
-        run: node --test scripts/managed-database-writer-fence-postgres.test.mjs
+        run: node --test scripts/managed-epoch-native.test.mjs scripts/managed-database-writer-fence-postgres.test.mjs
 
       - name: Verify managed proof worker cancellation and exact-job Docker cleanup
         run: npm run test:managed-proof-process

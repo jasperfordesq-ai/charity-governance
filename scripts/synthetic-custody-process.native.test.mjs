@@ -10,6 +10,8 @@ import {PutObjectCommand} from '@aws-sdk/client-s3';
 import {GenerateDataKeyCommand,GenerateMacCommand} from '@aws-sdk/client-kms';
 import {callSyntheticCustody} from './synthetic-custody-wire.mjs';
 import {connectSyntheticCustody} from './synthetic-custody-client.mjs';
+import {provisionSyntheticEpochGenesis,validateOriginalSyntheticEpochAck} from './managed-epoch-native.fixture.mjs';
+import {captureHelperImplementationBinding} from './postgres-backup.mjs';
 const file=name=>fileURLToPath(new URL('./'+name,import.meta.url));
 function terminal(child){const p=new Promise((yes,no)=>{child.once('error',no);child.once('close',(code,signal)=>yes({code,signal}));});void p.catch(()=>{});return p;}
 function childOutput(child){let body='';for(const stream of [child.stdout,child.stderr])stream.on('data',b=>{body+=b.toString();if(body.length>1024*1024)child.kill('SIGKILL');});return()=>body;}
@@ -27,15 +29,35 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   recoveryRoot=mkdtempSync(join(tmpdir(),'charitypilot-synthetic-custody-'));chmodSync(recoveryRoot,0o700);
   const path=join(root,'session.json'),recoveryPath=join(recoveryRoot,'session.json');writeFileSync(path,JSON.stringify(descriptor),{flag:'wx',mode:0o600});writeFileSync(recoveryPath,JSON.stringify(recoveryDescriptor),{flag:'wx',mode:0o600});
   for(const target of [path,root,recoveryPath,recoveryRoot]){const fd=openSync(target,'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
-  const env={...process.env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:path,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1'};delete env.NODE_OPTIONS;delete env.NODE_PATH;delete env.NODE_TEST_CONTEXT;
+  const bootstrap=await provisionSyntheticEpochGenesis(descriptor),bootstrapPath=join(root,'epoch-bootstrap.json');
+  writeFileSync(bootstrapPath,JSON.stringify(bootstrap),{flag:'wx',mode:0o600});
+  const expectedSourceSha=captureHelperImplementationBinding().commitSha,originalEpochAcks=[];let ackError;
+  const env={...process.env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:path,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE:bootstrapPath};delete env.NODE_OPTIONS;delete env.NODE_PATH;delete env.NODE_TEST_CONTEXT;
   for(const name of ['managed-database-writer-fence-postgres.test.mjs','managed-contained-parent-loss.native.test.mjs']){
-   source=spawn(process.execPath,['--test',file(name)],{env:{...env,...(name.includes('parent-loss')?{CHARITYPILOT_TEST_CONTAINED_PARENT:'1'}:{})},stdio:['ignore','pipe','pipe']});sourceTerminal=terminal(source);const log=childOutput(source);
+   if(name.includes('parent-loss'))source=spawn(process.execPath,['--test',file(name)],{env:{...env,CHARITYPILOT_TEST_CONTAINED_PARENT:'1'},stdio:['ignore','pipe','pipe']});
+   else{
+    source=fork(file(name),[],{execArgv:[],env,stdio:['ignore','pipe','pipe','ipc']});
+    source.on('message',value=>{try{
+     const ack=validateOriginalSyntheticEpochAck(value,originalEpochAcks.length+1,expectedSourceSha);assert.ok(ack.sequence<=2);
+     const retained=join(recoveryRoot,'original-epoch-ack-'+ack.sequence+'.json');writeFileSync(retained,JSON.stringify(ack),{flag:'wx',mode:0o600});
+     for(const target of [retained,recoveryRoot]){const fd=openSync(target,'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
+     originalEpochAcks.push(ack);
+    }catch(error){ackError=error;}});
+   }
+   sourceTerminal=terminal(source);const log=childOutput(source);
    assert.equal((await sourceTerminal).code,0,'Synthetic original source refused: '+log().slice(-6000));assert.equal(service.exitCode,null);
+   if(ackError)throw ackError;
    if(name.includes('parent-loss')){
     for(const format of [3,5])assert.ok(log().includes('PASS genuine format '+format+' source parent SIGKILL:'),'Missing actual caller-loss proof for format '+format);
     console.log('GENUINE_CALLER_SIGKILL_FORMATS=3|5');
    }
   }
+  assert.equal(originalEpochAcks.length,2);assert.notEqual(originalEpochAcks[0].entrySha256,originalEpochAcks[1].entrySha256);assert.notEqual(originalEpochAcks[0].headRevision,originalEpochAcks[1].headRevision);
+  // Retain the live original publisher acknowledgement outside the source
+  // workspace. No GET, backup or recovery report can manufacture this checkpoint.
+  const recoveryBootstrapPath=join(recoveryRoot,'epoch-bootstrap.json');
+  writeFileSync(recoveryBootstrapPath,JSON.stringify({...bootstrap,trustedCheckpoint:{sequence:2,sha256:originalEpochAcks[1].entrySha256}}),{flag:'wx',mode:0o600});
+  for(const target of [bootstrapPath,root,recoveryBootstrapPath,recoveryRoot]){const fd=openSync(target,'r');try{fsyncSync(fd);}finally{closeSync(fd);}}
   const states=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(states.length>=2);
   const selected=states[0],owner=connectSyntheticCustody(descriptor,selected.id,selected.config),recovery=connectSyntheticCustody(recoveryDescriptor,selected.id,selected.config);
   const ownerClients={s3:owner.s3(),kms:owner.kms()},recoveryClients={s3:recovery.s3(),kms:recovery.kms()};
@@ -51,7 +73,7 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
    const signed=await ownerClients.kms.send(new GenerateMacCommand(mac));assert.equal(signed.Mac.length,32);signed.Mac.fill(0);
    assert.equal(owner.writes,before.writes+1);assert.equal(owner.generates,before.generates+1);
   }finally{for(const c of [...Object.values(ownerClients),...Object.values(recoveryClients)])c.destroy();}
-  reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
+  reader=fork(file('synthetic-custody-reader.fixture.mjs'),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CUSTODY_SESSION_FILE:recoveryPath,CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE:recoveryBootstrapPath},stdio:['ignore','pipe','pipe','ipc']});let result,reportCount=0;reader.on('message',value=>{result=value;reportCount++;});readerTerminal=terminal(reader);const readLog=childOutput(reader);
   assert.equal((await readerTerminal).code,0,readLog().slice(-4000));assert.equal(reportCount,1);assert.equal(result.kind,'SYNTHETIC_COLD_CUSTODY_READER_V1');assert.ok(result.verifiedRoots>=1);assert.ok(result.killedSourceServiceRecords>=1);assert.equal(result.suppliedSourceIdsOrPins,false);assert.equal(result.executionAuthorized,false);
   console.log('CURRENT_INSPECTION_COUNTS='+JSON.stringify({inspected:result.currentInspections,verifiedRoots:result.currentVerifiedRoots,unresolved:result.currentUnresolved}));
   // Ten legacy, five read-role and five retired-control ACK-fault cases plus
@@ -59,6 +81,8 @@ test('separate synthetic custody survives source exit and source SIGKILL, then c
   assert.equal(result.currentInspections,22);assert.equal(result.currentVerifiedRoots,6);assert.equal(result.currentUnresolved,16);
   assert.equal(result.readRoleCurrentInspections,5);assert.equal(result.readRoleCurrentVerifiedRoots,2);assert.equal(result.readRoleCurrentUnresolved,3);
   assert.equal(result.retiredControlCurrentInspections,6);assert.equal(result.retiredControlCurrentVerifiedRoots,2);assert.equal(result.retiredControlCurrentUnresolved,4);
+  assert.deepEqual(result.epochRecovery,{entries:2,latestEpoch:2,verifiedCurrentRoots:1,externalOriginalAckCheckpoint:true});
+  console.log('COLD_TWO_EPOCH_COUNTS='+JSON.stringify({...result.epochRecovery,originalPublicationAcks:originalEpochAcks.length}));
    assert.ok(result.daemonCatalogues>=2);assert.ok(result.daemonCompleted>=2);assert.ok(result.daemonUnresolved>=1);
    assert.equal(result.daemonCatalogues,result.daemonCompleted+result.daemonUnresolved);
    console.log('COLD_DAEMON_DISCOVERY_COUNTS='+JSON.stringify({catalogues:result.daemonCatalogues,completed:result.daemonCompleted,unresolved:result.daemonUnresolved}));

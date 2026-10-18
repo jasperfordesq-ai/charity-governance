@@ -11,9 +11,11 @@ import {PrismaClient} from '@prisma/client';
 import {ManagedDatabaseWriterFence} from '../apps/api/dist/services/managed-database-writer-fence.js';
 import {proveManagedBackendMaintenance,proveManagedPasswordInvalidation} from './managed-backend-maintenance-postgres-proof.mjs';
 import {validateLocalDockerEndpoint} from './personal-server-docker-boundary.mjs';
+import {proveManagedEpochLifecycle} from './managed-epoch-native.fixture.mjs';
 const containmentSelector=process.env.CHARITYPILOT_TEST_CONTAINED_SOURCE;
 if(containmentSelector!==undefined&&!['0','1'].includes(containmentSelector))throw new Error('Contained source test selector must be exactly zero or one');
 const containedSource=containmentSelector==='1';
+if(process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE!==undefined&&(!containedSource||!process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE))throw new Error('Native epoch fixture requires contained synthetic custody');
 if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!==undefined&&(!containedSource||process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!=='1'||typeof process.send!=='function'))throw new Error('Synthetic parent fixture needs the original contained test driver');
 if(process.env.CHARITYPILOT_TEST_PARENT_CAPTURE_FORMAT!==undefined&&
  (process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE!=='1'||!['3','5'].includes(process.env.CHARITYPILOT_TEST_PARENT_CAPTURE_FORMAT)))throw new Error('Synthetic parent capture format requires the original parent fixture');
@@ -131,6 +133,7 @@ test('managed database fence closes real stale credentials and sessions while re
   assert.equal(count.total,4); // No source rows were deleted; prepared insert rolled back only by this fixture.
   await proveManagedPasswordInvalidation({admin,configuration,url});
   await proveManagedBackendMaintenance({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'});
+  if(process.env.CHARITYPILOT_TEST_EPOCH_BOOTSTRAP_FILE&&!process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE)await proveManagedEpochLifecycle({admin,configuration,url,id,database,certificate:join(certDir,'cert.pem'),sourceExecutionMode:'KERNEL_CONTAINED'});
   await proveStorageGrantBoundary({admin,url,prepareCatalogueTransaction:()=>docker(['exec',id,'psql','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1',
    '-c',"BEGIN; GRANT UPDATE ON public.synthetic_storage_boundary TO storage_probe_reader; PREPARE TRANSACTION 'synthetic-catalogue-grant';"])});
  }finally{
