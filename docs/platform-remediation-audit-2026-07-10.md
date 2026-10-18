@@ -1,3 +1,17 @@
+## 18 October: fixed outcome custody component
+
+The fixed stdin custody entry point and receiver-specific kernel verifier are
+implemented. Its private socket opens only after the existing SDK transfer has
+activated; one authenticated outcome may finish after client disconnection.
+Original expiry, unknown ACKs and invalid bindings refuse retry. Canonical
+executor verification includes thirteen modules. Native component tests cover
+socket permissions, wrong capability/bytes, expiry and client loss. They use a
+synthetic grant, and kernel negative cases use observation fixtures. They do not
+prove an actual custody service surviving issuer death or activate this path in
+the source runner. Actual service launch, original SDK-ready integration and
+provider/independent host-loss acceptance remain open. Exact release state is
+recorded privately.
+
 ## 18 October: private original claim transport
 
 Read [outcome transfer](managed-original-outcome-transfer.md). The private Unix

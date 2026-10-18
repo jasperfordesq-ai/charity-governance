@@ -100,3 +100,17 @@ CLI input, has no permissive default, and must be wired to actual original
 kernel/source verification before runtime use. The current source runner does
 not use this channel yet. An independently managed custody process and its
 provider-backed parent-death proof remain unfinished.
+
+## 18 October: fixed outcome custody component
+
+The fixed stdin custody entry point and receiver-specific kernel verifier are
+implemented. Its private socket opens only after the existing SDK transfer has
+activated; one authenticated outcome may finish after client disconnection.
+Original expiry, unknown ACKs and invalid bindings refuse retry. Canonical
+executor verification includes thirteen modules. Native component tests cover
+socket permissions, wrong capability/bytes, expiry and client loss. They use a
+synthetic grant, and kernel negative cases use observation fixtures. They do not
+prove an actual custody service surviving issuer death or activate this path in
+the source runner. Actual service launch, original SDK-ready integration and
+provider/independent host-loss acceptance remain open. Exact release state is
+recorded privately.

@@ -1,4 +1,5 @@
 import {spawn,spawnSync} from 'node:child_process';
+import {validateOutcomeReceiverMetadata} from './managed-outcome-claim-channel.mjs';
 import {mkdtempSync,chmodSync,lstatSync,realpathSync,readFileSync,writeFileSync,linkSync,unlinkSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
@@ -62,19 +63,39 @@ export function assertIndependentOwnerObservation(value,{source,sourceSha,ownerI
   ||['NODE_OPTIONS','NODE_PATH','LD_PRELOAD','LD_LIBRARY_PATH'].some(k=>!actual.unsetEnvironment.trim().split(/\s+/).includes(k)))throw failure();
  return{liveOwnerIdentityVerified:true,independentOwnerDispatchVerified:false,executionAuthorized:false,actionAuthorized:false};
 }
-export function verifyIndependentDaemonOwner(value,options){
+function observeIndependentProcess(value,options){
  if(process.platform!=='linux'||process.getuid()===0)throw failure();
  const v=value?.identity;if(!v||!Number.isSafeInteger(v.mainPid)||v.mainPid<1||v.unit!==containmentUnit(v.ownerId))throw failure();
- const expected=options.expectedCommandLine,worker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url));
- const probe=fileURLToPath(new URL('./managed-daemon-owner-probe.mjs',import.meta.url));
- if(!Array.isArray(expected)||expected[0]!==process.execPath||(expected[1]!==worker&&!(options.synthetic===true&&expected[1]===probe))||expected.some(v=>typeof v!=='string'))throw failure();
  const unit=inspectContainmentUnit(v.unit),source=inspectContainmentUnit(options.source.Id),path='/sys/fs/cgroup'+unit.ControlGroup;
  if(observeOriginalControlGroup(unit.ControlGroup,v.unit,process.getuid())!=='POPULATED')throw failure();
  const command=readFileSync('/proc/'+v.mainPid+'/cmdline');if(command.length>16384||command.at(-1)!==0)throw failure();
- return assertIndependentOwnerObservation(value,options,{uid:process.getuid(),bootId:readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim(),unit,source,
+ return{uid:process.getuid(),bootId:readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim(),unit,source,
   commandLine:command.toString('utf8').slice(0,-1).split('\0'),status:readFileSync('/proc/'+v.mainPid+'/status','utf8'),processGroup:readFileSync('/proc/'+v.mainPid+'/cgroup','utf8'),
   memory:readFileSync(join(path,'memory.max'),'utf8'),pids:readFileSync(join(path,'pids.max'),'utf8'),cpu:readFileSync(join(path,'cpu.max'),'utf8'),
-  unsetEnvironment:execute('systemctl',['--user','show',v.unit,'--property=UnsetEnvironment','--value'])});
+  unsetEnvironment:execute('systemctl',['--user','show',v.unit,'--property=UnsetEnvironment','--value'])};
+}
+export function verifyIndependentDaemonOwner(value,options){
+ const expected=options.expectedCommandLine,worker=fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url)),probe=fileURLToPath(new URL('./managed-daemon-owner-probe.mjs',import.meta.url));
+ if(!Array.isArray(expected)||expected[0]!==process.execPath||(expected[1]!==worker&&!(options.synthetic===true&&expected[1]===probe))||expected.some(v=>typeof v!=='string'))throw failure();
+ return assertIndependentOwnerObservation(value,options,observeIndependentProcess(value,options));
+}
+function custodyKernelValue(receiver){
+ // Reuse kernel separation predicates only. This object is never persisted or
+ // reported as an original daemon-owner record.
+ return{format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId:receiver.jobId,sequence:1,
+  identity:{...receiver.identity,ownerId:receiver.receiverId,sourceSha:receiver.sourceSha,inputDigest:receiver.inputDigest}};
+}
+export function assertOutcomeCustodyObservation(receiver,options,actual){
+ const parsed=validateOutcomeReceiverMetadata(receiver,options.jobId,options.sourceSha,options.receiverId,options.inputDigest,actual.uid);
+ assertIndependentOwnerObservation(custodyKernelValue(parsed),{...options,ownerInputDigest:options.inputDigest},actual);
+ return{liveCustodyIdentityVerified:true,originalOutcomeCustodyVerified:false,executionAuthorized:false,actionAuthorized:false};
+}
+export function verifyOutcomeCustodyReceiver(receiver,options){
+ if(process.platform!=='linux'||process.getuid()===0)throw failure();
+ const entry=fileURLToPath(new URL('./managed-outcome-custodian.mjs',import.meta.url));
+ const expected=[process.execPath,entry,'--stdin'];
+ const parsed=validateOutcomeReceiverMetadata(receiver,options.jobId,options.sourceSha,options.receiverId,options.inputDigest);
+ const bound={...options,expectedCommandLine:expected};return assertOutcomeCustodyObservation(parsed,bound,observeIndependentProcess(custodyKernelValue(parsed),bound));
 }
 function members(path){if(!path)return[];const target='/sys/fs/cgroup'+path;
  if(!existsSync(target))return[];try{if(realpathSync(target)!==target)throw failure();}catch(e){if(e.code==='ENOENT')return[];throw e;}

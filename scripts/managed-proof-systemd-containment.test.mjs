@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {containmentUnit,parseScopeProperties,assertIndependentOwnerObservation} from './managed-proof-systemd-containment.mjs';
+import {containmentUnit,parseScopeProperties,assertIndependentOwnerObservation,assertOutcomeCustodyObservation} from './managed-proof-systemd-containment.mjs';
 const id='11111111-1111-4111-8111-111111111111',unit=containmentUnit(id);
 const fields={Id:unit,LoadState:'loaded',ActiveState:'active',SubState:'running',MainPID:'123',ControlGroup:'/user.slice/user-1000.slice/user@1000.service/app.slice/'+unit,
  KillMode:'control-group',Type:'exec',Transient:'yes',InvocationID:'a'.repeat(32),ExecMainStartTimestampMonotonic:'123456789',Result:'success',ExecMainCode:'0',ExecMainStatus:'0',NoNewPrivileges:'yes'};
@@ -16,6 +16,12 @@ test('independent owner readiness requires actual original process, command, boo
  const actual={uid:1000,bootId:value.identity.bootId,source:{...fields},unit:{...fields,Id:ownerUnit,MainPID:'456',InvocationID:'b'.repeat(32),ExecMainStartTimestampMonotonic:'987654321',ControlGroup:group},
   commandLine:options.expectedCommandLine,processGroup:'0::'+group+'\n',status:'Uid:\t1000\t1000\t1000\t1000\nNoNewPrivs:\t1\n',memory:'134217728',pids:'32',cpu:'50000 100000',
   unsetEnvironment:'NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH'};
+ const receiver={format:1,kind:'MANAGED_OUTCOME_RECEIVER_V1',jobId:id,receiverId:ownerId,sourceSha:value.identity.sourceSha,inputDigest:value.identity.inputDigest,
+  identity:Object.fromEntries(Object.entries(value.identity).filter(([key])=>!['ownerId','sourceSha','inputDigest'].includes(key)))};
+ const receiverOptions={...options,jobId:id,receiverId:ownerId,inputDigest:value.identity.inputDigest};
+ assert.deepEqual(assertOutcomeCustodyObservation(receiver,receiverOptions,actual),{liveCustodyIdentityVerified:true,originalOutcomeCustodyVerified:false,executionAuthorized:false,actionAuthorized:false});
+ for(const change of [{receiverId:id},{sourceSha:'8'.repeat(40)},{inputDigest:'7'.repeat(64)},{identity:{...receiver.identity,uid:1001}},{identity:{...receiver.identity,mainPid:789}}])assert.throws(()=>assertOutcomeCustodyObservation({...receiver,...change},receiverOptions,actual));
+ for(const change of [{bootId:'other-boot'},{commandLine:[process.execPath,'/other-worker']},{memory:'max'},{unit:{...actual.unit,InvocationID:'c'.repeat(32)}}])assert.throws(()=>assertOutcomeCustodyObservation(receiver,receiverOptions,{...actual,...change}));
  assert.equal(assertIndependentOwnerObservation(value,options,actual).liveOwnerIdentityVerified,true);
  for(const key of ['independentOwnerDispatchVerified','executionAuthorized','actionAuthorized'])assert.equal(assertIndependentOwnerObservation(value,options,actual)[key],false);
  for(const change of [{bootId:'other-boot'},{commandLine:[process.execPath,'/other-worker']},{processGroup:'0::'+fields.ControlGroup},

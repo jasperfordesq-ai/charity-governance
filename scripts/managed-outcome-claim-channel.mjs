@@ -12,12 +12,12 @@ export function requireOutcomeClaimDirectory(root){
  if(process.platform!=='linux'||process.getuid()===0||dirname(root)!==resolve(tmpdir())||!/^charitypilot-outcome-claim-[A-Za-z0-9]{6}$/.test(basename(root))||realpathSync(root)!==root)throw refuse();
  const s=lstatSync(root);if(!s.isDirectory()||s.uid!==process.getuid()||(s.mode&0o777)!==0o700)throw refuse();return s;
 }
-function receiverMetadata(v,jobId,sourceSha,receiverId,inputDigest){
+export function validateOutcomeReceiverMetadata(v,jobId,sourceSha,receiverId,inputDigest,uid=process.getuid()){
  if(!exact(v,'format,kind,jobId,sourceSha,receiverId,inputDigest,identity')||v.format!==1||v.kind!=='MANAGED_OUTCOME_RECEIVER_V1'
   ||v.jobId!==jobId||v.sourceSha!==sourceSha||v.receiverId!==receiverId||v.inputDigest!==inputDigest)throw refuse();
  const i=v.identity;if(!exact(i,'unit,invocationId,uid,mainPid,mainStartMonotonic,bootId,controlGroup')
   ||i.unit!==`charitypilot-containment-${receiverId}.service`||!(/^[a-f0-9]{32}$/).test(i.invocationId)
-  ||!Number.isSafeInteger(i.uid)||i.uid!==process.getuid()||!Number.isSafeInteger(i.mainPid)||i.mainPid<1
+  ||!Number.isSafeInteger(i.uid)||i.uid<1||i.uid!==uid||!Number.isSafeInteger(i.mainPid)||i.mainPid<1
   ||!(/^[1-9][0-9]{0,19}$/).test(i.mainStartMonotonic)||!(/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/).test(i.bootId)
   ||typeof i.controlGroup!=='string'||i.controlGroup.length>1024||!i.controlGroup.startsWith(`/user.slice/user-${i.uid}.slice/user@${i.uid}.service/`)
   ||!i.controlGroup.endsWith('/'+i.unit)||!i.controlGroup.slice(1).split('/').every(p=>p!=='.'&&p!=='..'&&/^[A-Za-z0-9_.@:-]+$/.test(p)))throw refuse();
@@ -52,7 +52,7 @@ export async function createOriginalOutcomeClaimChannel({jobId,sourceSha,receive
     if(!exact(v,'format,kind,jobId,sourceSha,receiverId,capability,nonce,ticketDigest,exchangeNonce,receiver')||v.format!==1||v.kind!=='MANAGED_OUTCOME_CLAIM_V1'
      ||v.jobId!==jobId||v.sourceSha!==sourceSha||v.receiverId!==receiverId||v.ticketDigest!==ticketDigest||!hex(v.capability)||!hex(v.nonce)||!hex(v.exchangeNonce)
      ||!timingSafeEqual(Buffer.from(v.capability),Buffer.from(capability)))throw refuse();
-    const receiver=receiverMetadata(v.receiver,jobId,sourceSha,receiverId,inputDigest);await verified(receiver);
+    const receiver=validateOutcomeReceiverMetadata(v.receiver,jobId,sourceSha,receiverId,inputDigest);await verified(receiver);
     if(!active()||socket.destroyed)throw refuse();if(await transfer.claim(v.nonce,ticketDigest)!==true)throw refuse();claimed=true;
     await verified(receiver);if(!active()||socket.destroyed)throw refuse();unchanged();
     await new Promise((yes,no)=>socket.end(JSON.stringify(acknowledgement(v))+'\n',error=>error?no(error):yes()));
@@ -81,7 +81,7 @@ export async function claimOriginalOutcomeAuthority({binding,jobId,sourceSha,rec
   ||!uuid(jobId)||!uuid(receiverId)||typeof sourceSha!=='string'||!/^[a-f0-9]{40}$/.test(sourceSha)||!hex(nonce)||!hex(ticketDigest)||!hex(receiver?.inputDigest))throw refuse();
  const root=dirname(binding.path),before=requireOutcomeClaimDirectory(root),s=lstatSync(binding.path);
  if(!s.isSocket()||s.uid!==process.getuid()||(s.mode&0o777)!==0o600)throw refuse();
- const metadata=receiverMetadata(receiver,jobId,sourceSha,receiverId,receiver.inputDigest),after=requireOutcomeClaimDirectory(root);
+ const metadata=validateOutcomeReceiverMetadata(receiver,jobId,sourceSha,receiverId,receiver.inputDigest),after=requireOutcomeClaimDirectory(root);
  if(before.dev!==after.dev||before.ino!==after.ino)throw refuse();
  const request={format:1,kind:'MANAGED_OUTCOME_CLAIM_V1',jobId,sourceSha,receiverId,capability:binding.capability,nonce,ticketDigest,
   exchangeNonce:randomBytes(32).toString('hex'),receiver:metadata},packet=Buffer.from(JSON.stringify(request)+'\n');if(packet.length>8192)throw refuse();
