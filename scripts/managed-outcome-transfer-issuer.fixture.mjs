@@ -34,9 +34,22 @@ try{
   const owner=custody.artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId:input.jobId,sequence:1,
    intentPin:{sha256:custody.intent.sha256,byteLength:custody.intent.byteLength},identity:{...input.owner,inputDigest:custody.inputDigest}});
   await custody.session.bindDaemonOwner(owner,custody.original);
-  const transfer=await custody.outcomeTransfer(),retained=await launchSyntheticOutcomeCustodyFixture({jobId:input.jobId,sourceSha:input.sourceSha,source,transfer:{...transfer,take:async()=>transfer.take()}},input.synthetic);
-  const outcome=custody.outcome(owner,{status:0,transportError:false,signal:false,stdoutSha256:hash('synthetic retained outcome'),stdoutBytes:26,stderrSha256:hash(''),stderrBytes:0});
-  process.stdout.write(JSON.stringify({source,receiver:retained.receiver,endpoint:retained.binding(),outcome,binding:custody.binding,original:custody.original})+'\n');
+  const transfer=await custody.outcomeTransfer();let expiresMonotonicNs,consumed=false,retained;
+  const receiving={...transfer,take:async()=>{const ticket=transfer.take();expiresMonotonicNs=ticket.expiresMonotonicNs;return ticket;},
+   claim:async(nonce,digest)=>{const accepted=transfer.claim(nonce,digest);if(input.claimAckLoss&&accepted){consumed=true;throw no();}return accepted;}};
+  const beforeReads=backend.reads,beforeWrites=backend.writes;
+  try{retained=await launchSyntheticOutcomeCustodyFixture({jobId:input.jobId,sourceSha:input.sourceSha,source,transfer:receiving},input.synthetic);}
+  catch(error){
+   if(!input.claimAckLoss||!consumed||error.custodyDiagnostic?.receiverVerified!==true||error.custodyDiagnostic?.cleanupPhase!==null)throw error;
+   if(transfer.claim('0'.repeat(64),'0'.repeat(64))!==false)throw no();
+   process.stdout.write(JSON.stringify({source,binding:custody.binding,original:custody.original,claimConsumed:true,sdkReady:false,
+    providerReadsAfterClaim:backend.reads-beforeReads,providerWritesAfterClaim:backend.writes-beforeWrites})+'\n');setInterval(()=>{},1000);
+  }
+  if(retained){
+   if(input.claimAckLoss)throw no();
+   const outcome=custody.outcome(owner,{status:0,transportError:false,signal:false,stdoutSha256:hash('synthetic retained outcome'),stdoutBytes:26,stderrSha256:hash(''),stderrBytes:0});
+   process.stdout.write(JSON.stringify({source,receiver:retained.receiver,endpoint:retained.binding(),outcome,binding:custody.binding,original:custody.original,expiresMonotonicNs})+'\n');
+  }
   setInterval(()=>{},1000);
  }
 }catch{process.stderr.write('Synthetic original issuer unresolved\n');process.exitCode=1;}

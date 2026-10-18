@@ -211,3 +211,15 @@ readers still gain no cleanup/replay authority. The initial final-unit-gate
 failure and subsequent repair are retained privately. Actual claim-ACK loss,
 service expiry, second custody-job preservation, real provider/current-authority
 and physical-host-loss acceptance remain explicit open gates.
+
+## 18 October: retained custody failure acceptance expansion
+
+The opt-in native cohort now includes consumed original claim with lost ACK,
+real original 120-second expiry without a mocked clock, and preservation of a
+second independently managed SDK custody job. The claim-loss fixture reports
+readiness as false and checks zero provider reads/writes after consumption. The
+expiry case keeps an independent control actor live and observes the original
+monotonic deadline. The second job has a distinct candidate, storage session,
+issuer and receiver; the first job's loss must not change its write count or
+prevent its own publication. Source alone is not execution evidence; dated exact
+native results and remaining provider/host-loss gates are recorded privately.
