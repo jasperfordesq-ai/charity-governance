@@ -10,6 +10,7 @@ const configuration=z.object({ownerId:identifier,environmentId:identifier,
  if(new Set(value.services.map(s=>s.id)).size!==4||new Set(value.services.map(s=>s.component)).size!==4)
   ctx.addIssue({code:'custom',message:'Exact distinct gateway, private web, API and scheduler services required'});
 });
+export {configuration as renderMaintenanceConfigurationSchema};
 const service=z.object({id:serviceId,ownerId:identifier,environmentId:identifier,
  type:z.enum(['web_service','private_service','background_worker']),imagePath,
  autoDeploy:z.literal('no'),autoDeployTrigger:z.literal('off').optional(),
@@ -19,14 +20,16 @@ const service=z.object({id:serviceId,ownerId:identifier,environmentId:identifier
 const job=z.object({id:z.string().regex(/^job-[a-z0-9]{20}$/),serviceId,
  status:z.enum(['pending','running','succeeded','failed','canceled'])});
 const deploy=z.object({id:identifier,status:z.enum(['created','queued','build_in_progress','update_in_progress',
- 'live','deactivated','build_failed','update_failed','canceled','pre_deploy_in_progress','pre_deploy_failed'])});
+ 'live','deactivated','build_failed','update_failed','canceled','pre_deploy_in_progress','pre_deploy_failed']),
+ image:z.object({ref:z.string().max(512).optional(),sha:z.string().regex(/^(?:sha256:)?[a-f0-9]{64}$/).optional()}).optional()});
 const activeDeploys=['created','queued','build_in_progress','update_in_progress','pre_deploy_in_progress'];
 const types={gateway:'web_service',web:'private_service',api:'private_service',scheduler:'background_worker'} as const;
 const shutdownOrder=['gateway','scheduler','web','api'] as const;
 const unresolved='Render maintenance is unresolved; inspect current services and jobs without automatically retrying mutations or reopening';
 type Budget={requests:number;deadline:number};
 
-/** Internal provider adapter; no route, worker or operator command activates it.
+/** Internal provider adapter; no route, worker or operator command activates
+ * mutations. The separate inspection job exposes only observeConfiguration().
  * The caller must supply an authorised, separately trusted exact environment
  * registry and coordinate control-plane writers. A point-in-time suspension
  * observation is not a durable IAM fence, database fence or reopening permit. */
@@ -63,13 +66,15 @@ export class RenderMaintenanceControl {
    return JSON.parse(Buffer.concat(chunks,length).toString('utf8')) as unknown;
   }finally{await response.body?.cancel().catch(()=>{});}
  }
- private async list<T extends {id:string}>(path:string,query:Record<string,string>,key:string,schema:z.ZodType<T>,budget:Budget):Promise<T[]>{
+ private async list<T extends {id:string}>(path:string,query:Record<string,string>,key:string,schema:z.ZodType<T>,budget:Budget,check:(row:T)=>void=()=>{}):Promise<T[]>{
   const rows:T[]=[],ids=new Set<string>(),cursors=new Set<string>();let cursor='';
-  for(let page=0;page<10;page++){
+  for(let page=0;page<11;page++){
    const raw=await this.request(path,{...query,limit:'100',...(cursor?{cursor}:{})},'GET',200,budget);
    const items=z.array(z.object({cursor:z.string().min(1).max(512)}).passthrough()).max(100).parse(raw);
-   for(const item of items){const parsed=schema.parse(item[key]);if(ids.has(parsed.id))throw new Error();ids.add(parsed.id);rows.push(parsed);}
-   if(items.length<100)return rows;
+   for(const item of items){const parsed=schema.parse(item[key]);if(ids.has(parsed.id))throw new Error();check(parsed);ids.add(parsed.id);rows.push(parsed);if(rows.length>1000)throw new Error();}
+   // limit is a maximum, not a completeness assertion. A short page still
+   // needs its cursor followed to an empty page within the same budget.
+   if(items.length===0)return rows;
    cursor=items.at(-1)!.cursor;if(cursors.has(cursor))throw new Error();cursors.add(cursor);
   }
   throw new Error(); // A truncated inventory is not evidence of no active work.
@@ -82,16 +87,35 @@ export class RenderMaintenanceControl {
    const actual=services.find(s=>s.id===expected.id);
    if(!actual)throw new Error();this.checkService(actual,expected);
   }
-  const jobs:z.infer<typeof job>[]=[];
+  const jobs:z.infer<typeof job>[]=[],liveDeployments:Array<{serviceId:string;deployId:string;imagePath:string;sha:string}>=[];
   for(const current of services){
-   const deployments=await this.list(`/services/${current.id}/deploys`,{status:activeDeploys.join(',')},'deploy',deploy,budget);
-   if(deployments.some(d=>activeDeploys.includes(d.status)))throw new Error();
+   const deployments=await this.list(`/services/${current.id}/deploys`,{status:[...activeDeploys,'live'].join(',')},'deploy',deploy,budget,
+    d=>{if(activeDeploys.includes(d.status))throw new Error();});
+   const live=deployments.filter(d=>d.status==='live'),expected=c.services.find(s=>s.id===current.id)!;
+   if(live.length!==1||live[0]!.image?.ref!==expected.imagePath
+    ||live[0]!.image?.sha?.replace(/^sha256:/,'')!==expected.imagePath.split('@sha256:')[1])throw new Error();
+   liveDeployments.push({serviceId:current.id,deployId:live[0]!.id,imagePath:live[0]!.image!.ref!,sha:live[0]!.image!.sha!.replace(/^sha256:/,'')});
    const currentJobs=await this.list(`/services/${current.id}/jobs`,{status:'pending,running'},'job',job,budget);
    if(currentJobs.some(j=>j.serviceId!==current.id))throw new Error();
    jobs.push(...currentJobs.filter(j=>j.status==='pending'||j.status==='running'));
   }
   if(new Set(jobs.map(j=>j.id)).size!==jobs.length)throw new Error();
-  return{services,jobs};
+  return{services,jobs,liveDeployments};
+ }
+ /** Point-in-time readback only; active jobs are reported, not cancelled.
+  * No env/secret files, IAM/controller writers or image provenance is proved. */
+ async observeConfiguration(){
+  try{
+   const state=await this.snapshot(this.budget()),observedAt=new Date().toISOString();
+   return{format:1,kind:'MANAGED_RENDER_CONFIGURATION_DIAGNOSTIC_V1' as const,
+    scope:'RENDER_CONFIGURED_SERVICE_AND_WORK_OBSERVATION' as const,configurationDigest:this.configurationDigest(),observedAt,
+    observationDigest:createHash('sha256').update(JSON.stringify({configurationDigest:this.configurationDigest(),state,observedAt})).digest('hex'),
+    configuredServices:4,liveImagePinsMatched:state.liveDeployments.length,activeJobs:state.jobs.length,
+    suspendedServices:state.services.filter(s=>s.suspended==='suspended').length,
+    completeEnvironmentVerified:false as const,secretDeliveryVerified:false as const,imageProvenanceVerified:false as const,
+    controlPlaneExclusionVerified:false as const,runningToolReleaseVerified:false as const,
+    wholeBackendQuiesced:false as const,reopeningAuthorised:false as const,executionAuthorized:false as const,actionAuthorized:false as const};
+  }catch{throw new Error(unresolved);}
  }
  private proof(state:Awaited<ReturnType<RenderMaintenanceControl['snapshot']>>){
   if(state.services.some(s=>s.suspended!=='suspended')||state.jobs.length)throw new Error();

@@ -103,3 +103,55 @@ requirements. The generated synthetic Blueprint also passed the current download
 Render JSON schema offline. That is structural/local proof, not Render API
 validation, provisioning, image execution or provider acceptance. Exact schema
 hash and validation result are retained in the ignored private review pack.
+
+## Read-only Render inspection and complete cursor traversal
+
+The compiled API exposes `jobs:inspect-managed-render`. From a reviewed operator
+build, pipe an operator-protected JSON input through stdin:
+
+```sh
+npm run jobs:inspect-managed-render -w @charitypilot/api < /protected/operator/render-inspection.json
+```
+
+Input is strict UTF-8 JSON, at most16KiB: `format: 1`, `registry`, `token` and
+`expectedConfigurationDigest`. The registry is the compiler's exact four-service
+`maintenanceRegistry`, reviewed against the actual account. Compute its expected
+digest with the reviewed `RenderMaintenanceControl.configurationDigest()`; the
+provided digest binds that input, not independent registry completeness. No ambient
+provider credential, endpoint override, mutation switch or new access grant exists.
+The command reads only `https://api.render.com/v1`; store no token in tracked files,
+arguments, shell history or tickets. An authorised provider credential is still
+required before actual use.
+
+All service, deployment and job lists now follow every non-empty page's final
+cursor, including short pages, to an empty page. Duplicates, cursor cycles, unknown
+states, truncation, more than1000rows, more than11pages, or the existing96request/
+60second budget refuse the observation. Active deploys stop before any shutdown.
+For every service, exactly one current `live` deploy must name the configured
+immutable image reference and its matching resolved SHA-256. Missing/ambiguous
+live records and a different resolved image refuse. A configured service image
+alone cannot prove what is deployed. A suspended service whose current release
+cannot be verified also remains unresolved; no success is inferred from its state.
+
+The same snapshot feeds existing maintenance checks. It does not relax original
+mutation acknowledgements, gateway-first shutdown, surviving one-off-job accounting
+or database/storage/capture/recovery gates. Original deployment IDs and image pins
+are included in the internal observation digest, but the CLI emits only bounded
+counts/digests/time and false authority flags. Active jobs are reported; the command
+never suspends a service or cancels a job. Success is a point-in-time configured
+service/work observation, not maintenance readiness or a permanent fence.
+
+Complete environment variables/groups, Blueprint sync, hooks, secret-file bytes,
+image provenance, IAM/controller writers and physical-host recovery are NOT covered.
+Their flags stay false and their independent review remains required. Keep the
+running command's source/image evidence separately; it cannot attest its own release.
+Errors are fixed/redacted and produce no successful diagnostic report.
+
+Contract checked18October2026 against Render's official
+[OpenAPI source](https://api-docs.render.com/openapi/render-public-api-1.json),
+[pagination](https://api-docs.render.com/reference/pagination),
+[service listing](https://api-docs.render.com/reference/list-services) and
+[image deployment behaviour](https://render.com/docs/deploying-an-image).
+The full source snapshot/hash is retained privately. API-shape tests, short-page
+counterexamples, live-image substitutions and native integration are synthetic
+transport proof; they do not establish actual hosted API behaviour or account state.

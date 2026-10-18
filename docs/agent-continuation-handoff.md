@@ -1,3 +1,15 @@
+## 18 October: Render inventories require empty-page completion and live image pins
+
+Render maintenance now follows short pages to an empty continuation and checks
+one current live deployment's exact image reference and resolved SHA against each
+configured service. Hidden extra services, later active deploys/jobs and mismatched
+live images cannot be treated as a complete inventory. A separate stdin-only
+read-only inspection job reports counts/digests and active jobs without dispatching
+shutdown. Read [the contract and scope](managed-provider-plan.md).
+Current environment/secret/Blueprint/control-plane and image provenance evidence
+remain separate; this is not full provider or host-loss acceptance. Original unknown
+acknowledgements and tenant authority boundaries remain unchanged. Exact source/test
+results and OpenAPI snapshot provenance are in the ignored private handoff.
 ## 18 October: current managed provider configuration compiler
 
 A pure stdin-only compiler now joins the V2 mesh, exact reviewed image metadata,

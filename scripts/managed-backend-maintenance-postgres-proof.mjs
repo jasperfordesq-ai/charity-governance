@@ -99,6 +99,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    ({component:['gateway','web','api','scheduler'][i],id,imagePath:image}))},'synthetic-token',async(input,options)=>{
    const endpoint=new URL(String(input)),parts=endpoint.pathname.split('/'),id=parts[3];
    assert.equal(endpoint.origin,'https://api.render.com');assert.equal(options.redirect,'error');
+   if(options.method==='GET'&&endpoint.searchParams.has('cursor')&&['services','deploys','jobs'].includes(parts.at(-1)))return Response.json([]);
    if(endpoint.pathname==='/v1/services'){
     if(databaseClosed){const [row]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_authid WHERE rolname IN ('managed_writer_a','managed_writer_b') AND NOT rolcanlogin AND rolpassword IS NULL`;
      assert.equal(row.n,2);events.push('post-database-provider-read');}
@@ -110,7 +111,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
     const [row]=await admin.$queryRaw`SELECT count(*)::integer AS n FROM pg_roles WHERE rolname IN ('managed_writer_a','managed_writer_b') AND rolcanlogin`;
     assert.equal(row.n,2);services.find(s=>s.id===id).suspended='suspended';return new Response(null,{status:202});
    }
-   if(parts[4]==='deploys')return Response.json([]);
+   if(parts[4]==='deploys')return Response.json([{deploy:{id:'dep-'+id.slice(4),status:'live',image:{ref:image,sha:image.split('@')[1]}},cursor:'live'}]);
    if(parts[6]==='cancel'){assert.equal(options.method,'POST');commands++;events.push('cancel');job='canceled';return Response.json({status:'canceled'});}
    if(parts[4]==='jobs')return Response.json(id===ids[3]&&job==='running'?
     [{job:{id:'job-'+ 'd'.repeat(20),serviceId:id,status:job},cursor:'last-job'}]:[]);

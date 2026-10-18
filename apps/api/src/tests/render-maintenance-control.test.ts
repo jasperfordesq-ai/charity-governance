@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {RenderMaintenanceControl} from '../services/render-maintenance-control.js';
+import {inspectManagedRender} from '../jobs/inspect-managed-render.js';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
 const ids=['srv-'+ 'a'.repeat(20),'srv-'+ 'b'.repeat(20),'srv-'+ 'c'.repeat(20),'srv-'+ 'd'.repeat(20)];
 const jobId='job-'+ 'd'.repeat(20);
@@ -24,18 +27,18 @@ function fixture(){
   assert.equal(new Headers(options?.headers).get('Authorization'),'Bearer synthetic-token');
   assert.ok(options?.signal);const response=fault?.(url,method);if(response)return response;
   const parts=url.pathname.split('/'),id=parts[3];
-  if(url.pathname==='/v1/services')return Response.json(services.map(service=>({service,cursor:service.id})));
+  if(url.pathname==='/v1/services')return Response.json(url.searchParams.has('cursor')?[]:services.map(service=>({service,cursor:service.id})));
   const service=services.find(s=>s.id===id);assert.ok(service);
   if(parts.length===4)return Response.json(service);
   if(parts[4]==='suspend'){
    assert.equal(method,'POST');service.suspended='suspended';return new Response(null,{status:202});
   }
-  if(parts[4]==='deploys')return Response.json([]);
+  if(parts[4]==='deploys')return Response.json(url.searchParams.has('cursor')?[]:[{deploy:{id:'dep-'+id!.slice(4),status:'live',image:{ref:service.imagePath,sha:digest}},cursor:'live'}]);
   if(parts[4]==='jobs'&&parts[6]==='cancel'){
    assert.equal(method,'POST');const job=jobs.get(id!)!.find(j=>j.id===parts[5]);assert.ok(job);
    job.status='canceled';return Response.json(job);
   }
-  if(parts[4]==='jobs')return Response.json(jobs.get(id!)!.filter(j=>['pending','running'].includes(j.status)).map(job=>({job,cursor:job.id})));
+  if(parts[4]==='jobs')return Response.json(url.searchParams.has('cursor')?[]:jobs.get(id!)!.filter(j=>['pending','running'].includes(j.status)).map(job=>({job,cursor:job.id})));
   throw new Error('unexpected request');
  };
  return{services,calls,jobs,transport,setFault:(value:typeof fault)=>{fault=value;}};
@@ -53,6 +56,86 @@ test('Render suspension checks every service and independently cancels surviving
  assert.ok(f.calls.find(c=>c.path.startsWith('/v1/services?'))?.path.includes('includePreviews=true'));
  const mutations=f.calls.filter(c=>c.method==='POST').length;
  await control.observeSuspended();await control.suspend();assert.equal(f.calls.filter(c=>c.method==='POST').length,mutations);
+});
+
+test('operator inspection follows current live image pins and reports jobs without any provider mutation',async()=>{
+ const f=fixture(),control=new RenderMaintenanceControl(configuration,'synthetic-token',f.transport);
+ const raw={format:1,registry:configuration,token:'synthetic-token',expectedConfigurationDigest:control.configurationDigest()};
+ const report=await inspectManagedRender(raw,f.transport);
+ assert.equal(report.liveImagePinsMatched,4);assert.equal(report.activeJobs,1);assert.equal(report.suspendedServices,0);
+ assert.ok(f.calls.every(c=>c.method==='GET'));assert.ok(f.services.every(s=>s.suspended==='not_suspended'));
+ assert.equal(report.completeEnvironmentVerified,false);assert.equal(report.executionAuthorized,false);
+ assert.equal(JSON.stringify(report).includes('synthetic-token'),false);assert.equal(JSON.stringify(report).includes('ghcr.io'),false);
+ const before=f.calls.length;
+ for(const change of [{expectedConfigurationDigest:'0'.repeat(64)},{token:'PRIVATE\n'},{endpoint:'https://untrusted.invalid'}]){
+  await assert.rejects(inspectManagedRender({...raw,...change},f.transport),error=>error instanceof Error&&!error.message.includes('PRIVATE'));
+ }
+ assert.equal(f.calls.length,before);
+});
+
+test('Render inspection CLI refuses malformed or oversized confidential input with fixed output',()=>{
+ for(const body of ['{"token":"PRIVATE"',Buffer.alloc(16385,65),Buffer.from([0xff])]){
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../jobs/inspect-managed-render.js',import.meta.url)),'--stdin'],{input:body,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Managed Render inspection refused; no provider action authorised\n');
+ }
+});
+
+test('short service pages require an empty continuation and cannot hide a fifth service',async()=>{
+ for(const extra of [false,true]){
+  const f=fixture();let emptyPages=0;
+  f.setFault(url=>{
+   if(url.pathname!=='/v1/services')return;
+   const cursor=url.searchParams.get('cursor');
+   if(cursor==='last'){emptyPages++;return Response.json([]);}
+   const selected=cursor?f.services.slice(2):f.services.slice(0,2);
+   if(cursor&&extra)selected.push({...f.services[0]!,id:'srv-'+'x'.repeat(20)});
+   return Response.json(selected.map((service,i)=>({service,cursor:cursor&&i===selected.length-1?'last':service.id})));
+  });
+  const control=new RenderMaintenanceControl(configuration,'synthetic-token',f.transport);
+  if(extra){await assert.rejects(control.suspend());assert.equal(f.calls.some(v=>v.method==='POST'),false);}
+  else{assert.equal((await control.suspend()).suspendedServices,4);assert.equal(emptyPages,3);}
+ }
+});
+
+test('a short deploy page cannot hide a later active release before suspension',async()=>{
+ const f=fixture();let pages=0;
+ f.setFault(url=>{
+  if(url.pathname!==`/v1/services/${ids[0]}/deploys`)return;
+  pages++;
+  return Response.json(url.searchParams.has('cursor')?[{deploy:{id:'dep-hidden',status:'queued'},cursor:'second'}]:
+   [{deploy:{id:'dep-terminal',status:'deactivated'},cursor:'first'}]);
+ });
+ await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+ assert.equal(pages,2);assert.equal(f.calls.some(v=>v.method==='POST'),false);
+});
+
+test('later short-page jobs are accounted for and cancelled after the service is suspended',async()=>{
+ const f=fixture();
+ f.setFault(url=>{
+  if(url.pathname!==`/v1/services/${ids[3]}/jobs`)return;
+  const cursor=url.searchParams.get('cursor');if(cursor==='last')return Response.json([]);
+  if(!cursor)return Response.json([{job:{id:'job-'+'e'.repeat(20),serviceId:ids[3],status:'succeeded'},cursor:'history'}]);
+  return Response.json(f.jobs.get(ids[3]!)!.filter(v=>v.status==='running').map(job=>({job,cursor:'last'})));
+ });
+ assert.equal((await new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend()).activeJobs,0);
+ assert.equal(f.calls.filter(v=>v.path.endsWith('/cancel')).length,1);
+});
+
+test('configured image alone is insufficient: live deploy must have one matching immutable ref and resolved SHA',async()=>{
+ for(const mode of ['missing','duplicate','tag','sha','unknown-sha'] as const){
+  const f=fixture();f.setFault(url=>{
+   if(url.pathname!==`/v1/services/${ids[0]}/deploys`)return;
+   if(url.searchParams.has('cursor'))return Response.json([]);
+   const image={ref:f.services[0]!.imagePath,sha:digest};
+   if(mode==='tag')image.ref=image.ref.split('@')[0]+':latest';
+   if(mode==='sha')image.sha='sha256:'+'2'.repeat(64);
+   if(mode==='unknown-sha')image.sha='unknown';
+   const row={deploy:{id:'dep-live',status:'live',image},cursor:'last'};
+   return Response.json(mode==='missing'?[]:mode==='duplicate'?[row,{...row,deploy:{...row.deploy,id:'dep-other'}}]:[row]);
+  });
+  await assert.rejects(new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend());
+  assert.equal(f.calls.some(v=>v.method==='POST'),false,mode);
+ }
 });
 
 test('Render preflight rejects extra previews, wrong ownership, mutable images, auto-deploy and active deploys before mutation',async()=>{
@@ -182,12 +265,14 @@ test('Render complete paginated terminal history permits suspension without canc
  f.setFault(url=>{
   if(url.pathname!==`/v1/services/${ids[0]}/deploys`)return;
   if(url.searchParams.has('cursor')){
-   assert.equal(url.searchParams.get('cursor'),'cursor-99');continuationPages++;return Response.json([]);
+   continuationPages++;
+   if(url.searchParams.get('cursor')==='cursor-99')return Response.json([{deploy:{id:'dep-live',status:'live',image:{ref:f.services[0]!.imagePath,sha:digest}},cursor:'live'}]);
+   assert.equal(url.searchParams.get('cursor'),'live');return Response.json([]);
   }
   return Response.json(Array.from({length:100},(_,i)=>({deploy:{id:`dep-terminal-${i}`,status:'deactivated'},cursor:`cursor-${i}`})));
  });
  const result=await new RenderMaintenanceControl(configuration,'synthetic-token',f.transport).suspend();
- assert.equal(result.activeJobs,0);assert.equal(continuationPages,3);
+ assert.equal(result.activeJobs,0);assert.equal(continuationPages,6);
  assert.equal(f.calls.filter(c=>c.path.endsWith('/cancel')).length,1);
 });
 
