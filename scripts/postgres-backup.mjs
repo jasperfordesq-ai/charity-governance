@@ -4510,7 +4510,13 @@ export async function runImportedSnapshotRestoreProof(args,snapshot,env=process.
     const acknowledge=daemonCustodyRequired?((kind,artifact)=>acknowledgeDaemonRecord({kind,artifact,jobId,inputDigest,sourceSha:captureHelperImplementationBinding().commitSha})):undefined;
     managedDaemonJournal=createManagedDaemonRequestJournal({root:optionString(parsed.options,'output-dir'),jobId,inputDigest},{acknowledge,dispatchOwner:daemonCustodyRequired?dispatchDaemonOwner:undefined});
    }
-   const outcome=await runBackupCommand(args,env,snapshot),requests=managedDaemonJournal?.finish();
+   const outcome=await runBackupCommand(args,env,snapshot);let requests;
+   try{requests=managedDaemonJournal?.finish();}catch{
+    // Accounting failure must still refuse completion. Preserve the first
+    // already-redacted helper failure instead of hiding it behind finish().
+    const original=outcome.status!==0?redactPostgresTranscript(String(outcome.stderr??'')).split('\n')[0].slice(0,256):'';
+    return result(1,'',daemonJournalFailure().message+(original?'\n'+original:''));
+   }
    if(outcome.status===0&&requests&&(!requests.mutatingRequestsObservedSuccessful||!requests.declaredImageVolumesCovered))return result(1,'',daemonJournalFailure().message);
    return outcome;
   }catch{return result(1,'',daemonJournalFailure().message);}finally{managedDaemonJournal=undefined;managedProofJobId=undefined;}

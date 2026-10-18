@@ -9,7 +9,14 @@ import {verifyContainedExecutorSource} from './managed-proof-systemd-runner.mjs'
 import {requestOutcomeCustody,validateOutcomeCustodyHandoff,validateOutcomeCustodyReceipt} from './managed-outcome-custodian.mjs';
 import {requestManagedDaemonCustody} from './managed-daemon-custody-client.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
-const no=()=>new Error('Original daemon owner unresolved; preserve intent without replay');
+const failureStages=['VALIDATE_INPUT','LIVE_IDENTITY','ORIGINAL_OWNER_ACK','RETAINED_HANDOFF','RETAINED_PROBE','DOCKER_EXECUTION','RETAINED_PUBLICATION','ORIGINAL_OUTCOME_ACK'];
+const no=stage=>{const error=new Error('Original daemon owner unresolved; preserve intent without replay'+(failureStages.includes(stage)?' [stage='+stage+']':''));if(failureStages.includes(stage))error.phase=stage;return error;};
+/** Only fixed stage codes cross this stderr boundary. Never forward arbitrary
+ * child messages, environment, command operands or provider response bodies. */
+export function parseManagedDaemonOwnerFailureStage(stderr){
+ const matched=typeof stderr==='string'?/^Original daemon owner unresolved \[stage=([A-Z_]+)\]\n$/.exec(stderr):null;
+ return matched&&failureStages.includes(matched[1])?matched[1]:undefined;
+}
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');
 const hex=(v,n)=>typeof v==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(v);
 const artifact=value=>{const body=JSON.stringify(value);return{body,sha256:hash(body),byteLength:Buffer.byteLength(body)};};
@@ -47,7 +54,7 @@ export function dispatchManagedDaemonOwnerSync(raw){
   const state=spawnSync('systemctl',['--user','show',launch.unit,'--property=LoadState','--value'],{env:launch.environment,encoding:'utf8',timeout:15000,maxBuffer:4096});
   if(state.error||![0,1,4].includes(state.status)||state.stdout.trim()!=='not-found')throw no();
   const r=spawnSync('systemd-run',launch.args,{env:launch.environment,input:launch.input,encoding:'utf8',timeout:launch.timeout,maxBuffer:launch.maxBuffer,killSignal:'SIGKILL'});
-  if(r.status!==0||r.error||r.signal||r.stderr?.trim())throw no();const value=JSON.parse(r.stdout);
+  if(r.status!==0||r.error||r.signal||r.stderr?.trim())throw no(parseManagedDaemonOwnerFailureStage(r.stderr));const value=JSON.parse(r.stdout);
   if(!exact(value,'status,transportError,signal,stdout,stderr')||value.status!==null&&!Number.isSafeInteger(value.status)
    ||typeof value.transportError!=='boolean'||typeof value.signal!=='boolean'||typeof value.stdout!=='string'||typeof value.stderr!=='string'
    ||Buffer.byteLength(value.stdout)>input.maxBuffer||Buffer.byteLength(value.stderr)>input.maxBuffer)throw no();
@@ -84,24 +91,26 @@ function actualIdentity(input){
 /** Fixed CLI uses real identity, custody and local Docker. Seams are tests only.
  * Inputs travel on stdin, never a command line, environment file or saved record. */
 export async function runManagedDaemonOwner(raw,{identity=actualIdentity,acknowledge=requestManagedDaemonCustody,execute=spawnLocalDockerCommand,probeRetained=requestOutcomeCustody,publishRetained=requestOutcomeCustody}={}){
- const input=validateManagedDaemonOwnerInput(raw),intent=JSON.parse(input.intent.body),owner=artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',
+ let phase='VALIDATE_INPUT';try{
+ const input=validateManagedDaemonOwnerInput(raw),intent=JSON.parse(input.intent.body);phase='LIVE_IDENTITY';const owner=artifact({format:1,kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',
   jobId:input.jobId,sequence:intent.sequence,intentPin:{sha256:input.intent.sha256,byteLength:input.intent.byteLength},identity:identity(input)});
  const send=(kind,record,receipt)=>acknowledge({kind,artifact:record,descriptorPath:input.descriptorPath,jobId:input.jobId,inputDigest:input.inputDigest,sourceSha:input.sourceSha,...(kind==='OWNER'?{ownerInput:input}:{}),...(receipt?{receipt}:{})});
- const acknowledged=await send('OWNER',owner);let retained;
- if(input.outcomeMode==='RETAINED_SDK_V1'){retained=validateOutcomeCustodyHandoff(acknowledged,input);if(await probeRetained({endpoint:retained.endpoint,receiver:retained.receiver})!==true)throw no();}
+ phase='ORIGINAL_OWNER_ACK';const acknowledged=await send('OWNER',owner);let retained;
+ if(input.outcomeMode==='RETAINED_SDK_V1'){phase='RETAINED_HANDOFF';retained=validateOutcomeCustodyHandoff(acknowledged,input);phase='RETAINED_PROBE';if(await probeRetained({endpoint:retained.endpoint,receiver:retained.receiver})!==true)throw no();}
  else if(acknowledged!==true)throw no();
  const environment=Object.fromEntries(['PATH','HOME','USER','LOGNAME'].filter(k=>process.env[k]!==undefined).map(k=>[k,process.env[k]]));
  Object.assign(environment,input.environment);
- const r=execute(['docker',...input.args],environment,{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:input.timeoutMs,maxBuffer:input.maxBuffer,killSignal:'SIGKILL'});
+ phase='DOCKER_EXECUTION';const r=execute(['docker',...input.args],environment,{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:input.timeoutMs,maxBuffer:input.maxBuffer,killSignal:'SIGKILL'});
  const stdout=typeof r.stdout==='string'?r.stdout:'',stderr=typeof r.stderr==='string'?r.stderr:'';
  const outcome=artifact({format:1,kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId:input.jobId,sequence:intent.sequence,
   intentPin:{sha256:input.intent.sha256,byteLength:input.intent.byteLength},ownerPin:{sha256:owner.sha256,byteLength:owner.byteLength},
   ownerInputDigest:JSON.parse(owner.body).identity.inputDigest,status:Number.isSafeInteger(r.status)?r.status:null,transportError:!!r.error,signal:!!r.signal,
   removalAlreadyAbsent:intent.operation==='rm'&&r.status===1&&!r.error&&!r.signal&&stderr.trim()==='Error response from daemon: No such container: '+intent.target,
   stdout:{sha256:hash(stdout),byteLength:Buffer.byteLength(stdout)},stderr:{sha256:hash(stderr),byteLength:Buffer.byteLength(stderr)}});
- const receipt=retained?validateOutcomeCustodyReceipt(await publishRetained({endpoint:retained.endpoint,receiver:retained.receiver,artifact:outcome})):undefined;
- if(await send('OUTCOME',outcome,receipt)!==true)throw no();
+ phase='RETAINED_PUBLICATION';const receipt=retained?validateOutcomeCustodyReceipt(await publishRetained({endpoint:retained.endpoint,receiver:retained.receiver,artifact:outcome})):undefined;
+ phase='ORIGINAL_OUTCOME_ACK';if(await send('OUTCOME',outcome,receipt)!==true)throw no();
  return{status:Number.isSafeInteger(r.status)?r.status:null,transportError:!!r.error,signal:!!r.signal,stdout,stderr};
+ }catch{throw no(phase);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  process.stdout.on('error',()=>{});process.stderr.on('error',()=>{});let bytes=0;const chunks=[];
@@ -110,5 +119,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   for await(const chunk of process.stdin){bytes+=chunk.length;if(bytes>65536)throw no();chunks.push(chunk);}
   const body=Buffer.concat(chunks);let input;try{input=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(body));}finally{body.fill(0);for(const b of chunks)b.fill(0);}
   const result=await runManagedDaemonOwner(input);process.stdout.write(JSON.stringify(result)+'\n');
- }catch{process.stderr.write('Original daemon owner unresolved\n');process.exitCode=1;}finally{for(const b of chunks)b.fill(0);}
+ }catch(error){process.stderr.write('Original daemon owner unresolved'+(failureStages.includes(error?.phase)?' [stage='+error.phase+']':'')+'\n');process.exitCode=1;}finally{for(const b of chunks)b.fill(0);}
 }

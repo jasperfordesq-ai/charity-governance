@@ -1,3 +1,14 @@
+## 18 October: daemon proof failure under diagnosis
+
+The new native checkpoint/read probes passed all six refusals and seven fresh
+positive controls at93d10b6d. That same full run was4/5: an entry-read-loss case
+failed during its first native source capture, before the intended epoch2 fault.
+A focused fresh scenario reproduced the early daemon-accounting refusal. Do not
+claim this full matrix green or treat the failure as the intended ACK-loss result.
+Bounded owner-stage diagnostics now preserve the earlier redacted helper error
+when journal finalisation also refuses. Completion/identity/custody gates and
+no-replay behaviour remain enforced; diagnosis and exact native verification
+remain required. Detailed original failed transcripts are retained privately.
 ## 18 October: original epoch publication loss passed; read-fault extension integrated
 
 A separate native cohort now covers entry/head PUT and exact-readback response

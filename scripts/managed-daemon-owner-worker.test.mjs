@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runManagedDaemonOwner,validateManagedDaemonOwnerInput,prepareManagedDaemonOwnerLaunch,managedDaemonOwnerEnvironment} from './managed-daemon-owner-worker.mjs';
+import {runManagedDaemonOwner,validateManagedDaemonOwnerInput,prepareManagedDaemonOwnerLaunch,managedDaemonOwnerEnvironment,parseManagedDaemonOwnerFailureStage} from './managed-daemon-owner-worker.mjs';
 import {independentOwnerProbeArguments} from './managed-daemon-owner-probe.mjs';
 import {planManagedProofStorage} from './postgres-backup.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -47,7 +47,12 @@ test('original OWNER ACK precedes execution and exact OUTCOME ACK precedes retur
 });
 test('unknown OWNER never executes; unknown OUTCOME withholds output and never repeats execution',async()=>{
  for(const kind of ['OWNER','OUTCOME']){let executed=0;await assert.rejects(runManagedDaemonOwner(fixture(),{identity:()=>({inputDigest:'a'.repeat(64)}),
-  acknowledge:async v=>{if(v.kind===kind)throw new Error('synthetic unknown ACK');return true;},execute:()=>{executed++;return{status:0,stdout:'',stderr:''};}}));assert.equal(executed,kind==='OWNER'?0:1);}
+  acknowledge:async v=>{if(v.kind===kind)throw new Error('private-provider-body');return true;},execute:()=>{executed++;return{status:0,stdout:'',stderr:''};}}),error=>{assert.equal(error.phase,kind==='OWNER'?'ORIGINAL_OWNER_ACK':'ORIGINAL_OUTCOME_ACK');assert.doesNotMatch(error.message,/private-provider-body/);return true;});assert.equal(executed,kind==='OWNER'?0:1);}
+});
+test('only exact known owner failure stages cross stderr; raw child errors and caller secrets are discarded',async()=>{
+ assert.equal(parseManagedDaemonOwnerFailureStage('Original daemon owner unresolved [stage=RETAINED_PROBE]\n'),'RETAINED_PROBE');
+ for(const value of ['Original daemon owner unresolved [stage=PRIVATE_SECRET]\n','Original daemon owner unresolved [stage=RETAINED_PROBE]\nprivate-payload','private-payload',undefined])assert.equal(parseManagedDaemonOwnerFailureStage(value),undefined);
+ await assert.rejects(runManagedDaemonOwner(fixture(),{identity(){throw new Error('private-identity-payload');}}),error=>{assert.equal(error.phase,'LIVE_IDENTITY');assert.doesNotMatch(error.message,/private-identity-payload/);return true;});
 });
 
 test('retained mode refuses a legacy boolean OWNER ACK before execution or publication',async()=>{
@@ -59,7 +64,7 @@ test('unbound worker refuses the actual default identity and CLI before any exec
  await assert.rejects(runManagedDaemonOwner(fixture()));
  const r=spawnSync(process.execPath,[fileURLToPath(new URL('./managed-daemon-owner-worker.mjs',import.meta.url)),'--stdin'],{
   input:JSON.stringify(fixture()),encoding:'utf8',timeout:10000,maxBuffer:4096});
- assert.equal(r.status,1);assert.equal(r.stdout,'');assert.equal(r.stderr,'Original daemon owner unresolved\n');
+ assert.equal(r.status,1);assert.equal(r.stdout,'');assert.equal(r.stderr,'Original daemon owner unresolved [stage=LIVE_IDENTITY]\n');
 });
 test('fixed service launch transports private payload only on stdin and pins its command and resource limits',()=>{
  const input={...fixture(),environment:{PGPASSWORD:'synthetic-private-payload'}},launch=prepareManagedDaemonOwnerLaunch(input,{PATH:'/synthetic',DATABASE_URL:'omit',NODE_OPTIONS:'omit',AWS_SECRET_ACCESS_KEY:'omit'});
