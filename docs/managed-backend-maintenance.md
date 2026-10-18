@@ -169,3 +169,49 @@ Supabase documents that its customer [postgres role is not a superuser](https://
 That fact alone does not determine a project's complete permissions. Check the
 actual configured account; do not grant hosted privileges to force this prototype
 to pass, or infer hosted-provider compatibility from synthetic PostgreSQL results.
+## Operator database compatibility command
+
+From a reviewed compiled checkout, use the read-only job on an operator machine:
+
+```sh
+npm run jobs:preflight-managed-database -w @charitypilot/api < /protected/operator/database-preflight.json
+```
+
+Keep the input outside the checkout in an operator-only directory/file. Do not
+paste its credentials into command arguments, shell history, tickets or tracked
+documentation. No ambient `DATABASE_URL` or application environment is used.
+This command is for an already authorised connection; it creates no provider,
+role, access grant or maintenance attempt and runs no migration.
+
+Input is strict UTF-8 JSON, at most 16 KiB, with exactly `format: 1`, `databaseUrl`,
+`configuration` and `expectedConfigurationDigest`. The configuration has database
+name/OID, maintenance name/OID and explicit writer/custodian name/OID arrays, using
+the same trusted registry as the maintenance plan. Verify those identities through
+an independently reviewed catalogue inventory. The expected digest is the SHA-256
+of JSON serialisation of `managedDatabaseWriterFenceConfigurationSchema.parse`
+from the reviewed build, the same as `ManagedDatabaseWriterFence.configurationDigest()`.
+A digest supplied with the input binds that reviewed registry; it is not a signature
+or independent proof of the registry's completeness.
+
+The explicit connection must name the configured maintenance role and database,
+use `sslmode=verify-full` and `target_session_attrs=read-write`, and optionally an
+absolute `sslrootcert` (or `system`). It uses the existing strict Prisma transport
+normaliser; duplicate/unknown parameters and TLS downgrades refuse before connecting.
+Connection timeout defaults to ten seconds. Only the narrow read-only database
+preflight runs; it never calls `close()` or password invalidation.
+
+Exit 0 means `CATALOGUE_PREREQUISITES_OBSERVED`; exit 2 means
+`MISSING_CATALOGUE_PRIVILEGES`, with the missing predicate names. Exit 1 means the
+observation is unverified, malformed, refused or cleanup failed. The command emits
+no report on exit 1 and prints a fixed error, without provider bodies or credentials.
+The JSON report omits connection URLs, role names/OIDs and raw password material.
+It keeps `runningToolReleaseVerified`, `providerMutationCapabilityVerified`,
+`directEndpointVerified`, `wholeBackendQuiesced` and execution/action authority
+false. Preserve the exact reviewed source/image identity separately alongside the
+report; the command does not certify its own release or make a later shutdown safe.
+
+The native synthetic PostgreSQL test invokes the actual compiled command using
+stdin, with a deliberately unusable ambient database URL. It requires a positive
+maintenance result and a limited-role exit-2 result, then proves both original
+writer sessions can still insert. These are executable compatibility observations,
+not actual Supabase permissions, a hosted deployment or provider activation.

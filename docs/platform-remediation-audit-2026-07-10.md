@@ -1,3 +1,16 @@
+## 18 October: operator-facing read-only database compatibility job
+
+The compiled API now provides `jobs:preflight-managed-database` with bounded
+explicit stdin configuration and a reviewed registry digest. It normalises only
+verified TLS, binds role/database identity before connection, uses the read-only
+catalogue preflight and emits a redacted compatibility/missing-privilege report.
+It performs no maintenance or grants and does not certify its own release.
+Read [the command contract](managed-backend-maintenance.md). Actual provider
+permissions, endpoint/control-plane scope, independent custody and physical-host
+recovery remain unproved. Native tests invoke the real command and check both
+compatible and limited accounts; their exact execution evidence is recorded in
+the private continuation checkpoint. No live VM or provider activation follows
+from publishing this command.
 ## 18 October: database maintenance preflight before shutdown
 
 Managed maintenance now checks the configured database identity, verified TLS,

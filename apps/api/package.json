@@ -30,7 +30,8 @@
     "jobs:create-platform-operator": "node dist/jobs/create-platform-operator.js",
     "jobs:reconcile-document-mirrors": "node dist/jobs/reconcile-document-mirrors.js",
     "jobs:register-confluence-synthetic-scope": "node dist/jobs/register-confluence-synthetic-scope.js",
-    "jobs:inspect-managed-recovery": "node dist/jobs/inspect-managed-recovery.js"
+    "jobs:inspect-managed-recovery": "node dist/jobs/inspect-managed-recovery.js",
+    "jobs:preflight-managed-database": "node dist/jobs/preflight-managed-database.js --stdin"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "3.1143.0",

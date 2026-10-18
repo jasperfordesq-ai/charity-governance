@@ -86,6 +86,25 @@ test('managed database fence closes real stale credentials and sessions while re
   assert.equal(preflight.requiredCataloguePredicatesObserved,true);
   assert.equal(preflight.passwordStateReadVerified,true);
   assert.equal(preflight.rolesChanged,false);
+  const preflightCommand=(databaseUrl,registry)=>{
+   const expectedConfigurationDigest=new ManagedDatabaseWriterFence(admin,registry).configurationDigest();
+   const result=spawnSync(process.execPath,['apps/api/dist/jobs/preflight-managed-database.js','--stdin'],{
+    input:JSON.stringify({format:1,databaseUrl,configuration:registry,expectedConfigurationDigest}),encoding:'utf8',timeout:45000,maxBuffer:16384,
+    env:{...process.env,DATABASE_URL:'postgresql://unused:unused@invalid.example/unused'}});
+   assert.equal(result.error,undefined);assert.equal(result.stderr,'');assert.ok([0,2].includes(result.status));
+   assert.equal(/synthetic-private|synthetic-maintenance-only|synthetic-writer-only|postgresql:|SCRAM-SHA/i.test(result.stdout),false);
+   return {code:result.status,report:JSON.parse(result.stdout)};
+  };
+  const commandPass=preflightCommand(canonical.href,configuration);
+  assert.equal(commandPass.code,0);assert.equal(commandPass.report.status,'CATALOGUE_PREREQUISITES_OBSERVED');
+  assert.equal(commandPass.report.runningToolReleaseVerified,false);assert.equal(commandPass.report.executionAuthorized,false);
+  const [limited]=await admin.$queryRaw`SELECT rolname AS name,oid::text AS oid FROM pg_roles WHERE rolname='managed_alias'`;
+  const limitedRegistry={...configuration,maintenance:limited,custodians:[...configuration.custodians,limited]},limitedUrl=new URL(canonical.href);
+  limitedUrl.username=limited.name;limitedUrl.password='synthetic-writer-only';
+  const commandRefusal=preflightCommand(limitedUrl.href,limitedRegistry);
+  assert.equal(commandRefusal.code,2);assert.equal(commandRefusal.report.status,'MISSING_CATALOGUE_PRIVILEGES');
+  assert.ok(commandRefusal.report.missingPredicates.includes('readPasswordState'));
+  assert.equal(commandRefusal.report.passwordStateReadVerified,false);
   // A passing advisory read must leave both original writer sessions usable.
   await writerA.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-a')`;
   await writerB.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-b')`;

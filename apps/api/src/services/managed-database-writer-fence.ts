@@ -12,6 +12,7 @@ const configuration=z.object({database:name,databaseOid:oid,maintenance:principa
   ||value.writers.some(p=>p.name==='postgres'||p.name==='rdsadmin'||p.name.startsWith('pg_')||p.name.startsWith('supabase_')))ctx.addIssue({code:'custom',message:'Invalid managed principal boundary'});
 });
 type Configuration=z.infer<typeof configuration>;
+export {configuration as managedDatabaseWriterFenceConfigurationSchema};
 const role=z.object({name,oid,canLogin:z.boolean(),superuser:z.boolean(),createRole:z.boolean(),createDb:z.boolean(),
  replication:z.boolean(),bypassRls:z.boolean()}).strict();
 const identity=z.object({database:name,databaseOid:oid,currentRole:name,sessionRole:name,recovery:z.boolean(),durable:z.boolean(),encrypted:z.boolean(),
