@@ -182,7 +182,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
  const inspect=target=>{const r=docker(['inspect',target]);if(r.status!==0){if(ownerProbeInspectAbsent(r,target))return null;throw no();}return JSON.parse(r.stdout)[0];};
  const exact=v=>{if(!v||v.Name!=='/'+independentOwnerProbeTarget(jobId)||v.Config.Image!==DEFAULT_POSTGRES_IMAGE||v.Config.Labels['io.charitypilot.owner-probe']!==jobId
   ||v.HostConfig.Privileged||v.HostConfig.NetworkMode!=='none'||v.HostConfig.ReadonlyRootfs!==true||v.Mounts.some(m=>m.Type!=='tmpfs'||m.Destination!=='/var/lib/postgresql/data'))throw no();return v;};
- let custody,gate,caller,ownerReady,writer,input,container,deniedCustodyClaims=0,outcomeStored=false,sourceClosed=false,completed=false,launched=false;
+ let custody,gate,caller,ownerReady,writer,input,container,deniedCustodyClaims=0,custodyDenialVerified=false,outcomeStored=false,sourceClosed=false,completed=false,launched=false;
  try{
   write(root,'request.json',request);if(loaded(request.callerUnit)!=='not-found'||loaded(request.ownerUnit)!=='not-found')throw no();
   launched=true;launch(request.callerUnit,'--caller',root);await waitFor(()=>existsSync(join(root,'caller.ready.json')));caller=inspectContainmentUnit(request.callerUnit);
@@ -195,7 +195,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
     const saved=await custody.session.bindDaemonOwner(a,custody.original);verifyIndependentDaemonOwner(value,options);if(mode==='custody-claim-denied'){
      const transfer=await custody.outcomeTransfer();
      try{await launchOriginalOutcomeCustody({jobId,sourceSha,source:caller,transfer:{take:()=>transfer.take(),abandon:()=>transfer.abandon(),claim:()=>{deniedCustodyClaims++;return false;}}});throw new Error('Unexpected custody launch success');}
-     catch(error){process.stderr.write('Custody launch diagnostic='+JSON.stringify(error.custodyDiagnostic??{})+'\n');if(deniedCustodyClaims!==1)throw no();throw no();}
+     catch(error){process.stderr.write('Custody launch diagnostic='+JSON.stringify(error.custodyDiagnostic??{})+'\n');if(deniedCustodyClaims!==1||error.custodyDiagnostic?.receiverVerified!==true||error.custodyDiagnostic?.cleanupPhase!==null)throw no();custodyDenialVerified=true;throw no();}
     }
     writer=custody.outcomeWriter();
     if(mode==='owner-ack-lost')void gate.close();return saved;},
@@ -211,7 +211,7 @@ export async function probeFixedDaemonOwner(mode='complete'){
   await deliverFixedWorkerInput(root,input);
   if(mode==='owner-ack-lost'||mode==='custody-claim-denied'){
    await waitFor(()=>existsSync(join(root,'worker.client-terminal.json')));if(!ownerReady||outcomeStored||inspect(independentOwnerProbeTarget(jobId))!==null)throw no();
-   const client=read(root,'worker.client-terminal.json');if(client.code!==1||client.stdoutBytes!==0)throw no();writer?.revoke();if(mode==='custody-claim-denied'&&deniedCustodyClaims!==1)throw no();await custody.inspect(0);
+   const client=read(root,'worker.client-terminal.json');if(client.code!==1||client.stdoutBytes!==0)throw no();writer?.revoke();if(mode==='custody-claim-denied'&&(!custodyDenialVerified||deniedCustodyClaims!==1))throw no();await custody.inspect(0);
   }else{
    container=await waitFor(()=>{const v=inspect(independentOwnerProbeTarget(jobId));return v?.State.Running?exact(v):null;});if(!ownerReady)throw no();
    if(mode!=='complete'){

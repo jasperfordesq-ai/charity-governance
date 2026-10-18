@@ -51,7 +51,7 @@ export async function launchOriginalOutcomeCustody({jobId,sourceSha,source,trans
  const close=async()=>{
   let error=false;try{await channel?.close();}catch{error=true;cleanupPhase='claim-channel';}
   // Unknown launch/claim identities are deliberately not adopted for cleanup.
-  if(child){if(receiver){try{stopOriginal(receiver,environment);}catch{error=true;cleanupPhase='original-unit';}}else if(!ended)error=true;}
+  if(child){if(receiver){try{stopOriginal(receiver,environment);}catch{try{requireAbsent(receiver.identity.unit,environment);}catch{error=true;cleanupPhase='original-unit';}}}else if(!ended)error=true;}
   if(terminal&&!ended){let timer;try{await Promise.race([terminal,new Promise((_,reject)=>{timer=setTimeout(()=>reject(no()),5000);})]);}catch{error=true;}finally{clearTimeout(timer);}}
   try{endpoint?.close();}catch{error=true;}if(error)throw no();
  };
