@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {Prisma} from '@prisma/client';
 import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
 
 /** Runs only in the original disposable TLS writer fixture. All SQL below is
@@ -10,15 +11,16 @@ export async function proveCaptureRoleWindow({admin,fencer,actor,capture,config,
  let deniedCalls=0;await assert.rejects(new ManagedStorageDatabaseInventory(capture,{...config,observer:config.capture,capture:readerRole})
   .runCaptureRoleWindow(async()=>{deniedCalls++;},options));assert.equal(deniedCalls,0);
  const cases=[
-  ['table','GRANT INSERT ON public.synthetic_storage_boundary TO storage_probe_reader','REVOKE INSERT ON public.synthetic_storage_boundary FROM storage_probe_reader'],
-  ['column','GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader','REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader'],
-  ['membership','GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE','REVOKE storage_probe_alternate FROM storage_probe_reader'],
-  ['role','ALTER ROLE storage_probe_reader BYPASSRLS','ALTER ROLE storage_probe_reader NOBYPASSRLS'],
-  ['definer','GRANT EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) TO storage_probe_reader','REVOKE EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) FROM storage_probe_reader'],
-  ['schema','GRANT CREATE ON SCHEMA public TO storage_probe_reader','REVOKE CREATE ON SCHEMA public FROM storage_probe_reader'],
-  ['database',`GRANT CREATE ON DATABASE "${config.database}" TO storage_probe_reader`,`REVOKE CREATE ON DATABASE "${config.database}" FROM storage_probe_reader`],
-  ['rls','ALTER TABLE public.synthetic_storage_boundary DISABLE ROW LEVEL SECURITY','ALTER TABLE public.synthetic_storage_boundary ENABLE ROW LEVEL SECURITY'],
-  ['routine','ALTER FUNCTION public.synthetic_storage_elevated_write(text) SECURITY INVOKER','ALTER FUNCTION public.synthetic_storage_elevated_write(text) SECURITY DEFINER'],
+  ['table',tx=>tx.$executeRaw`GRANT INSERT ON public.synthetic_storage_boundary TO storage_probe_reader`,tx=>tx.$executeRaw`REVOKE INSERT ON public.synthetic_storage_boundary FROM storage_probe_reader`],
+  ['column',tx=>tx.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`,tx=>tx.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`],
+  ['membership',tx=>tx.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`,tx=>tx.$executeRaw`REVOKE storage_probe_alternate FROM storage_probe_reader`],
+  ['role',tx=>tx.$executeRaw`ALTER ROLE storage_probe_reader BYPASSRLS`,tx=>tx.$executeRaw`ALTER ROLE storage_probe_reader NOBYPASSRLS`],
+  ['definer',tx=>tx.$executeRaw`GRANT EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) TO storage_probe_reader`,tx=>tx.$executeRaw`REVOKE EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) FROM storage_probe_reader`],
+  ['schema',tx=>tx.$executeRaw`GRANT CREATE ON SCHEMA public TO storage_probe_reader`,tx=>tx.$executeRaw`REVOKE CREATE ON SCHEMA public FROM storage_probe_reader`],
+  // The sole identifier comes from the exact validated disposable fixture above.
+  ['database',tx=>tx.$executeRaw(Prisma.sql`GRANT CREATE ON DATABASE ${Prisma.raw('"'+config.database+'"')} TO storage_probe_reader`),tx=>tx.$executeRaw(Prisma.sql`REVOKE CREATE ON DATABASE ${Prisma.raw('"'+config.database+'"')} FROM storage_probe_reader`)],
+  ['rls',tx=>tx.$executeRaw`ALTER TABLE public.synthetic_storage_boundary DISABLE ROW LEVEL SECURITY`,tx=>tx.$executeRaw`ALTER TABLE public.synthetic_storage_boundary ENABLE ROW LEVEL SECURITY`],
+  ['routine',tx=>tx.$executeRaw`ALTER FUNCTION public.synthetic_storage_elevated_write(text) SECURITY INVOKER`,tx=>tx.$executeRaw`ALTER FUNCTION public.synthetic_storage_elevated_write(text) SECURITY DEFINER`],
  ];
  for(const [label,mutation,restore] of cases){
   let pending,committed=false,entered,actorPid;
@@ -32,7 +34,7 @@ export async function proveCaptureRoleWindow({admin,fencer,actor,capture,config,
     pending=actor.$transaction(async tx=>{
      actorPid=(await tx.$queryRaw`SELECT pg_backend_pid() AS pid`)[0].pid;
      await tx.$executeRaw`SET LOCAL lock_timeout='5s'`;entered();
-     await tx.$executeRawUnsafe(mutation);
+     await mutation(tx);
     },{maxWait:5000,timeout:10000}).then(()=>{committed=true;});void pending.catch(()=>{});
     await started;let waiting=false;
     for(let i=0;i<100;i++){
@@ -45,7 +47,7 @@ export async function proveCaptureRoleWindow({admin,fencer,actor,capture,config,
    },options);
    assert.equal(result.value,label);assert.equal(result.evidence.listedCatalogueChangesExcludedDuringCallback,true);
    assert.equal(result.evidence.providerManagementActorsExcluded,false);await pending;assert.equal(committed,true,label);
-  }finally{if(pending)await pending.catch(()=>{});await admin.$executeRawUnsafe(restore);}
+  }finally{if(pending)await pending.catch(()=>{});await restore(admin);}
  }
  // Existing DCL must finish before any successful interval/callback begins.
  let release,started;const ready=new Promise(r=>{started=r;}),hold=new Promise(r=>{release=r;});
