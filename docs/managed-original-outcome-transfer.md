@@ -152,3 +152,24 @@ Canonical executor verification pins fifteen modules. Exact execution results
 and limitations belong to the private checkpoint; test source alone is not proof.
 Default source integration, actual provider authority and physical-host-loss
 acceptance remain unfinished. The fixture dispatches no real daemon request.
+
+### Original issuer loss and outcome uncertainty verified
+
+The opt-in native cohort now proves three actual service cases using a separate
+synthetic SDK storage keeper: successful outcome after original issuer SIGKILL,
+accepted PUT with lost readback ACK, and receiver SIGKILL before publication.
+Fresh read-only discovery finds one outcome in the first two cases and none in
+the third. Repeated publish refuses, and an independent owner control service
+remains live. A killed receiver's original socket root is retained, not adopted
+for cleanup. These are same-host synthetic provider tests with a fixed fixture
+owner and no daemon dispatch. They do not prove actual provider IAM/current
+authority, full source-path integration or physical host loss. Exact revisions,
+original failures and test durations are recorded privately.
+
+The remaining source integration must introduce an explicitly bound OWNER reply
+carrying the private outcome endpoint after SDK readiness. The owner must probe
+it before dispatch, publish directly to the retained receiver, and forward its
+original SDK receipt to the still-live source for response accounting. The old
+parent must not issue a second PUT. A lost receipt must stay unresolved; saved
+pins alone cannot recreate an ACK. Actual claim-ACK loss, original expiry and a
+second custody job's preservation remain explicit native acceptance cases.
