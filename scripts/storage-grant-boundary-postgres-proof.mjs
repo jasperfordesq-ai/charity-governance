@@ -6,6 +6,7 @@ import {PrismaClient} from '@prisma/client';
 import {proveStorageMetadataWindow} from './storage-metadata-window-postgres-proof.mjs';
 import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
 import {proveCaptureRoleWindow} from './capture-role-window-postgres-proof.mjs';
+import {proveReadRoleCapture} from './read-role-capture-postgres-proof.mjs';
 
 /** Explicit provider model: real JWT crypto + actual TLS role-scoped SQL,
  * not a hosted Storage server or a held provider privilege interval. */
@@ -257,6 +258,7 @@ export async function proveStorageGrantBoundary({admin,url,prepareCatalogueTrans
   await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
   await proveReadRoleJwtCapture(admin,readerRole,boundary,new ManagedStorageDatabaseInventory(fencer,{...config,capture:readerRole}));
   await proveCaptureRoleWindow({admin,fencer,actor,capture,config,readerRole,prepareCatalogueTransaction});
+  await proveReadRoleCapture({admin,fencer,actor,config,readerRole,url});
   await admin.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`;
   await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`;
   await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`;

@@ -26,6 +26,10 @@ export class ManagedStorageMetadataWindow {
   this.config=configuration.parse(raw);this.config.relations.sort((a,b)=>Number(a.oid)-Number(b.oid));
  }
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
+ assertCaptureWindowScope(raw:unknown){
+  const value=configuration.parse(raw);value.relations.sort((a,b)=>Number(a.oid)-Number(b.oid));
+  if(JSON.stringify(value)!==JSON.stringify(this.config))throw failure();
+ }
  private async check(tx:Prisma.TransactionClient,locked:boolean,pid?:number){
   const c=this.config;
   const [actual]=z.array(identity).length(1).parse(await tx.$queryRaw`SELECT current_database()::text AS database,

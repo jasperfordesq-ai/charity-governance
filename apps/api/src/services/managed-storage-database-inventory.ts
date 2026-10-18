@@ -34,6 +34,10 @@ export class ManagedStorageDatabaseInventory {
  private windowRunning=false;
  constructor(private readonly prisma:PrismaClient,raw:unknown){this.config=configuration.parse(raw);}
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
+ assertCaptureWindowScope(raw:unknown){
+  const value=configuration.parse(raw),ordered=(v:typeof value)=>({...v,relations:[...v.relations].sort((a,b)=>Number(a.oid)-Number(b.oid))});
+  if(JSON.stringify(ordered(value))!==JSON.stringify(ordered(this.config)))throw windowFailure();
+ }
  observe(){return this.inspect(false);}
  async observeCaptureRoleBoundary(){
   try{const observed=await this.inspect(true);if(!observed.captureRoleBoundary)throw new Error();

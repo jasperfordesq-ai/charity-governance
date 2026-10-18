@@ -21,6 +21,7 @@ import type {ManagedResumableUploadEvidence} from './managed-resumable-upload-ev
 import type {ManagedSignedUploadEvidence} from './managed-signed-upload-evidence.js';
 import {signedUploadBaselineSchema,signedUploadObservationSchema} from './signed-upload-evidence-contract.js';
 import {credentialWriteObservationSchema} from './credential-write-evidence.js';
+import type {ManagedReadRoleCapture} from './managed-read-role-capture.js';
 
 const configuration=z.object({installationId:z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),
  sourceSha:z.string().regex(/^[a-f0-9]{40}$/),maintenanceEpoch:z.number().int().positive().max(2147483647)}).strict();
@@ -34,7 +35,7 @@ export class ManagedBackendMaintenance {
  private readonly config:z.infer<typeof configuration>;
  constructor(raw:unknown,private readonly provider:RenderMaintenanceControl,
   private readonly database:ManagedDatabaseWriterFence,private readonly control:S3ManagedMaintenanceControl,
-  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence,private readonly s3:ManagedS3MaintenanceEvidence){
+  private readonly storage:SupabaseStorageWriterControl,private readonly proof:SupabaseCredentialReadProof,private readonly write:ManagedStorageWriteEvidence,private readonly signed:ManagedSignedUploadEvidence,private readonly resumable:ManagedResumableUploadEvidence,private readonly signedResumable:ManagedSignedResumableUploadEvidence,private readonly s3:ManagedS3MaintenanceEvidence,private readonly readRole?:ManagedReadRoleCapture){
   this.config=configuration.parse(raw);
   this.s3.assertStorageScope(this.storage.s3FeatureProofScope(),this.storage.configurationDigest(this.config.installationId));
   this.proof.assertStorageScope(this.storage.readProofScope());
@@ -43,14 +44,17 @@ export class ManagedBackendMaintenance {
   this.resumable.assertStorageScope(this.storage.readProofScope());
   this.signedResumable.assertStorageScope(this.storage.readProofScope());
   this.signedResumable.assertSignedScope(this.signed.configurationDigest(this.config.installationId));
+  this.readRole?.assertMaintenanceScope(this.config);this.readRole?.assertStorageScope(this.storage.candidateCaptureScope());
  }
- planDescriptor(){return{format:9,...this.config,
+ planDescriptor(){const descriptor={format:9,...this.config,
   databaseCredentialPolicy:'PASSWORD_NULL_WHILE_CLOSED',
   storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1',
   readProofPolicy:'INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1',
   writeProofPolicy:'EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1',signedProofPolicy:'ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1',resumableProofPolicy:'ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1',signedResumableProofPolicy:'ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1',s3ProofPolicy:'EXPLICIT_MODE_ORIGINAL_S3_BASELINE_BEFORE_CLOSURE_V1',
   provider:this.provider.configurationDigest(),database:this.database.configurationDigest(),storage:this.storage.configurationDigest(this.config.installationId),
-  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)};}
+  readProof:this.proof.configurationDigest(this.config.installationId),writeProof:this.write.configurationDigest(this.config.installationId),signedProof:this.signed.configurationDigest(this.config.installationId),resumableProof:this.resumable.configurationDigest(this.config.installationId),signedResumableProof:this.signedResumable.configurationDigest(this.config.installationId),s3Proof:this.s3.configurationDigest(this.config.installationId)};
+  if(!this.readRole)return descriptor;this.readRole.assertMaintenanceScope(this.config);this.readRole.assertStorageScope(this.storage.candidateCaptureScope());
+  return{...descriptor,format:10,capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:this.readRole.configurationDigest()};}
  planDigest(){return createHash('sha256').update(JSON.stringify(this.planDescriptor())).digest('hex');}
  private async readback(readProofDigest?:string,writeProofDigest?:string,signedProofDigest?:string,resumableProofDigest?:string,signedResumableProofDigest?:string,s3ProofDigest?:string){
   const services=await this.provider.observeSuspended(),database=await this.database.observePasswordsInvalidated(),storage=await this.storage.observeClosed(),signing=await this.signed.observeRevoked();
@@ -140,6 +144,7 @@ export class ManagedBackendMaintenance {
   visit:Parameters<SupabaseRecoveryCapture['capture']>[0],caller?:AbortSignal){
   let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,liveAcknowledged=false;
   try{
+   if(this.readRole)throw new Error(); // Protocol10 must never use the legacy key path.
    const request=candidateRequest.parse(raw);caller?.throwIfAborted();
    capture.assertStorageScope(this.storage.candidateCaptureScope());
    if(request.captureConfigurationDigest!==capture.configurationDigest()
@@ -181,6 +186,7 @@ export class ManagedBackendMaintenance {
   }>,caller?:AbortSignal){
   let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,acknowledged=false;
   try{
+   if(this.readRole)throw new Error(); // No silent downgrade of the pinned capture policy.
    const request=commonCandidateRequestSchema.parse(raw);caller?.throwIfAborted();
    capture.assertStorageScope(this.storage.candidateCaptureScope());
    if(typeof source!=='function'||request.captureConfigurationDigest!==capture.configurationDigest()

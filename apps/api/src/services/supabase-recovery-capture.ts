@@ -108,6 +108,17 @@ export class SupabaseRecoveryCapture {
       }),
     );
   }
+  assertConfiguredReadRoleScope(raw:unknown){
+    try{
+      const value=z.object({installationId:configSchema.shape.installationId,projectRef:configSchema.shape.projectRef,bucket:configSchema.shape.bucket,
+        subject:z.string().uuid(),sqlRole:z.object({name:z.string(),oid:z.string()}).strict()}).strict().parse(raw);
+      if(!this.#jwt||!('authentication' in this.config)||value.installationId!==this.config.installationId
+        ||value.projectRef!==this.config.projectRef||value.bucket!==this.config.bucket
+        ||value.subject!==this.config.authentication.subject||value.sqlRole.name!==this.config.authentication.sqlRole.name
+        ||value.sqlRole.oid!==this.config.authentication.sqlRole.oid)throw failure();
+    }catch{throw failure();}
+  }
+  readRoleRemainingMs(){if(!this.#jwt)throw failure();return this.#jwt.remainingMs();}
   private timeout(maximum:number){return this.#jwt?Math.min(maximum,this.#jwt.remainingMs()):maximum;}
   private segment(raw: string) {
     if (

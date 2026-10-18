@@ -1,3 +1,12 @@
+## 18 October: configured read-role interval and plan binding
+
+An explicit component now joins the configured JWT, SQL role/database, both
+Storage metadata relations and exported snapshot in a bounded live capture.
+A distinct format-10 maintenance plan pins its digest and refuses legacy capture
+fallback. Read [the composition and remaining integration](managed-read-role-capture.md).
+Versioned candidate/journal/archive integration and actual provider compatibility
+remain open; no application route or provider setting is activated.
+
 ## 18 October: capture privilege window verified natively
 
 Native TLS PostgreSQL tests passed the bounded JWT/SQL role join and nine

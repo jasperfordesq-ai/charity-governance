@@ -4,13 +4,15 @@ import {z} from 'zod';
 import {GetObjectCommand,PutObjectCommand,type S3Client} from '@aws-sdk/client-s3';
 import {candidateHash,candidatePinSchema} from './managed-candidate-capture-contract.js';
 const sha=z.string().regex(/^[a-f0-9]{64}$/),identity=z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
-export const managedPlanSchema=z.object({format:z.literal(9),installationId:identity,sourceSha:z.string().regex(/^[a-f0-9]{40}$/),
+const legacyManagedPlanSchema=z.object({format:z.literal(9),installationId:identity,sourceSha:z.string().regex(/^[a-f0-9]{40}$/),
  maintenanceEpoch:z.number().int().positive().max(2147483647),databaseCredentialPolicy:z.literal('PASSWORD_NULL_WHILE_CLOSED'),
  storageCredentialPolicy:z.literal('REVOKE_REVIEWED_KEYS_KEEP_CAPTURE_V1'),readProofPolicy:z.literal('INDEPENDENT_BASELINE_BEFORE_CREDENTIAL_REVOCATION_V1'),
  writeProofPolicy:z.literal('EXACT_VERSION_BASELINE_PIN_BEFORE_REVOCATION_V1'),signedProofPolicy:z.literal('ORIGINAL_ENCRYPTED_TOKEN_AND_BASELINE_PIN_BEFORE_REVOCATION_V1'),
  resumableProofPolicy:z.literal('ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1'),signedResumableProofPolicy:z.literal('ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1'),
  s3ProofPolicy:z.literal('EXPLICIT_MODE_ORIGINAL_S3_BASELINE_BEFORE_CLOSURE_V1'),provider:sha,database:sha,storage:sha,readProof:sha,writeProof:sha,
  signedProof:sha,resumableProof:sha,signedResumableProof:sha,s3Proof:sha}).strict();
+export const managedPlanSchema=z.discriminatedUnion('format',[legacyManagedPlanSchema,legacyManagedPlanSchema.extend({format:z.literal(10),
+ capturePolicy:z.literal('EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1'),captureAuthorization:sha}).strict()]);
 const closed=z.object({revision:sha,value:z.object({installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:sha,phase:z.literal('OBSERVED_CLOSED'),attemptId:z.string().uuid()})});
 export type ManagedClosedHead=z.infer<typeof closed>;

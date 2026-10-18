@@ -1082,3 +1082,17 @@ test('cold recovery refuses moving head/catalogue after archive read and cancell
  const aborted=new AbortController();aborted.abort();const reads=x.f.reads;
  await assert.rejects(x.cold().inspectCurrentRecovery(x.f.store,1,x.archive,aborted.signal));assert.equal(x.f.reads,reads);
 });
+
+test('explicit read-role policy uses a distinct protocol10 plan and refuses legacy capture paths before I/O',async()=>{
+ const f=fixture();let checks=0;
+ const profile={configurationDigest:()=>hash('read-role-authorization'),assertMaintenanceScope:(raw:unknown)=>{assert.deepEqual(raw,operation);checks++;},assertStorageScope:(raw:unknown)=>{assert.deepEqual(raw,f.storage.candidateCaptureScope());checks++;}};
+ const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
+ const plan=coordinator.planDescriptor();assert.equal(plan.format,10);assert.notEqual(coordinator.planDigest(),f.coordinator.planDigest());assert.ok(checks>=4);
+ assert.equal('captureAuthorization' in plan&&plan.captureAuthorization,profile.configurationDigest());
+ const {managedPlanSchema}=await import('../services/managed-plan-bootstrap.js');assert.deepEqual(managedPlanSchema.parse(plan),plan);
+ assert.throws(()=>managedPlanSchema.parse({...plan,format:9}));const{captureAuthorization,...missing}=plan as typeof plan&{captureAuthorization:string};assert.throws(()=>managedPlanSchema.parse(missing));
+ const before=f.calls.length;await assert.rejects(coordinator.captureQuarantined({},undefined as never,undefined as never,undefined as never,async()=>{}));
+ await assert.rejects(coordinator.captureCommonQuarantined({},undefined as never,undefined as never,undefined as never,undefined as never,async()=>{throw new Error();}));
+ assert.equal(f.calls.length,before);assert.equal(f.puts,0);
+ await assert.rejects(coordinator.close());assert.equal(f.calls.includes('provider-suspend'),false);assert.equal(f.puts,0);
+});
