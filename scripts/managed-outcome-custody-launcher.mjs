@@ -76,7 +76,7 @@ async function launchCustody({jobId,sourceSha,source,transfer,signal},synthetic)
   const claim=await Promise.race([channel.result,terminal.then(()=>{throw no();})]);receiver=claim.receiver;check();verify(receiver);
   const deadline=performance.now()+15000;
   while(!existsSync(endpoint.binding().path)){check();if(performance.now()>=deadline)throw no();await new Promise(r=>setTimeout(r,25));}
-  check();await requestOutcomeCustody({endpoint:endpoint.binding(),receiver});check();verify(receiver);
+  check();await requestOutcomeCustody({endpoint:endpoint.binding(),receiver});check();if(typeof transfer.confirmReady!=='function'||await transfer.confirmReady()!==true)throw no();check();verify(receiver);
   await channel.close();check();
   let publishing=false;
   return Object.freeze({receiver:structuredClone(receiver),binding:()=>endpoint.binding(),terminal,

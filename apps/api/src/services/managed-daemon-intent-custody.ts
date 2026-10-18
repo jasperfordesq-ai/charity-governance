@@ -213,6 +213,8 @@ export class ManagedDaemonIntentCustody{
    },claim:(nonce:string,bodyDigest:string)=>{
     if(claimed)return false;claimed=true;
     if(!taken||this.failed||!this.live()||!transferActive(value)||nonce!==value.nonce||bodyDigest!==digest){this.failed=true;return false;}return true;
+   },confirmReady:()=>{
+    if(!claimed||!taken||this.failed||this.busy||!this.live()||!transferActive(value)||this.sequence!==sequence||this.endAttempted||this.responseAttempts.has(sequence)){this.failed=true;throw failure();}return true;
    },observeReceipt:async(raw:unknown,receipt:unknown,caller?:AbortSignal)=>{
     try{
      if(receiptAttempted||!claimed||!taken||this.failed||this.busy||!this.live()||!transferActive(value)

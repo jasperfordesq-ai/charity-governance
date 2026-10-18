@@ -55,10 +55,15 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
    return saved;
   }])));
   let supervised;
-  try{supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody:observedCustody,signal,...(sourceExecutionMode==='INTERNAL_IPC_PROOF'?{executionMode:sourceExecutionMode}:{}),diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}},{launchOutcomeCustody:options=>{
+  try{supervised=await runManagedImportedProof({args,snapshot,databaseUrl:source.href,workspace,scope,jobCustody:observedCustody,signal,...(sourceExecutionMode==='INTERNAL_IPC_PROOF'?{executionMode:sourceExecutionMode}:{}),diagnostics:b=>{sourceFailure=(sourceFailure+b.toString('utf8')).slice(0,4096);}},{launchOutcomeCustody:async options=>{
    assert.ok(cloud?.b.sessionId,'Kernel-contained synthetic handoff requires separate original SDK keeper');
    const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
-   return launchSyntheticOutcomeCustodyFixture(options,{descriptor,id:cloud.b.sessionId,config:cloud.config});
+   const retained=await launchSyntheticOutcomeCustodyFixture(options,{descriptor,id:cloud.b.sessionId,config:cloud.config});
+   if(process.env.CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE==='1'){
+    const {capability,...endpoint}=retained.binding();
+    await new Promise((yes,no)=>process.send({kind:'ORIGINAL_CONTAINED_CUSTODY_READY_V1',custody:retained.receiver,endpoint},error=>error?no(error):yes()));
+   }
+   return retained;
   }});}catch(error){
    if(sourceExecutionMode==='KERNEL_CONTAINED'){
     const path=join(output,'proof-job.request.json'),request=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):null;

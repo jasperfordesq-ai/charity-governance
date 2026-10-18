@@ -165,11 +165,19 @@ test('original live transfer observes its delivered SDK receipt once without a d
  try{
   const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();
   grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);
-  const outcome=f.ownerOutcome(f.local,f.bound),stored=await grant.publish(outcome),writes=f.b.writes;
+  assert.equal(transfer.confirmReady(),true);const outcome=f.ownerOutcome(f.local,f.bound),stored=await grant.publish(outcome),writes=f.b.writes;
   const receipt={pin:stored.pin,originalAcknowledgementReconstructed:false,pendingRequestResolved:false,actionAuthorized:false};
   const observed=await transfer.observeReceipt(outcome,receipt);assert.deepEqual(observed.pin,stored.pin);assert.equal(observed.pendingRequestResolved,false);assert.equal(observed.savedEvidenceAuthorizesDispatch,false);
   assert.equal(f.b.writes,writes);await assert.rejects(transfer.observeReceipt(outcome,receipt));assert.equal(f.b.writes,writes);
  }finally{grant?.revoke();f.close();}
+});
+
+test('original receiver readiness cannot be confirmed before claim or after source closure',async()=>{
+ for(const stage of ['before-claim','closed']){const f=await transferFixture();let grant;try{
+  const transfer=await f.writer.createOwnerOutcomeTransfer(),input=transfer.take();
+  if(stage==='closed'){grant=await ManagedDaemonIntentCustody.acceptOwnerOutcomeTransfer(input,async(n,d)=>transfer.claim(n,d),f.client);f.live.value=false;}
+  const writes=f.b.writes;assert.throws(()=>transfer.confirmReady());assert.equal(f.b.writes,writes);
+ }finally{grant?.revoke();f.close();}}
 });
 
 test('transferred receipt refuses missing original claim, changed pin/body, source closure and reconstructed flags without writes',async()=>{

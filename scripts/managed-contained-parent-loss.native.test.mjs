@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fork,spawn,spawnSync} from 'node:child_process';
 import {randomUUID,randomBytes} from 'node:crypto';
-import {mkdtempSync,chmodSync,writeFileSync,readFileSync,realpathSync,lstatSync,rmSync,existsSync,openSync,fsyncSync,closeSync} from 'node:fs';
+import {mkdtempSync,chmodSync,writeFileSync,readFileSync,realpathSync,lstatSync,rmSync,existsSync,openSync,fsyncSync,closeSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,basename,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {DEFAULT_POSTGRES_IMAGE,prepareLocalDockerCommand,captureHelperImplementationBinding,inspectProofContainerInventory} from './postgres-backup.mjs';
-import {inspectContainmentUnit,containmentUnit} from './managed-proof-systemd-containment.mjs';
+import {inspectContainmentUnit,containmentUnit,verifyOutcomeCustodyReceiver,currentContainmentBootId} from './managed-proof-systemd-containment.mjs';
 import {inspectOriginalProofStorage} from './managed-proof-storage-inspect.mjs';
 import {requireDaemonGateDirectory} from './managed-daemon-custody-channel.mjs';
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -20,7 +20,7 @@ test('real source caller loss stops its cohort while the original independent re
 },async()=>{
  assert.notEqual(process.getuid(),0);const helper=captureHelperImplementationBinding();assert.equal(helper.sourceMatchesCommit,true);assert.equal(helper.canonicalRepositoryMatched,true);
  const root=mkdtempSync(join(tmpdir(),'charitypilot-parent-observer-'));chmodSync(root,0o700);
- let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,originalOwner,verifiedSource,channelRoot,originalGroup,daemonGateBinding,output='',errors='';const observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
+ let producer,producerTerminal,locker,lockerTerminal,control,ready,held,unit,originalOwner,verifiedSource,channelRoot,originalGroup,daemonGateBinding,output='',errors='';const originalCustodies=[],observedClientIds=[],ownedVolumes=[],volumeOwner=randomUUID();let attachedVolume,emptyVolume,controlPlannedName;
  const saveOwnership=(name,value)=>{writeFileSync(join(root,name),JSON.stringify(value),{flag:'wx',mode:0o600});const fd=openSync(join(root,name),'r');try{fsyncSync(fd);}finally{closeSync(fd);}const dir=openSync(root,'r');try{fsyncSync(dir);}finally{closeSync(dir);}};
  try{
   const otherJob=randomUUID(),controlName=`charitypilot-isolated-restore-${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
@@ -33,7 +33,7 @@ test('real source caller loss stops its cohort while the original independent re
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!['NODE_TEST_CONTEXT','NODE_OPTIONS','NODE_PATH'].includes(key)));
   producer=fork(fileURLToPath(new URL('./managed-database-writer-fence-postgres.test.mjs',import.meta.url)),[],{execArgv:[],env:{...env,CHARITYPILOT_TEST_CONTAINED_SOURCE:'1',CHARITYPILOT_TEST_SOURCE_PARENT_FIXTURE:'1'},stdio:['ignore','pipe','pipe','ipc']});
   producer.stdout.on('data',b=>{output+=b.toString();if(output.length>65536)producer.kill('SIGKILL');});producer.stderr.on('data',b=>{errors+=b.toString();if(errors.length>65536)producer.kill('SIGKILL');});
-  producer.on('message',value=>{if(value?.kind==='ORIGINAL_CONTAINED_OWNER_READY_V1'&&!originalOwner)originalOwner=value.owner;});
+  producer.on('message',value=>{if(value?.kind==='ORIGINAL_CONTAINED_OWNER_READY_V1'&&!originalOwner)originalOwner=value.owner;if(value?.kind==='ORIGINAL_CONTAINED_CUSTODY_READY_V1')originalCustodies.push(value);});
   producerTerminal=new Promise((yes,no)=>{producer.once('error',no);producer.once('close',(code,signal)=>yes({code,signal}));});void producerTerminal.catch(()=>{});
   ready=await new Promise((yes,no)=>{const timer=setTimeout(()=>no(new Error('Original source barrier missing: '+output.slice(-2000))),30000);
    producer.once('message',value=>{clearTimeout(timer);yes(value);});producer.once('exit',()=>{clearTimeout(timer);no(new Error('Original source exited before barrier: '+output.slice(-2000)));});});
@@ -74,6 +74,12 @@ test('real source caller loss stops its cohort while the original independent re
   assert.equal(owner.sourceSha,helper.commitSha);assert.notEqual(owner.unit,unit);assert.notEqual(owner.controlGroup,originalGroup);
   const liveOwner=inspectContainmentUnit(owner.unit);assert.equal(liveOwner.InvocationID,owner.invocationId);assert.equal(liveOwner.MainPID,String(owner.mainPid));assert.equal(liveOwner.ActiveState,'active');
   saveOwnership('original-owner.json',originalOwner);
+  assert.ok(originalCustodies.length>0);for(const entry of originalCustodies){
+   const c=entry.custody;assert.equal(c.jobId,ready.jobId);assert.equal(c.sourceSha,helper.commitSha);
+   assert.equal(verifyOutcomeCustodyReceiver(c,{jobId:ready.jobId,sourceSha:helper.commitSha,receiverId:c.receiverId,inputDigest:c.inputDigest,source:original,synthetic:true}).liveCustodyIdentityVerified,true);
+   assert.notEqual(c.identity.unit,owner.unit);const s=lstatSync(entry.endpoint.root);assert.equal(s.dev,entry.endpoint.device);assert.equal(s.ino,entry.endpoint.inode);
+  }
+  saveOwnership('original-custody-identities.json',originalCustodies);
   const storage=inspectOriginalProofStorage({root:ready.workspaceRoot,jobId:ready.jobId,inputDigest:ready.identity.inputDigest});
   assert.ok(storage.containers.some(v=>observedClientIds.includes(v.id)&&v.state==='ORIGINAL_PLAN_MATCHES_CURRENT_MOUNTS'));
   assert.equal(storage.completeResourceInventory,false);assert.ok(storage.volumes.every(v=>v.cleanupAuthorized===false));
@@ -86,6 +92,7 @@ test('real source caller loss stops its cohort while the original independent re
   assert.equal(terminal.InvocationID,held.identity.invocationId);assert.equal(terminal.ExecMainStartTimestampMonotonic,held.identity.mainStartMonotonic);
   assert.ok(!existsSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+held.originalControlGroup+'/cgroup.procs','utf8').trim()==='');
   const survivingOwner=inspectContainmentUnit(owner.unit);assert.equal(survivingOwner.InvocationID,owner.invocationId);assert.equal(survivingOwner.MainPID,String(owner.mainPid));assert.equal(survivingOwner.ActiveState,'active');
+  for(const {custody:c}of originalCustodies){const v=inspectContainmentUnit(c.identity.unit);assert.equal(v.InvocationID,c.identity.invocationId);assert.equal(v.MainPID,String(c.identity.mainPid));assert.equal(v.ActiveState,'active');}
   const retained=docker(['ps','-a','--no-trunc','--filter','label=charitypilot.restore-proof=true','--filter','label=charitypilot.managed-proof-job='+ready.jobId,'--format','{{.ID}}']).split(/\r?\n/);
   assert.ok(observedClientIds.every(id=>retained.includes(id)));assert.ok(retained.length>0);
   assert.equal(docker(['inspect','--format','{{.State.Running}}',ready.sourceId]),'true');assert.equal(docker(['inspect','--format','{{.State.Running}}',control]),'true');
@@ -111,6 +118,15 @@ test('real source caller loss stops its cohort while the original independent re
    if(current.MainPID!=='0'){assert.equal(current.MainPID,String(owner.mainPid));assert.equal(current.ControlGroup,owner.controlGroup);manager(['stop',owner.unit]);}
    assert.ok(!existsSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+owner.controlGroup+'/cgroup.procs','utf8').trim()==='');
    spawnSync('systemctl',['--user','reset-failed',owner.unit],{stdio:'ignore',timeout:10000});}
+  for(const {custody:c,endpoint}of originalCustodies){
+   assert.equal(currentContainmentBootId(),c.identity.bootId);
+   const state=spawnSync('systemctl',['--user','show',c.identity.unit,'--property=LoadState','--value'],{encoding:'utf8',timeout:10000,maxBuffer:4096});
+   if(state.stdout.trim()==='loaded'){const v=inspectContainmentUnit(c.identity.unit);assert.equal(v.InvocationID,c.identity.invocationId);assert.equal(v.ExecMainStartTimestampMonotonic,c.identity.mainStartMonotonic);
+    if(v.MainPID!=='0'){assert.equal(v.MainPID,String(c.identity.mainPid));assert.equal(v.ControlGroup,c.identity.controlGroup);}manager(['stop',c.identity.unit]);
+   }else assert.equal(state.stdout.trim(),'not-found');
+   assert.ok(!existsSync('/sys/fs/cgroup'+c.identity.controlGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+c.identity.controlGroup+'/cgroup.procs','utf8').trim()==='');
+   if(existsSync(endpoint.root)){const s=lstatSync(endpoint.root);assert.equal(s.dev,endpoint.device);assert.equal(s.ino,endpoint.inode);assert.ok(readdirSync(endpoint.root).every(name=>name==='outcome.sock'));protectedRemove(endpoint.root,'charitypilot-outcome-custody-');}
+  }
   for(const id of observedClientIds){const listed=docker(['ps','-a','--no-trunc','--filter','id='+id,'--format','{{.ID}}']);if(listed)docker(['rm','--force',id]);}
   if(channelRoot){assert.ok(!existsSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs')||readFileSync('/sys/fs/cgroup'+originalGroup+'/cgroup.procs','utf8').trim()==='');protectedRemove(channelRoot,'charitypilot-managed-channel-');}
   if(daemonGateBinding&&existsSync(dirname(daemonGateBinding.descriptorPath))){const path=dirname(daemonGateBinding.descriptorPath),s=requireDaemonGateDirectory(path);
