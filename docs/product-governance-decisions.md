@@ -1,3 +1,14 @@
+## 18 October: genuine caller loss covered for retired-control captures
+
+The separate-custody native cohort now exercises real SIGKILL for both legacy
+format 3 and retired-control format 5. It checks the empty original source
+cgroup, surviving independent owner/outcome custody, retained unresolved request
+and resources, and fresh local replay/cleanup refusal. The fresh recovery reader
+learns 22 candidates: six verified quarantined roots and 16 unresolved outcomes;
+format 5 accounts for six candidates, two roots and four unresolved outcomes.
+See [scope and supported test entry](managed-retired-control-common-candidate.md).
+This is synthetic provider custody, not independent provider/IAM/current tenant
+authority or physical-host-loss acceptance. No application deployment occurred.
 ## 18 October: new-format native snapshot and separate recovery proof passed
 
 The retired-control format-5 path passed TLS SQL snapshot import/dump, canonical

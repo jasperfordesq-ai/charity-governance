@@ -48,8 +48,13 @@ read from the bound control namespace, never copied into candidate sessions.
 The SQL-backed canary shares the main capture role and signing key. One original
 control-key DELETE and one pre-retirement old-key canary positive are asserted;
 fresh comparisons reuse that baseline. Provider HTTP and cloud custody remain
-synthetic. Existing genuine source SIGKILL coverage is for the legacy path; a
-new-format caller SIGKILL is not yet proved. Actual
+synthetic. Genuine source caller SIGKILL is now exercised for formats 3 and 5:
+the original source cgroup becomes empty, the independent request owner and
+outcome custody survive, source/control resources remain, and fresh local reads
+refuse replay and cleanup. The separate recovery reader learns the additional
+format-5 interrupted attempt as unresolved. Unsupported standalone parent-loss
+invocations refuse before fixture creation: use the separate-custody native
+entry point with its original keeper. Actual
 provider propagation, signing-key currency, project SQL identity, unfiltered
 visibility, remaining privileged writers/issuers, independent IAM/current tenant
 authority and physical-host-loss reopening remain open. All admission, global
