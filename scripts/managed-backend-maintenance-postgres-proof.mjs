@@ -20,6 +20,7 @@ import {ManagedBackendMaintenance} from '../apps/api/dist/services/managed-backe
 import {SupabaseStorageWriterControl} from '../apps/api/dist/services/supabase-storage-writer-control.js';
 import {SupabaseCredentialReadProof} from '../apps/api/dist/services/supabase-credential-read-proof.js';
 import {ManagedStorageWriteEvidence} from '../apps/api/dist/services/managed-storage-write-evidence.js';
+import {ManagedCaptureControlRetirement} from '../apps/api/dist/services/managed-capture-control-retirement.js';
 
 export async function proveManagedPasswordInvalidation({admin,configuration,url}){
  const service=new ManagedDatabaseWriterFence(admin,configuration);
@@ -78,8 +79,8 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
  const image='ghcr.io/synthetic/api@sha256:'+ '1'.repeat(64),credentials={accessKeyId:'synthetic',secretAccessKey:'synthetic'};
  const localStorage={installationId:'synthetic-managed',bucket:'synthetic-managed-control',accountId:'123456789012',
   kmsKeyArn:'arn:aws:kms:eu-west-1:123456789012:key/11111111-1111-1111-1111-111111111111'};
- for(const scenario of ['legacy-three-service-plan','success','read-role-success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','resumable-child-report-ack-lost','resumable-manifest-report-ack-lost','resumable-still-writable','signed-tus-credential-ack-lost','signed-tus-baseline-ack-lost','signed-tus-readback-ack-lost','signed-tus-head-ack-lost','signed-tus-report-ack-lost','signed-tus-still-writable','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost','s3-canary-ack-lost','s3-baseline-ack-lost','s3-readback-ack-lost','s3-head-ack-lost','s3-head-readback-ack-lost','s3-report-ack-lost','s3-report-readback-ack-lost','s3-post-stale-gateway','s3-enabled-metadata','working-s3-success']){
-  const independentControl=['success','read-role-success'].includes(scenario)&&process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?managedCommonCustodyBackend(localStorage.installationId):undefined;
+ for(const scenario of ['legacy-three-service-plan','success','read-role-success','retired-control-success','acquire-ack-lost','baseline-ack-lost','write-baseline-ack-lost','write-head-ack-lost','signed-credential-ack-lost','signed-baseline-ack-lost','signed-head-ack-lost','resumable-location-ack-lost','resumable-child-baseline-ack-lost','resumable-manifest-baseline-ack-lost','resumable-head-ack-lost','resumable-child-report-ack-lost','resumable-manifest-report-ack-lost','resumable-still-writable','signed-tus-credential-ack-lost','signed-tus-baseline-ack-lost','signed-tus-readback-ack-lost','signed-tus-head-ack-lost','signed-tus-report-ack-lost','signed-tus-still-writable','database-ack-lost','password-ack-lost','storage-ack-lost','write-report-ack-lost','signed-report-ack-lost','signing-ack-lost','record-ack-lost','s3-canary-ack-lost','s3-baseline-ack-lost','s3-readback-ack-lost','s3-head-ack-lost','s3-head-readback-ack-lost','s3-report-ack-lost','s3-report-readback-ack-lost','s3-post-stale-gateway','s3-enabled-metadata','working-s3-success']){
+  const independentControl=(['success','read-role-success'].includes(scenario)&&process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE||scenario==='retired-control-success')?managedCommonCustodyBackend(localStorage.installationId):undefined;
   const storage=independentControl?{installationId:independentControl.config.installationId,bucket:independentControl.config.bucket,accountId:independentControl.config.accountId,kmsKeyArn:independentControl.config.storageKeyArn}:localStorage;
   // Only this disposable fixture reopens synthetic roles between independent
   // cases. Neither production primitive nor coordinator exposes reopening.
@@ -158,7 +159,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   const storageConfig={installationId:storage.installationId,projectRef:'abcdefghijklmnopqrst',bucket:'documents',
    organisationId:'org-synthetic',region:'eu-central-1',captureKeyId:'11111111-1111-4111-8111-111111111111',
    writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
-  let legacyEnabled=true,s3Enabled=['s3-enabled-metadata','working-s3-success'].includes(scenario),writerKeyPresent=true,storageCommands=0;
+  let legacyEnabled=true,s3Enabled=['s3-enabled-metadata','working-s3-success'].includes(scenario),writerKeyPresent=true,controlKeyPresent=true,storageCommands=0;
   const storageTransport=async(input,options)=>{
    const endpoint=new URL(String(input)),path=endpoint.pathname;
    assert.equal(endpoint.origin,'https://api.supabase.com');assert.equal(options.redirect,'error');
@@ -172,8 +173,9 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
     return Response.json({features:{s3Protocol:{enabled:s3Enabled}}});
    }
    if(path.endsWith('/api-keys/legacy')){if(options.method==='PUT')legacyEnabled=false;return Response.json({enabled:legacyEnabled});}
-   if(path.endsWith('/api-keys'))return Response.json([{id:storageConfig.captureKeyId,type:'secret'},...(writerKeyPresent?storageConfig.writerKeys:[])]);
+   if(path.endsWith('/api-keys'))return Response.json([...(controlKeyPresent?[{id:storageConfig.captureKeyId,type:'secret'}]:[]),...(writerKeyPresent?storageConfig.writerKeys:[])]);
    if(options.method==='DELETE'){
+    if(path.endsWith(storageConfig.captureKeyId)){assert.equal(scenario,'retired-control-success');assert.equal(writerKeyPresent,false);controlKeyPresent=false;events.push('original-control-delete');return Response.json({id:storageConfig.captureKeyId,type:'secret'});}
     assert.ok(path.endsWith(storageConfig.writerKeys[0].id));writerKeyPresent=false;
     if(scenario==='storage-ack-lost')throw new Error('synthetic committed Supabase key deletion ACK lost');
     return Response.json(storageConfig.writerKeys[0]);
@@ -220,8 +222,10 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
   const s3=scenario==='working-s3-success'?managedS3WorkingFixture(storage,sdk,actualStorage,controlCredential,events,()=>({attemptId:value.attemptId,planDigest:value.planDigest,sourceSha:operation.sourceSha,maintenanceEpoch:1}),()=>!s3Enabled):s3Current;
   if(scenario==='s3-canary-ack-lost')s3Current.mode.lostCanaryAck=true;
   if(scenario==='s3-post-stale-gateway')s3Current.mode.stalePostGateway=true;
-  const readRoleFixture=scenario==='read-role-success'?await createReadRoleSnapshotFixture({admin,url,operation,scope:actualStorage.candidateCaptureScope()}):undefined;
-  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,actualStorage,newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile);
+  const readRoleFixture=['read-role-success','retired-control-success'].includes(scenario)?await createReadRoleSnapshotFixture({admin,url,operation,scope:actualStorage.candidateCaptureScope(),
+   ...(scenario==='retired-control-success'?{retiredControl:{credential:controlCredential,isPresent:()=>controlKeyPresent,events}}:{})}):undefined;
+  const retirementFor=control=>readRoleFixture?.comparison?new ManagedCaptureControlRetirement(storage,credentials,control,store,sdk,readRoleFixture.comparison):undefined;
+  const coordinator=new ManagedBackendMaintenance(operation,provider,database,store,actualStorage,newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile,retirementFor(actualStorage));
   value={format:1,installationId:storage.installationId,maintenanceEpoch:1,planDigest:coordinator.planDigest(),
    phase:'READY',attemptId:null,observations:null,publicationId:randomUUID()};
   try{
@@ -240,7 +244,7 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
     await writer.$queryRaw`SELECT 1`;await assert.rejects(coordinator.inspect());
     console.log('PASS legacy three-service control refuses before provider/role mutation');continue;
    }
-   if(['success','read-role-success','working-s3-success'].includes(scenario)){
+   if(['success','read-role-success','retired-control-success','working-s3-success'].includes(scenario)){
     const result=await coordinator.close();assert.equal(result.phase,'OBSERVED_CLOSED');assert.equal(result.configuredS3CoverageObserved,true);assert.ok(value.s3BaselinePin&&value.s3ObservationPin&&value.observations.s3ProofDigest);assert.ok(events.indexOf('control-S3_BASELINED')>=0&&events.indexOf('control-S3_BASELINED')<events.indexOf('suspend-'+ids[0]));assert.equal(result.wholeBackendQuiesced,false);
     assert.equal(result.storageAccessPathsObservedClosed,true);assert.equal(storageCommands,scenario==='working-s3-success'?3:2);assert.ok(value.observations.storageDigest);
     assert.equal(events[0],independentControl?'control-READY':'control-ATTEMPTED');if(independentControl)assert.equal(events[1],'control-ATTEMPTED');assert.ok(events.indexOf('control-BASELINED')<events.indexOf('suspend-'+ids[0]));
@@ -285,22 +289,30 @@ export async function proveManagedBackendMaintenance({admin,configuration,url,id
    const activeProbeMutations=()=>events.filter(e=>e.startsWith('signed-kms-')||e==='signed-storage-POST'||e==='signed-storage-PUT'||e==='signed-management-PATCH'||e.startsWith('kms-')||e==='tus-POST'||e==='tus-PATCH'||e==='signed-tus-POST'||e==='signed-tus-PATCH'||e.startsWith('secret-kms-')||e.startsWith('s3-feature-')||e.startsWith('s3-working-')).length;
    const activeBefore=activeProbeMutations();
    signedTus.aws.setFault(()=>undefined); // explicit synthetic transport resolution, not parent backfill.
-   const before=commands,storageBefore=storageCommands,probeCount=probeObjects.size,artifactCount=artifacts.size,versionBefore=version,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store,newStorageControl(),newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile);
+   if(scenario==='retired-control-success'){
+    await coordinator.publishCaptureBootstrap(independentControl.journal);await coordinator.retireCaptureControl();
+    assert.equal(controlKeyPresent,false);assert.equal(events.filter(e=>e==='original-control-delete').length,1);
+    assert.equal(events.filter(e=>e==='original-control-canary-positive').length,1);
+   }
+   const freshStorage=newStorageControl();
+   const before=commands,storageBefore=storageCommands,probeCount=probeObjects.size,artifactCount=artifacts.size,versionBefore=version,fresh=new ManagedBackendMaintenance(operation,provider,new ManagedDatabaseWriterFence(admin,configuration),store,freshStorage,newReadProof(),newWriteEvidence(),signed.factory(),resumable.factory(),signedTus.factory(),s3.factory(),readRoleFixture?.profile,retirementFor(freshStorage));
    await assert.rejects(fresh.close());assert.equal(commands,before);assert.equal(storageCommands,storageBefore);
    const inspected=await fresh.inspect();assert.equal(inspected.phase,value.phase);
-   assert.equal(inspected.recordedObservations===null,!['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));
-   assert.equal(inspected.credentialReadRefusalsObserved,scenario!=='acquire-ack-lost');
-   assert.equal(inspected.recordedReadObservation===null,!['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));
-   assert.equal(inspected.recordedStandardWriteRefusalsObserved,['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));
-   assert.equal(inspected.recordedTestedSignedUploadRefusalObserved,['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshSignedUploadRefusalObserved,false);
-   assert.equal(inspected.recordedResumableCredentialCohortRefusalsObserved,['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshResumableCredentialCohortRefusalsObserved,false);
-   assert.equal(inspected.recordedSignedResumablePatchRefusalObserved,['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshSignedResumablePatchRefusalObserved,false);
+   assert.equal(inspected.recordedObservations===null,!['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));
+   assert.equal(inspected.credentialReadRefusalsObserved,!['acquire-ack-lost','retired-control-success'].includes(scenario));
+   assert.equal(inspected.recordedReadObservation===null,!['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));
+   assert.equal(inspected.recordedStandardWriteRefusalsObserved,['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));
+   assert.equal(inspected.recordedTestedSignedUploadRefusalObserved,['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshSignedUploadRefusalObserved,false);
+   assert.equal(inspected.recordedResumableCredentialCohortRefusalsObserved,['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshResumableCredentialCohortRefusalsObserved,false);
+   assert.equal(inspected.recordedSignedResumablePatchRefusalObserved,['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshSignedResumablePatchRefusalObserved,false);
    assert.equal(artifacts.size,artifactCount);assert.equal(version,versionBefore);assert.ok(resumable.plaintext.every(p=>p.every(v=>v===0)));assert.ok(signedTus.aws.plaintextResponses.every(p=>p.every(v=>v===0)));
-   assert.equal(inspected.recordedS3CoverageObserved,['success','read-role-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
+   assert.equal(inspected.recordedS3CoverageObserved,['success','read-role-success','retired-control-success','working-s3-success','record-ack-lost'].includes(scenario));assert.equal(inspected.freshS3CoverageObserved,false);assert.equal(inspected.freshStandardWriteRefusalsObserved,false);assert.equal(probeObjects.size,probeCount);assert.equal(activeProbeMutations(),activeBefore);assert.ok(signed.plaintext.every(p=>p.every(v=>v===0)));
    assert.equal(inspected.reopeningAuthorised,false);assert.equal(inspected.actionAuthorized,false);
    if(scenario==='success')await proveManagedCandidateCapture({coordinator:fresh,control:store,admin,configuration,operation,scope:newStorageControl().candidateCaptureScope(),controlStorage:storage,controlClient:sdk,url});
    if(scenario==='success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack',...(sourceExecutionMode==='KERNEL_CONTAINED'?['service-ack','daemon-header-ack','daemon-intent-ack','daemon-response-ack','daemon-end-ack']:[])])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode}});
-   if(scenario==='read-role-success')for(const mode of ['success','root-ack','report-ack','request-ack','job-ack'])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode,readRole:readRoleFixture.profile}});
+   if(['read-role-success','retired-control-success'].includes(scenario))for(const mode of ['success','root-ack','report-ack','request-ack','job-ack'])await proveManagedDatabaseSnapshot({admin,url,id,database:databaseName,certificate,managed:{coordinator:fresh,control:store,controlReader:()=>new S3ManagedMaintenanceControl(storage,credentials,sdk),controlSessionId:independentControl?.b.sessionId,scope:newStorageControl().candidateCaptureScope(),secret:controlCredential.secret,operation,mode,sourceExecutionMode,readRole:readRoleFixture.profile,
+    ...(scenario==='retired-control-success'?{retirement:retirementFor(freshStorage),controlCustody:independentControl}:{})}});
+   if(scenario==='retired-control-success'){assert.equal(events.filter(e=>e==='original-control-delete').length,1);assert.equal(events.filter(e=>e==='original-control-canary-positive').length,1);assert.ok(events.filter(e=>e==='retired-control-canary-refusal').length>1);}
    const freshWriter=new PrismaClient({datasources:{db:{url:writerUrl.href}}});
    try{await assert.rejects(freshWriter.$queryRaw`SELECT 1`);}finally{await freshWriter.$disconnect();}
    console.log('PASS integrated managed maintenance '+scenario+'; roles closed, fresh retry read-only/refused');

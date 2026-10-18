@@ -10,6 +10,7 @@ import {credentials} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 const descriptor=readSyntheticCustodyDescriptor(process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE);
 const sessions=await callSyntheticCustody(descriptor,{op:'sessions'});assert.ok(sessions.length>=1&&sessions.length<=32);
 let roots=0,records=0,services=0,killedSourceServices=0,currentInspections=0,currentVerifiedRoots=0,currentUnresolved=0,daemonCatalogues=0,daemonCompleted=0,daemonUnresolved=0,readRoleCurrentInspections=0,readRoleCurrentVerifiedRoots=0,readRoleCurrentUnresolved=0;
+let retiredControlCurrentInspections=0,retiredControlCurrentVerifiedRoots=0,retiredControlCurrentUnresolved=0;
 for(const session of sessions){
  const b=connectSyntheticCustody(descriptor,session.id,session.config),before={writes:b.writes,generates:b.generates},clients={s3:b.s3(),kms:b.kms()};
  try{
@@ -52,6 +53,12 @@ for(const session of sessions){
      readRoleCurrentInspections++;readRoleCurrentVerifiedRoots+=observation.records.filter(r=>r.rootStatus==='ARCHIVE_VERIFIED_QUARANTINE_ONLY').length;readRoleCurrentUnresolved+=observation.unresolvedCommonCandidates;
      assert.ok(observation.bootstrap.catalogue.records.every(r=>r.binding.format===4));
     }
+    if(observation.bootstrap.plan.format===12){
+     retiredControlCurrentInspections++;retiredControlCurrentVerifiedRoots+=observation.records.filter(r=>r.rootStatus==='ARCHIVE_VERIFIED_QUARANTINE_ONLY').length;
+     retiredControlCurrentUnresolved+=observation.unresolvedCommonCandidates;
+     assert.ok(observation.bootstrap.retirementEvidence);
+     assert.ok(observation.bootstrap.catalogue.records.every(r=>r.binding.format===5));
+    }
     currentInspections++;currentVerifiedRoots+=observation.records.filter(r=>r.rootStatus==='ARCHIVE_VERIFIED_QUARANTINE_ONLY').length;currentUnresolved+=observation.unresolvedCommonCandidates;
    }finally{controlClient.destroy();}
   }
@@ -59,7 +66,8 @@ for(const session of sessions){
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
 const report={kind:'SYNTHETIC_COLD_CUSTODY_READER_V1',sessions:sessions.length,records,verifiedRoots:roots,verifiedSourceServiceRecords:services,killedSourceServiceRecords:killedSourceServices,
- currentInspections,currentVerifiedRoots,currentUnresolved,readRoleCurrentInspections,readRoleCurrentVerifiedRoots,readRoleCurrentUnresolved,daemonCatalogues,daemonCompleted,daemonUnresolved,
+ currentInspections,currentVerifiedRoots,currentUnresolved,readRoleCurrentInspections,readRoleCurrentVerifiedRoots,readRoleCurrentUnresolved,
+ retiredControlCurrentInspections,retiredControlCurrentVerifiedRoots,retiredControlCurrentUnresolved,daemonCatalogues,daemonCompleted,daemonUnresolved,
  suppliedSourceIdsOrPins:false,executionAuthorized:false,realProvider:false,sourceHostLossProven:false};
 if(process.connected){await new Promise((yes,no)=>process.send(report,error=>error?no(error):yes()));process.disconnect();}
 else process.stdout.write(JSON.stringify(report)+'\n');

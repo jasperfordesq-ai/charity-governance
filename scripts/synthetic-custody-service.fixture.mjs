@@ -30,7 +30,13 @@ async function dispatch(v,role){
   if(r.headers['x-amz-target']==='TrentService.Decrypt')assert.equal(kmsInput.KeyId,s.config.dataKeyArn);
   else{assert.ok([s.config.indexMacKeyArn,s.config.rootMacKeyArn].includes(kmsInput.KeyId));assert.equal(s.macKeys.has(kmsInput.KeyId),true);}
  }
- const handler=await s[v.service].config.requestHandler,result=await handler.handle({...r,body:r.body===null?undefined:Buffer.from(r.body,'base64')});
+ // Model one bucket namespace for original retirement objects without copying
+ // them into candidate sessions. Only fixed-record GET/HEAD reaches the bound
+ // original control session; flags and all publication remain session-local.
+ const original=s.controlSessionId&&v.service==='s3'&&['GET','HEAD'].includes(r.method)
+  &&/\/(?:capture-control-baseline|capture-control-observation|capture-control-read-baseline)\.json$/.test(r.path)?sessions.get(s.controlSessionId):s;
+ assert.ok(original);
+ const handler=await original[v.service].config.requestHandler,result=await handler.handle({...r,body:r.body===null?undefined:Buffer.from(r.body,'base64')});
  if(v.service==='kms'&&r.headers['x-amz-target']==='TrentService.GenerateMac'&&result.response.statusCode===200)s.macKeys.add(kmsInput.KeyId);
  const bytes=await bounded(result.response.body);return{statusCode:result.response.statusCode,headers:result.response.headers,body:bytes.toString('base64')};
 }

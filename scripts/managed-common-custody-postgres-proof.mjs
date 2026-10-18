@@ -14,15 +14,26 @@ import {S3BackupManifests} from '../apps/api/dist/services/backup-manifests-s3.j
 import {ManagedCandidateCaptureJournal} from '../apps/api/dist/services/managed-candidate-capture-journal.js';
 import {ArchivedRecoverySets} from '../apps/api/dist/services/archived-recovery-set.js';
 import {openSyntheticCustodyProcess} from './synthetic-custody-client.mjs';
+import {GetObjectCommand,HeadObjectCommand} from '@aws-sdk/client-s3';
 const hex=v=>hash(v).toString('hex');
 /** In-process signed SDK synthetic cloud transport, actual crypto/archive classes.
  * Input report and dump come from the genuine native source/isolated-restore proof. */
-export function managedCommonCustodyBackend(installationId){
- const config={...defaults,installationId},b=process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?openSyntheticCustodyProcess(installationId,process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE):backend(config),clients={s3:b.s3(),kms:b.kms()},readers=[];
+export function managedCommonCustodyBackend(installationId,controlCustody){
+ const config={...defaults,installationId},b=process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE?openSyntheticCustodyProcess(installationId,process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE):backend(config);
+ const s3=()=>{
+  const client=b.s3();
+  if(controlCustody&&!process.env.CHARITYPILOT_TEST_CUSTODY_SESSION_FILE){
+   const original=client.send.bind(client);client.send=(command,...rest)=>
+    (command instanceof GetObjectCommand||command instanceof HeadObjectCommand)&&/\/(?:capture-control-baseline|capture-control-observation|capture-control-read-baseline)\.json$/.test(command.input.Key??'')
+     ?controlCustody.clients.s3.send(command,...rest):original(command,...rest);
+  }
+  return client;
+ };
+ const clients={s3:s3(),kms:b.kms()},readers=[];
  const journalConfig={installationId,bucket:config.bucket,accountId:config.accountId,kmsKeyArn:config.storageKeyArn};
  return{config,b,clients,readers,journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,clients.s3),
   archive:new ArchivedRecoverySets(config,credentials,clients),
-  fresh(){const v={s3:b.s3(),kms:b.kms()};readers.push(v);return{journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,v.s3),archive:new ArchivedRecoverySets(config,credentials,v)};},
+  fresh(){const v={s3:s3(),kms:b.kms()};readers.push(v);return{journal:new ManagedCandidateCaptureJournal(journalConfig,credentials,v.s3),archive:new ArchivedRecoverySets(config,credentials,v)};},
   close(){clients.s3.destroy();clients.kms.destroy();for(const v of readers){v.s3.destroy();v.kms.destroy();}b.close();}};
 }
 export async function startManagedCommonCustody({reportBody,databaseSource,workspace,metadata,captureConfigurationDigest},signal,owned=managedCommonCustodyBackend('synthetic-snapshot-proof')){
