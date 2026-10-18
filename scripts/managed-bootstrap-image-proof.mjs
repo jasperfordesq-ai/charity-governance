@@ -77,7 +77,7 @@ try {
         assert.equal(fs.existsSync('/app/apps'),false);assert.equal(fs.existsSync('/app/node_modules'),false);
       `]);
     } else {
-      docker(['exec', id, 'node', '--input-type=module', '-e', `
+      docker(['exec', id, 'node', '--input-type=module', '-e', String.raw`
         import fs from 'node:fs';import assert from 'node:assert/strict';
         for(const file of ['/proc/net/tcp','/proc/net/tcp6']) assert.ok(!fs.readFileSync(file,'utf8').split('\n').some(line=>line.trim().split(/\s+/)[3]==='0A'));
       `]);
