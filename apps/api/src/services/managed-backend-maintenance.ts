@@ -4,7 +4,7 @@ import type {ManagedDatabaseSnapshot} from './managed-storage-metadata-window.js
 import {managedSnapshotInterval,type ManagedSnapshotInterval} from './managed-snapshot-interval.js';
 import {requireProtocol9ClosedHead} from './managed-maintenance-control.js';
 import type {ManagedCandidateCaptureJournal} from './managed-candidate-capture-journal.js';
-import {candidateRequestSchema as candidateRequest,candidateBindingSchema} from './managed-candidate-capture-contract.js';
+import {candidateRequestSchema as candidateRequest,candidateBindingSchema,legacySupabaseCaptureSchema,type ManagedLegacySupabaseCapture} from './managed-candidate-capture-contract.js';
 import type {SupabaseRecoveryCapture} from './supabase-recovery-capture.js';
 import type {ManagedStorageMetadataWindow} from './managed-storage-metadata-window.js';
 import type {ManagedS3MaintenanceEvidence} from './managed-s3-maintenance-evidence.js';
@@ -177,7 +177,7 @@ export class ManagedBackendMaintenance {
   journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
   source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:Readonly<{kind:'COMMON_CANDIDATE';bindingDigest:string;requestPinDigest:string;sourceSha:string;jobCustody:Readonly<{reserve:(artifact:unknown)=>Promise<unknown>;observe:(artifact:unknown)=>Promise<unknown>;bindService:(artifact:unknown)=>Promise<unknown>;reserveDaemonHeader:(artifact:unknown)=>Promise<unknown>;reserveDaemonIntent:(artifact:unknown)=>Promise<unknown>;bindDaemonOwner:(artifact:unknown)=>Promise<unknown>;createDaemonOwnerOutcomeWriter:()=>Promise<Readonly<{publish:(artifact:unknown,signal?:AbortSignal)=>Promise<unknown>;revoke:()=>void}>>;createDaemonOwnerOutcomeTransfer:()=>Promise<Readonly<{take:()=>Promise<unknown>;claim:(nonce:string,digest:string)=>Promise<boolean>;observeReceipt:(artifact:unknown,receipt:unknown)=>Promise<unknown>;confirmReady:()=>Promise<boolean>;abandon:()=>void}>>;observeDaemonResponse:(artifact:unknown)=>Promise<unknown>;finishDaemonRequests:(artifact:unknown)=>Promise<unknown>}>}>)=>Promise<{
    visit:Parameters<SupabaseRecoveryCapture['capture']>[0];
-   prepareArchiveInput:(captured:Awaited<ReturnType<SupabaseRecoveryCapture['capture']>>,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
+   prepareArchiveInput:(captured:ManagedLegacySupabaseCapture,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
   }>,caller?:AbortSignal){
   let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,acknowledged=false;
   try{
@@ -213,7 +213,7 @@ export class ManagedBackendMaintenance {
     const prepared=await source(snapshot,signal,context);signal.throwIfAborted();
     if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
     const visit=prepared.visit,prepareArchiveInput=prepared.prepareArchiveInput;
-    const captured=await capture.capture(visit,signal);return{captured,prepareArchiveInput};
+    const captured=legacySupabaseCaptureSchema.parse(await capture.capture(visit,signal));return{captured,prepareArchiveInput};
    },caller);
    await check();await this.inspect();await check();
    const interval=managedSnapshotInterval({metadataWindow:guarded.evidence,databaseSnapshot:guarded.databaseSnapshot});

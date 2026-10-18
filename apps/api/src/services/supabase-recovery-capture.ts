@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import {SupabaseCaptureJwt,supabaseCaptureJwtConfiguration} from './supabase-capture-jwt.js';
 
 const failure = () => new Error('Supabase recovery capture is unresolved');
 const configSchema = z
@@ -27,6 +28,8 @@ const configSchema = z
       .refine((v) => v === v.trim()),
   })
   .strict();
+const jwtConfigSchema=configSchema.extend({authentication:supabaseCaptureJwtConfiguration}).strict();
+const captureConfiguration=z.union([configSchema,jwtConfigSchema]);
 const timestamp = z.string().max(64).datetime({ offset: true });
 const fileSchema = z.object({
   name: z.string(),
@@ -70,26 +73,26 @@ type Inventory = {
  * fence, unfiltered credential authority, exact provider version or restore
  * admission. No application route/job activates this internal component. */
 export class SupabaseRecoveryCapture {
-  private readonly config: z.infer<typeof configSchema>;
+  private readonly config: z.infer<typeof captureConfiguration>;
+  readonly #secret:string;
+  readonly #jwt:SupabaseCaptureJwt|undefined;
   private readonly origin: string;
   constructor(
     raw: unknown,
-    private readonly secret: string,
+    secret: string,
     private readonly transport: typeof fetch = fetch,
   ) {
-    this.config = configSchema.parse(raw);
-    // This new managed capture path uses independently supplied modern server
-    // keys only. A prefix does not attest its actual privilege or visibility.
-    if (
-      typeof secret !== 'string' ||
-      !/^sb_secret_[A-Za-z0-9_-]{16,512}$/.test(secret) ||
-      secret !== secret.trim() ||
-      hash(secret) !== this.config.credential.sha256
-    )
-      throw failure();
+    this.config = captureConfiguration.parse(raw);
+    this.#secret=secret;
+    if(typeof secret!=='string'||Buffer.byteLength(secret)>8192||secret!==secret.trim()||hash(secret)!==this.config.credential.sha256)throw failure();
+    if('authentication' in this.config){
+      try{this.#jwt=new SupabaseCaptureJwt(this.config.authentication,secret,this.config.projectRef);}catch{throw failure();}
+    }else if(!/^sb_secret_[A-Za-z0-9_-]{16,512}$/.test(secret))throw failure();
     this.origin = `https://${this.config.projectRef}.supabase.co`;
   }
   assertStorageScope(raw: unknown) {
+    // Legacy modern-key registry cannot authorise the new JWT role lane.
+    if(this.#jwt)throw failure();
     const scope=z.object({installationId:configSchema.shape.installationId,projectRef:configSchema.shape.projectRef,
       bucket:configSchema.shape.bucket,captureKeyId:z.string().uuid()}).strict().parse(raw);
     if(scope.installationId!==this.config.installationId||scope.projectRef!==this.config.projectRef
@@ -98,12 +101,13 @@ export class SupabaseRecoveryCapture {
   configurationDigest() {
     return hash(
       JSON.stringify({
-        format: 2,
-        provider: 'SUPABASE_PRIVATE_CAPTURE_CREDENTIAL_BOUND_V2',
+        format: this.#jwt?3:2,
+        provider: this.#jwt?'SUPABASE_PRIVATE_CAPTURE_CUSTOM_ROLE_JWT_V3':'SUPABASE_PRIVATE_CAPTURE_CREDENTIAL_BOUND_V2',
         ...this.config,
       }),
     );
   }
+  private timeout(maximum:number){return this.#jwt?Math.min(maximum,this.#jwt.remainingMs()):maximum;}
   private segment(raw: string) {
     if (
       !raw ||
@@ -126,9 +130,10 @@ export class SupabaseRecoveryCapture {
     mimeType?: string,
   ): Promise<Buffer> {
     if (++budget.requests > 30000 || budget.signal.aborted) throw failure();
+    this.#jwt?.assertActive();
     const controller = new AbortController(),
       signal = AbortSignal.any([controller.signal, budget.signal]);
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), this.timeout(15000));
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let stop!: () => void;
     const cancelled = new Promise<never>((_resolve, reject) => {
@@ -146,7 +151,7 @@ export class SupabaseRecoveryCapture {
           redirect: 'error',
           signal,
           headers: {
-            apikey: this.secret,
+            ...(this.#jwt?this.#jwt.headers():{apikey:this.#secret}),
             Accept: mimeType ?? 'application/json',
             'Accept-Encoding': 'identity',
             'Cache-Control': 'no-cache, no-store',
@@ -157,6 +162,7 @@ export class SupabaseRecoveryCapture {
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         },
       );
+      this.#jwt?.assertActive();
       if (signal.aborted || response.status !== 200) {
         void response.body?.cancel().catch(() => {});
         throw failure();
@@ -206,7 +212,7 @@ export class SupabaseRecoveryCapture {
           (length !== null && count !== Number(length))
         )
           throw failure();
-        return Buffer.from(bytes.subarray(0, count));
+        this.#jwt?.assertActive();return Buffer.from(bytes.subarray(0, count));
       } finally {
         bytes.fill(0);
       }
@@ -323,7 +329,7 @@ export class SupabaseRecoveryCapture {
       signal = caller
         ? AbortSignal.any([caller, controller.signal])
         : controller.signal;
-    const timer = setTimeout(() => controller.abort(), 30000),
+    const timer = setTimeout(() => controller.abort(), this.timeout(30000)),
       budget = { signal, requests: 0 };
     try {
       const value = z
@@ -368,7 +374,7 @@ export class SupabaseRecoveryCapture {
       } finally {
         bytes.fill(0);
       }
-      return {
+      this.#jwt?.assertActive();return {
         kind: 'RECOVERY_CANARY_READ_MATCH' as const,
         sha256: value.sha256,
         bytes: value.bytes,
@@ -393,10 +399,10 @@ export class SupabaseRecoveryCapture {
       signal = caller
         ? AbortSignal.any([controller.signal, caller])
         : controller.signal;
-    const timer = setTimeout(() => controller.abort(), 60 * 60 * 1000),
+    const timer = setTimeout(() => controller.abort(), this.timeout(60 * 60 * 1000)),
       budget = { requests: 0, signal };
     try {
-      signal.throwIfAborted();
+      signal.throwIfAborted();this.#jwt?.assertActive();
       const startedAt = new Date().toISOString(),
         first = await this.inventory(budget);
       const objects: { fileUrl: string; bytes: number; sha256: string }[] = [];
@@ -440,15 +446,17 @@ export class SupabaseRecoveryCapture {
         signal.aborted
       )
         throw failure();
+      this.#jwt?.assertActive();
       return {
-        kind: 'SUPABASE_CANDIDATE_CAPTURE' as const,
+        kind: this.#jwt?'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1' as const:'SUPABASE_CANDIDATE_CAPTURE' as const,
         restoreMode: 'QUARANTINE_ONLY' as const,
         captureConsistency: 'EXTERNAL_VERIFICATION_REQUIRED' as const,
         visibility: 'SUPPLIED_CREDENTIAL_VIEW_ONLY' as const,
         credentialId: this.config.credential.id,
         credentialSha256: this.config.credential.sha256,
         captureRequestMode: 'READ_OPERATIONS_ONLY' as const,
-        credentialCapability: 'PRIVILEGED_MODERN_SERVER_KEY' as const,
+        credentialCapability: this.#jwt?'ASYMMETRIC_CUSTOM_ROLE_JWT' as const:'PRIVILEGED_MODERN_SERVER_KEY' as const,
+        ...(this.#jwt?{jwtVerification:this.#jwt.evidence()}:{}),
         credentialHashMatched: true as const,
         credentialIdentityVerified: false as const,
         credentialPrivilegeVerified: false as const,

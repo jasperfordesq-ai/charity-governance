@@ -1,7 +1,40 @@
 import assert from 'node:assert/strict';
+import {generateKeyPairSync,createHash,randomUUID} from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import {SupabaseRecoveryCapture} from '../apps/api/dist/services/supabase-recovery-capture.js';
 import {PrismaClient} from '@prisma/client';
 import {proveStorageMetadataWindow} from './storage-metadata-window-postgres-proof.mjs';
 import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
+
+/** Explicit provider model: real JWT crypto + actual TLS role-scoped SQL,
+ * not a hosted Storage server or a held provider privilege interval. */
+async function proveReadRoleJwtCapture(admin,readerRole,boundary){
+ const pair=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),subject=randomUUID(),now=Math.floor(Date.now()/1000),projectRef='abcdefghijklmnopqrst';
+ const authentication={kind:'SUPABASE_CAPTURE_CUSTOM_ROLE_JWT_V1',sqlRole:readerRole,subject,
+  verificationKey:{...pair.publicKey.export({format:'jwk'}),alg:'ES256',kid:'synthetic-read-role',use:'sig'}};
+ const token=jwt.sign({iss:`https://${projectRef}.supabase.co/auth/v1`,aud:'authenticated',sub:subject,role:readerRole.name,iat:now,exp:now+300},pair.privateKey,
+  {algorithm:'ES256',header:{alg:'ES256',typ:'JWT',kid:'synthetic-read-role'}});
+ const asRole=async operation=>{
+  const claims=jwt.verify(token,pair.publicKey,{algorithms:['ES256'],issuer:`https://${projectRef}.supabase.co/auth/v1`,audience:'authenticated'});
+  assert.equal(claims.role,readerRole.name);assert.equal(claims.sub,subject);
+  return admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role',${claims.role},true)`;return operation(tx);});
+ };
+ let calls=0;
+ const capture=new SupabaseRecoveryCapture({installationId:'synthetic-reader',projectRef,bucket:'synthetic-read-bucket',credential:{id:subject,sha256:createHash('sha256').update(token).digest('hex')},authentication},token,async(input,init)=>{
+  calls++;assert.equal(new Headers(init.headers).get('authorization'),'Bearer '+token);assert.equal(new Headers(init.headers).get('apikey'),null);
+  const u=new URL(String(input));assert.equal(u.origin,`https://${projectRef}.supabase.co`);
+  const rows=await asRole(tx=>tx.$queryRaw`SELECT value FROM public.synthetic_storage_boundary WHERE value='synthetic-reader-control'`);assert.equal(rows.length,1);
+  if(u.pathname.includes('/bucket/'))return Response.json({id:'synthetic-read-bucket',public:false});
+  if(u.pathname.includes('/object/list/')){assert.equal(init.method,'POST');return Response.json([{name:'synthetic.txt',id:subject,created_at:'2026-10-18T00:00:00Z',updated_at:'2026-10-18T00:00:00Z',metadata:{size:Buffer.byteLength(rows[0].value),mimetype:'text/plain'}}]);}
+  assert.equal(init.method,'GET');return new Response(rows[0].value,{headers:{'content-type':'text/plain','content-length':String(Buffer.byteLength(rows[0].value))}});
+ });
+ let visited=0;const result=await capture.capture(async(_file,bytes)=>{visited++;assert.equal(bytes.toString(),'synthetic-reader-control');});
+ assert.equal(visited,1);assert.equal(result.kind,'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1');assert.equal(result.jwtVerification.signatureVerified,true);
+ assert.deepEqual(result.jwtVerification.sqlRole,boundary.capture);assert.equal(result.jwtVerification.providerSqlRoleVerified,false);assert.equal(result.credentialWriteAuthorityExcluded,false);
+ assert.equal(JSON.stringify(result).includes(token),false);assert.equal(JSON.stringify(capture).includes(token),false);assert.ok(calls>=5);
+ await assert.rejects(()=>asRole(tx=>tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='jwt-must-not-write' WHERE value='synthetic-reader-control'`),e=>e?.code==='P2010'&&e?.meta?.code==='42501');
+ console.log('PASS capture JWT/native SQL composition: verified asymmetric custom-role bearer, actual role-scoped reads and 42501 write refusal, token-free output; provider transport is synthetic, no hosted privilege-interval claim');
+}
 
 /** SQL semantics experiment in the EXISTING disposable TLS PostgreSQL fixture.
  * Not a Supabase migration, operator command, live ACL fence or release claim. */
@@ -213,6 +246,7 @@ export async function proveStorageGrantBoundary({admin,url}){
   const visible=await admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;return tx.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_storage_boundary WHERE value='synthetic-reader-control'`;});
   assert.equal(visible[0].total,1);
   await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
+  await proveReadRoleJwtCapture(admin,readerRole,boundary);
   await admin.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`;
   await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`;
   await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`;

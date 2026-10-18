@@ -1,3 +1,12 @@
+## 18 October: explicit capture JWT component
+
+An inactive, versioned asymmetric JWT capture lane now verifies configured
+claims and bounded expiry, with credential-safe output and no server-key
+fallback. Existing maintenance/archive authorization refuses the new mode.
+Read [the contract and limits](managed-capture-jwt.md). Focused tests pass;
+exact native and release evidence is recorded privately. Hosted provider
+authority, guarded privilege intervals and physical-host-loss gates remain open.
+
 ## 18 October: capture role SQL boundary executed
 
 Native TLS PostgreSQL execution passed for the dedicated NOLOGIN/NOINHERIT

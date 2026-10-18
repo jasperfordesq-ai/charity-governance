@@ -22,6 +22,8 @@ const capture=z.object({kind:z.literal('SUPABASE_CANDIDATE_CAPTURE'),restoreMode
  credentialPrivilegeVerified:no,credentialWriteAuthorityExcluded:no,wholeStorageQuiesced:no,actionAuthorized:no,
  configurationDigest:sha,inventoryDigest:sha,startedAt:z.string().datetime(),observedAt:z.string().datetime(),
  objects:z.array(z.object({fileUrl:path,bytes:size,sha256:sha}).strict()).max(5000),files:z.array(file).max(5000)}).strict();
+export const legacySupabaseCaptureSchema=capture;
+export type ManagedLegacySupabaseCapture=z.infer<typeof capture>;
 export const managedStorageWindowSchema=z.object({format:z.literal(1),kind:z.literal('MANAGED_STORAGE_METADATA_WINDOW_V1'),windowId:uuid,
  configurationDigest:sha,database:name,databaseOid:oid,observer:z.object({name,oid}).strict(),
  relations:z.array(z.object({schema:name,name,oid}).strict()).min(1).max(16),backendPid:z.number().int().positive(),
