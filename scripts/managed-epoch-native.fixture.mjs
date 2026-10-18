@@ -154,3 +154,13 @@ export async function inspectSyntheticEpochRecovery(descriptor,path){
   return{entries:observation.epochCatalogue.entryCount,latestEpoch:observation.bootstrap.plan.maintenanceEpoch,verifiedCurrentRoots:1,externalOriginalAckCheckpoint:true};
  }finally{clients.s3.destroy();clients.kms.destroy();}
 }
+/** Generic cold catalogue probe lets the production catalogue enforce a supplied
+ * checkpoint (including a deliberately future one), without a fixture shortcut. */
+export async function observeSyntheticEpochCatalogue(descriptor,path){
+ const bootstrap=readSyntheticEpochBootstrap(path),b=connectSyntheticCustody(descriptor,bootstrap.sessionId,bootstrap.archiveConfiguration),client=b.s3(),before={writes:b.writes,generates:b.generates};
+ try{
+  const reader=new S3ManagedRecoveryEpochReader(storage(bootstrap.archiveConfiguration),credentials,client),catalogue=new ManagedRecoveryEpochCatalogue(epochCatalogueConfiguration(bootstrap),reader),observed=await catalogue.observe();
+  assert.equal(b.writes,before.writes);assert.equal(b.generates,before.generates);
+  return{entries:observed.entryCount,executionAuthorized:observed.executionAuthorized,originalAcknowledgementReconstructed:observed.originalAcknowledgementReconstructed};
+ }finally{client.destroy();}
+}

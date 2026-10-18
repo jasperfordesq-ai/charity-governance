@@ -65,6 +65,17 @@ separation are synthetic process boundaries on the same machine.
 
 ### Native original-acknowledgement loss cohort
 
+Exact source `1c330ecf387157432f41754d9a5e8f337dc7eca0` passed all five cases
+below in 173,299 ms on 18 October. Fresh API build and three Linux boundary tests
+passed. Each failure retained exactly one original publication receipt, a readable
+historical epoch-1 root and an explicitly unresolved epoch-2 publication. Both
+entry-loss cases refused the stale-head/current-control comparison. Both head-loss
+cases verified the readable two-entry history without inventing an original
+second receipt or a completed second capture. Recovery made no new writes/data
+keys; selected containers/units were absent and the application checkout was
+unchanged. This is a synthetic provider-process result, not actual cloud IAM or
+physical-host-loss evidence.
+
 `CHARITYPILOT_TEST_EPOCH_ACK_LOSS_NATIVE=1 node --test
 scripts/synthetic-epoch-loss.native.test.mjs` is a separate opt-in Linux cohort.
 It runs a two-epoch positive control and four distinct losses: epoch-2 entry PUT,
@@ -89,8 +100,26 @@ list a completed capture. Both outcomes remain explicitly unresolved. The prior
 completed epoch-1 archive is independently discovered from its verified historical
 chain entry and remains readable only into quarantine, without caller IDs/pins.
 Recovery may not write, generate keys, reconstruct ACKs, retry or admit an archive.
-Source integration alone does not establish execution of these new cases; exact
-native results must be recorded separately.
+Exact native results must be recorded separately from later source changes.
+
+### Native read-refusal extension
+
+The positive-control case also tests a stable provider view rolled back to head 1,
+a changed physical version of head 2 with unchanged bytes/ETag, and a listing that
+changes between its two observations. These faults alter only the synthetic
+keeper's read responses after the original SDK response; stored objects stay
+unchanged. Only the fixture owner can arm/clear them. Their application must be
+confirmed from the keeper's consumed-fault counters.
+
+Three additional cold probes supply a wrong checkpoint hash, a checkpoint beyond
+the observed head and a substituted genesis digest. The production catalogue,
+not a fixture sequence shortcut, must refuse all six cases. A new full anchored
+recovery reader then verifies the original correct checkpoint after each refusal:
+seven positive reads including the initial control. These probes get only the
+recovery capability and external configuration, never source candidate IDs or
+archive pins. Reads may not mutate custody, generate keys, admit, reconstruct an
+ACK or fall back to an older acceptable-looking archive. These new read-refusal
+extensions still require an exact-source native execution result.
 
 The original independent legacy/read-role/retired-control ACK-loss cohorts and
 genuine legacy/retired-control caller SIGKILL cases remain separate. Their
@@ -99,7 +128,7 @@ namespace reports its own two-entry chain and one latest-epoch root.
 
 The executed scope above is source-specific. Dated native results, receipts and
 failures belong in the ignored private handoff. New epoch
-entry/head ACK-loss execution, external-checkpoint rollback/version/list drift and genuine
+later read-refusal extensions and genuine
 caller loss within the shared two-epoch path still require their own native
 execution. Modelled SDK tests cover those store boundaries separately.
 

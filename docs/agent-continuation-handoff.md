@@ -1,10 +1,12 @@
-## 18 October: original epoch publication loss cohort integrated
+## 18 October: original epoch publication loss passed; read-fault extension integrated
 
 A separate native cohort now covers entry/head PUT and exact-readback response
 loss after the original SDK operation completes in the surviving custody process.
 A positive control and four distinct losses retain externally observed receipts;
 recovery verifies prior quarantine without reconstructing the missing receipt.
-These new cases require exact-source native execution before proof is claimed.
+Exact1c330ecf passed all five native cases in173299ms, retaining original ACK
+uncertainty and historical quarantine. New rollback/version/list/configuration
+refusal probes with fresh positive comparisons still need native execution.
 See [the native contract](managed-recovery-epoch-native.md). Actual provider IAM,
 current tenant authority and physical-host-loss acceptance remain open.
 ## 18 October: dedicated two-epoch native proof passed

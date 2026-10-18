@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {backend,config as defaults} from '../apps/api/dist/tests/fixtures/archived-custody.js';
 import {syntheticCustodyAllowed} from './synthetic-custody-policy.mjs';
 import {syntheticEpochAckLossModes,matchesSyntheticEpochAckLoss} from './synthetic-epoch-ack-loss.mjs';
+import {syntheticEpochReadFaultModes,applySyntheticEpochReadFault} from './synthetic-epoch-read-fault.mjs';
 if(!process.connected||process.argv.length!==2)throw new Error('Synthetic custody owner required');
 const capability=randomBytes(32).toString('hex'),recoveryCapability=randomBytes(32).toString('hex'),sessions=new Map(),limit=32*1024*1024;
 const flags=['loseRoot','losePrepared','loseCommonRequestRead','loseCommonReportRead','loseJobRequestRead','loseJobObservationRead','loseJobServiceRead','loseDaemonHeaderRead','loseDaemonIntentRead','loseDaemonResponseRead','loseDaemonEndRead'];
@@ -20,9 +21,15 @@ async function dispatch(v,role){
   const control=sessions.get(v.controlSessionId);assert.ok(control&&control!==s&&!s.controlSessionId);
   assert.equal(control.config.installationId,s.config.installationId);s.controlSessionId=v.controlSessionId;return true;
  }
- if(v.op==='stats')return{reads:s.b.reads,writes:s.b.writes,generates:s.b.generates,...(s.epochAckLoss?{epochAckLoss:s.epochAckLoss}:{})};
+ if(v.op==='stats')return{reads:s.b.reads,writes:s.b.writes,generates:s.b.generates,...(s.epochAckLoss?{epochAckLoss:s.epochAckLoss}:{}),...(s.epochReadFault?{epochReadFault:s.epochReadFault}:{})};
  if(v.op==='metadata')return[...s.b.objects].map(([k,o])=>[k,{version:o.version,checksum:o.checksum,type:o.type,contentType:o.contentType,byteLength:o.body.length}]);
  if(v.op==='flag'){
+  if(v.name==='epochReadFault'){
+   assert.equal(s.config.installationId,'synthetic-native-epochs');assert.equal(s.epochAckLoss,undefined);
+   if(v.value===null){assert.ok(s.epochReadFault);delete s.epochReadFault;return true;}
+   assert.equal(s.epochReadFault,undefined);assert.ok(syntheticEpochReadFaultModes.includes(v.value));assert.equal(s.b.objects.has(`managed-maintenance/${s.config.installationId}/recovery-epochs/heads/00002.json`),true);
+   s.epochReadFault={mode:v.value,listReads:0,currentReads:0,applied:0};return true;
+  }
   if(v.name==='epochAckLoss'){
    assert.equal(s.config.installationId,'synthetic-native-epochs');assert.ok(syntheticEpochAckLossModes.includes(v.value));assert.equal(s.epochAckLoss,undefined);
    s.epochAckLoss={mode:v.value,used:false};return true;
@@ -51,7 +58,8 @@ async function dispatch(v,role){
   s.epochAckLoss={...s.epochAckLoss,used:true,storedRecordPresent:true,responseLostAfterSdkOperation:true};throw new Error('Synthetic original epoch response lost');
  }
  if(v.service==='kms'&&r.headers['x-amz-target']==='TrentService.GenerateMac'&&result.response.statusCode===200)s.macKeys.add(kmsInput.KeyId);
- const bytes=await bounded(result.response.body);return{statusCode:result.response.statusCode,headers:result.response.headers,body:bytes.toString('base64')};
+ const bytes=await bounded(result.response.body),view=v.service==='s3'&&s.epochReadFault?applySyntheticEpochReadFault(s.epochReadFault,s.config,r,result.response.headers,bytes):{headers:result.response.headers,bytes};
+ return{statusCode:result.response.statusCode,headers:view.headers,body:view.bytes.toString('base64')};
 }
 const server=createServer(async(req,res)=>{
  try{

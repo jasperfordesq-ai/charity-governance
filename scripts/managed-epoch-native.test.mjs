@@ -7,6 +7,26 @@ import {config as defaults} from '../apps/api/dist/tests/fixtures/archived-custo
 import {readSyntheticEpochBootstrap,validateOriginalSyntheticEpochAck} from './managed-epoch-native.fixture.mjs';
 import {syntheticEpochAckLossModes,matchesSyntheticEpochAckLoss} from './synthetic-epoch-ack-loss.mjs';
 import {syntheticCustodyAllowed} from './synthetic-custody-policy.mjs';
+import {syntheticEpochReadFaultModes,applySyntheticEpochReadFault} from './synthetic-epoch-read-fault.mjs';
+test('synthetic epoch read faults preserve bytes/ETag, scope and first observations while changing only the named provider boundary',()=>{
+ const config={installationId:'synthetic-native-epochs'},prefix=`managed-maintenance/${config.installationId}/recovery-epochs/heads/`,headers={'x-amz-version-id':'physical-original',etag:'"same-etag"'};
+ const listed=Buffer.from('<ListBucketResult><KeyCount>3</KeyCount>'+[0,1,2].map(n=>`<Contents><Key>${prefix}${String(n).padStart(5,'0')}.json</Key></Contents>`).join('')+'</ListBucketResult>');
+ const listing={method:'GET',path:'/',query:{'list-type':'2',prefix}},current={method:'GET',path:'/'+prefix+'00002.json',query:{}};
+ for(const mode of syntheticEpochReadFaultModes){
+  const fault={mode,listReads:0,currentReads:0,applied:0};assert.equal(syntheticCustodyAllowed('recovery',{op:'flag',name:'epochReadFault',value:mode,role:'owner'}),false);
+  assert.deepEqual(applySyntheticEpochReadFault(fault,{installationId:'other'},listing,headers,listed),{headers,bytes:listed});assert.equal(fault.applied,0);
+  if(mode==='HEAD_2_PHYSICAL_VERSION_DRIFT'){
+   const bytes=Buffer.from('{"canonical":"unchanged"}');assert.deepEqual(applySyntheticEpochReadFault(fault,config,current,headers,bytes),{headers,bytes});
+   assert.deepEqual(applySyntheticEpochReadFault(fault,config,{...current,query:{versionId:'physical-original'}},headers,bytes),{headers,bytes});
+   const changed=applySyntheticEpochReadFault(fault,config,current,headers,bytes);assert.deepEqual(changed.bytes,bytes);assert.equal(changed.headers.etag,headers.etag);assert.notEqual(changed.headers['x-amz-version-id'],headers['x-amz-version-id']);
+  }else{
+   const first=applySyntheticEpochReadFault(fault,config,listing,headers,listed);if(mode==='HEAD_LIST_DRIFT')assert.deepEqual(first.bytes,listed);
+   const changed=mode==='HEAD_LIST_DRIFT'?applySyntheticEpochReadFault(fault,config,listing,headers,listed):first;
+   assert.ok(changed.bytes.toString().includes('<KeyCount>2</KeyCount>'));assert.equal(changed.bytes.toString().includes('00002.json'),false);assert.deepEqual(changed.headers,headers);
+  }
+  assert.ok(fault.applied>0);
+ }
+});
 test('epoch ACK-loss hooks match only the second fixed slot and exact readback in the disposable namespace',()=>{
  for(const mode of syntheticEpochAckLossModes){
   const config={installationId:'synthetic-native-epochs'},method=mode.includes('_PUT_')?'PUT':'GET',kind=mode.startsWith('ENTRY_')?'entries':'heads';
