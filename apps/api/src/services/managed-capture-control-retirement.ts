@@ -42,6 +42,18 @@ const artifact=(value:unknown):MaintenanceArtifact=>{const body=JSON.stringify(v
 const savedValue=(raw:unknown)=>{const v=z.object({body:z.string().max(16384),sha256:sha}).strict().parse(raw);
  if(candidateHash(v.body)!==v.sha256)throw failure();const value:unknown=JSON.parse(v.body);
  if(JSON.stringify(value)!==v.body)throw failure();return value;};
+export const managedRetirementRecordSchemas={storage:storageSchema,scope:scopeSchema,binding:bindingSchema,request:anyRequestSchema,report:anyReportSchema,readBaseline:readBaselineRecord,metadata:observationSchema};
+export function controlRetirementPolicyDigest(storage:unknown,scope:unknown,comparison?:unknown){
+ const s=storageSchema.parse(storage),p=scopeSchema.parse(scope),d=comparison===undefined?undefined:retiredControlReadDescriptorSchema.parse(comparison);
+ if(s.installationId!==p.installationId||d&&(d.configuration.installationId!==p.installationId||d.configuration.projectRef!==p.projectRef||d.configuration.retiredControl.id!==p.captureKeyId))throw failure();
+ return candidateHash(JSON.stringify(d?{format:2,policy:'ORIGINAL_INTENT_AND_CANARY_BASELINE_ACK_BEFORE_RETIREMENT_V2',storage:s,scope:p,readComparison:d}
+  :{format:1,policy:'ORIGINAL_REQUEST_ACK_BEFORE_CAPTURE_CONTROL_RETIREMENT_V1',storage:s,scope:p}));
+}
+export function assertControlRetirementMetadata(raw:unknown,scope:unknown){
+ const v=observationSchema.parse(raw),p=scopeSchema.parse(scope),{observationDigest,...observation}=v;
+ const facts={format:observation.format,kind:observation.kind,...scopeFrom(observation),observedAt:observation.observedAt,stateSha256:observation.stateSha256};
+ if(observationDigest!==candidateHash(JSON.stringify(facts))||JSON.stringify(scopeFrom(v))!==JSON.stringify(p))throw failure();return v;
+}
 
 /** Explicit format-11/12 component supplied by operator composition, not a
  * route or legacy plan. It retires one named control key only; management
@@ -62,8 +74,7 @@ export class ManagedCaptureControlRetirement {
    this.comparison={descriptor,probe:comparison.probe};}
  }
  readComparisonConfigurationDigest(){return this.comparison?candidateHash(JSON.stringify(this.comparison.descriptor)):undefined;}
- configurationDigest(){return candidateHash(JSON.stringify(this.comparison?{format:2,policy:'ORIGINAL_INTENT_AND_CANARY_BASELINE_ACK_BEFORE_RETIREMENT_V2',
-  storage:this.storage,scope:this.scope,readComparison:this.comparison.descriptor}:{format:1,policy:'ORIGINAL_REQUEST_ACK_BEFORE_CAPTURE_CONTROL_RETIREMENT_V1',storage:this.storage,scope:this.scope}));}
+ configurationDigest(){return controlRetirementPolicyDigest(this.storage,this.scope,this.comparison?.descriptor);}
  assertCoordinatorScope(installationId:string,provider:SupabaseStorageWriterControl,control:S3ManagedMaintenanceControl){
   if(installationId!==this.storage.installationId||provider!==this.provider||control!==this.control
    ||JSON.stringify(scopeSchema.parse(provider.captureControlRetirementScope()))!==JSON.stringify(this.scope))throw failure();
@@ -84,9 +95,7 @@ export class ManagedCaptureControlRetirement {
   const request=(raw:unknown)=>{const v=anyRequestSchema.parse(raw);sameBinding(v.binding);
    if(Boolean(this.comparison)!==(v.format===2)||v.format===2&&JSON.stringify(v.readComparison)!==JSON.stringify(this.comparison?.descriptor))throw failure();
    if(JSON.stringify(v.scope)!==JSON.stringify(this.scope))throw failure();return artifact(v);};
-  const observe=(raw:unknown)=>{const v=observationSchema.parse(raw),{observationDigest,...observation}=v;
-   const facts={format:observation.format,kind:observation.kind,...scopeFrom(observation),observedAt:observation.observedAt,stateSha256:observation.stateSha256};
-   if(observationDigest!==candidateHash(JSON.stringify(facts))||JSON.stringify(scopeFrom(v))!==JSON.stringify(this.scope))throw failure();return v;};
+  const observe=(raw:unknown)=>assertControlRetirementMetadata(raw,this.scope);
   const report=(raw:unknown)=>{const v=anyReportSchema.parse(raw);sameBinding(v.binding);observe(v.observation);
    if(Boolean(this.comparison)!==(v.format===2))throw failure();
    if(v.format===2){if(!acceptedReadBaseline||JSON.stringify(v.readBaselinePin)!==JSON.stringify(acceptedReadBaseline.pin))throw failure();
@@ -143,13 +152,28 @@ export class ManagedCaptureControlRetirement {
  async inspect(rawPlan:unknown,caller?:AbortSignal){
   try{
    const c=await this.context(rawPlan,caller),request=await c.evidence.inspectCandidateArtifact('BASELINE',caller);
-   if(this.comparison){const read=c.readEvidence(request.pin),saved=await read.store.inspectCandidateArtifact('BASELINE',caller);read.accept(saved.artifact,saved.pin);}
+   let readSaved:{pin:z.infer<typeof candidatePinSchema>;artifact:MaintenanceArtifact}|undefined;
+   if(this.comparison){const read=c.readEvidence(request.pin),saved=await read.store.inspectCandidateArtifact('BASELINE',caller);read.accept(saved.artifact,saved.pin);readSaved={pin:saved.pin,artifact:saved.artifact};}
    const saved=await c.evidence.inspectCandidateArtifact('OBSERVATION',caller);
    const pair=await c.evidence.observeObservation(saved.pin,request.pin,caller),report=anyReportSchema.parse(JSON.parse(pair.body));
    if(JSON.stringify(report.requestPin)!==JSON.stringify(request.pin))throw failure();
    const current=c.observe(await this.provider.observeCaptureControlRetired(caller));await c.check();
-   return{requestPin:request.pin,reportPin:saved.pin,report,current,originalAcknowledgementReconstructed:false as const,
+   return{requestPin:request.pin,reportPin:saved.pin,report,current,
+    ...(readSaved?{evidence:{storage:this.storage,request:{pin:request.pin,artifact:request.artifact},readBaseline:readSaved,report:{pin:saved.pin,artifact:pair}}}:{}),
+    originalAcknowledgementReconstructed:false as const,
     savedObservationAuthorizesExecution:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
+  }catch{throw failure();}
+ }
+ async inspectForCapture(rawPlan:unknown,caller?:AbortSignal){
+  try{
+   if(!this.comparison?.probe)throw failure();const c=await this.context(rawPlan,caller),before=await this.inspect(rawPlan,caller);
+   if(!before.evidence)throw failure();
+   const record=readBaselineRecord.parse(JSON.parse(before.evidence.readBaseline.artifact.body));
+   const freshReadRefusal=await this.comparison.probe.verifyRefusal(record.readBaseline.body,record.readBaseline.sha256,caller);await c.check();
+   const after=await this.inspect(rawPlan,caller);
+   if(!after.evidence||JSON.stringify(before.evidence)!==JSON.stringify(after.evidence)||before.current.stateSha256!==after.current.stateSha256)throw failure();await c.check();
+   return{evidence:after.evidence,metadataBefore:before.current,metadataAfter:after.current,freshReadRefusal,
+    originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
   }catch{throw failure();}
  }
 }

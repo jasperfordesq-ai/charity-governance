@@ -73,3 +73,7 @@ host-loss acceptance. Exact source/tests/CI/deployment state is recorded private
 ## Provider design references
 
 Supabase's [custom Storage role example](https://supabase.com/docs/guides/storage/schema/custom-roles) supplies the JWT through Authorization directly to StorageClient. Its [self-hosted authentication guide](https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys) explicitly describes Storage accepting requests without an API key. These support investigating this transport design; neither attests the actual hosted project's gateway, deployed signing key, SQL permissions or post-retirement behaviour. Those still require direct approved-target tests.
+
+## 18 October integration update
+
+Plan 12 now uses [candidate format 5 and original-record cold discovery](managed-retired-control-common-candidate.md). This supersedes earlier pending-integration notes above. Plan 11 remains refused. Actual native format-5 execution and provider/current-authority/host-loss acceptance remain open.

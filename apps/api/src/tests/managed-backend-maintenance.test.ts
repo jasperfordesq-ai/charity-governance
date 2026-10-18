@@ -4,7 +4,8 @@ import {managedPlanSchema} from '../services/managed-plan-bootstrap.js';
 import {retiredControlReadFixture} from './fixtures/retired-control-read.js';
 import {backend as archivedSdkBackend,config as archivedSdkConfig} from './fixtures/archived-custody.js';
 import {readRoleCommonCandidateReportSchema} from '../services/managed-common-candidate-contract.js';
-import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
+import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact,retiredControlCommonCandidateReportSchema} from '../services/managed-common-candidate-contract.js';
+import {ManagedSavedRetirementCustody} from '../services/managed-retirement-custody.js';
 import {candidateBindingSchema,candidateReportArtifact} from '../services/managed-candidate-capture-contract.js';
 import {ManagedCandidateCaptureJournal} from '../services/managed-candidate-capture-journal.js';
 import {jobScope} from '../services/managed-proof-job-contract.js';
@@ -1114,17 +1115,18 @@ test('protocol10 original closure and bootstrap preserve the capture authorizati
  assert.equal(seen.catalogue.records.length,0);assert.equal(seen.savedObservationAuthorizesExecution,false);assert.equal(seen.originalAcknowledgementReconstructed,false);
 });
 
-async function readRoleCommonParentFixture(){
+async function readRoleCommonParentFixture(retired=false){
  // Structure/custody fixture only; real JWT, SQL and source/archive execution
  // are covered by the native PostgreSQL cohort.
- const seed=await commonJournalFixture(),f=fixture(),events:string[]=[];let sourceCalls=0,published=false,interval:unknown,context:unknown;
- const role={name:'capture_reader',oid:'20000'},relations=[{schema:'storage' as const,name:'buckets' as const,oid:'20001'},{schema:'storage' as const,name:'objects' as const,oid:'20002'}];
+ const seed=await commonJournalFixture(),events:string[]=[];let f=fixture(),sourceCalls=0,published=false,interval:unknown,context:unknown;
+ const readFixture=retired?retiredControlReadFixture({installationId:config.installationId,controlId:'11111111-1111-4111-8111-111111111111'}):undefined;
+ const role=readFixture?.config.readRole.sqlRole??{name:'capture_reader',oid:'20000'},relations=[{schema:'storage' as const,name:'buckets' as const,oid:'20001'},{schema:'storage' as const,name:'objects' as const,oid:'20002'}];
  const w=structuredClone(seed.report.metadataWindow);w.relations=relations;w.configurationDigest=hash('read-role-metadata');
  const {observationDigest:oldWindowHash,scope,metadataWindowCompleted,windowStillHeld,objectBytesFenced,allWritersInventoried,wholeBackendQuiesced,actionAuthorized,...windowFacts}=w;w.observationDigest=hash(JSON.stringify(windowFacts));
  const snapshot={...seed.report.databaseSnapshot,configurationDigest:w.configurationDigest};
  const jwt={format:1,kind:'SUPABASE_CAPTURE_JWT_VERIFICATION_V1',algorithm:'ES256',keyId:'synthetic-unit',verificationKeySha256:hash('unit-key'),sqlRole:role,subject:'11111111-1111-4111-8111-111111111111',issuedAt:1700000000,expiresAt:1700000600,
   signatureVerified:true,configuredClaimsMatched:true,sqlRoleOidDeclared:true,sqlRoleOidVerified:false,providerKeyCurrentVerified:false,providerSqlRoleVerified:false,privilegeIntervalHeld:false};
- const capture={...seed.report.capture,kind:'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1',credentialCapability:'ASYMMETRIC_CUSTOM_ROLE_JWT',configurationDigest:hash('read-role-capture'),jwtVerification:jwt};
+ const capture={...seed.report.capture,kind:'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1',credentialCapability:'ASYMMETRIC_CUSTOM_ROLE_JWT',configurationDigest:hash('read-role-capture'),jwtVerification:readFixture?.positive.readRoleVerificationEvidence()??jwt};
  const authorization=managedReadRoleConfigurationSchema.parse({kind:'MANAGED_READ_ROLE_CAPTURE_CONFIGURATION_V1',...operation,projectRef:f.storage.candidateCaptureScope().projectRef,bucket:f.storage.candidateCaptureScope().bucket,subject:jwt.subject,sqlRole:role,
   database:{name:w.database,oid:w.databaseOid},catalogueObserver:{name:'maintenance',oid:'10'},snapshotObserver:w.observer,storageRelations:{buckets:relations[0],objects:relations[1]},
   captureConfigurationDigest:capture.configurationDigest,catalogueConfigurationDigest:hash('role-catalogue'),metadataWindowConfigurationDigest:w.configurationDigest,maxWindowMs:5000});
@@ -1134,19 +1136,26 @@ async function readRoleCommonParentFixture(){
  const sqlPrivilegeWindow={...facts,observationDigest:hash(JSON.stringify(facts)),scope:'LISTED_SQL_CATALOGUES_DURING_CALLBACK_ONLY',configuredCaptureSqlReadOnlyObserved:true,preexistingAssignedTransactionsExcludedAtEntry:true,listedCatalogueChangesExcludedDuringCallback:true,windowStillHeld:false,
   providerTokenRoleVerified:false,providerManagementActorsExcluded:false,unfilteredBucketVisibilityVerified:false,captureCredentialReadOnlyVerified:false,allWritersInventoried:false,wholeBackendQuiesced:false,actionAuthorized:false};
  const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDescriptor:()=>structuredClone(authorization),configurationDigest:()=>hash(JSON.stringify(authorization)),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{},
-  runWithSnapshot:async(fn:(snapshot:unknown,signal:AbortSignal)=>Promise<{visit:unknown;value:unknown}>)=>{events.push('windows');const prepared=await fn({snapshotId:'00000001-00000002-1',database:w.database,databaseOid:w.databaseOid,observerOid:w.observer.oid,backendPid:w.backendPid},new AbortController().signal);
+   runWithSnapshot:async(fn:(snapshot:unknown,signal:AbortSignal)=>Promise<{visit:unknown;value:unknown}>)=>{events.push('windows');if(retired)capture.startedAt=new Date().toISOString();const prepared=await fn({snapshotId:'00000001-00000002-1',database:w.database,databaseOid:w.databaseOid,observerOid:w.observer.oid,backendPid:w.backendPid},new AbortController().signal);
+   if(retired)capture.observedAt=new Date().toISOString();
    return{configurationDigest:hash(JSON.stringify(authorization)),captured:capture,snapshotInterval:{metadataWindow:w,databaseSnapshot:snapshot},sqlPrivilegeWindow,sourceValue:prepared.value};}};
- const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
- f.value.planDigest=coordinator.planDigest();await coordinator.close();const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);await coordinator.publishCaptureBootstrap(journal);
- const getReport=()=>JSON.parse([...f.artifacts.values()].find(v=>{try{return JSON.parse(v.body).kind==='MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE';}catch{return false;}})!.body) as z.infer<typeof readRoleCommonCandidateReportSchema>;
+ const retirement=retired?await captureControlRetirementFixture(true,true,profile,readFixture):undefined;
+ if(retirement)f=retirement.f;
+ const coordinator=retirement?.coordinator??new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
+ if(!retirement){f.value.planDigest=coordinator.planDigest();await coordinator.close();}
+ const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);if(!retirement)await coordinator.publishCaptureBootstrap(journal);
+ const retiredResult=retirement?await coordinator.retireCaptureControl():undefined;
+ const getReport=()=>JSON.parse([...f.artifacts.values()].find(v=>{try{return JSON.parse(v.body).kind===(retired?'MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CANDIDATE':'MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE');}catch{return false;}})!.body) as z.infer<typeof readRoleCommonCandidateReportSchema>|z.infer<typeof retiredControlCommonCandidateReportSchema>;
  const archive={configurationDigest:()=>seed.archiveDigest,prepareImported:async(_raw:unknown,completed:unknown)=>{events.push('prepare');interval=completed;const pin=structuredClone(seed.report.rootReference.pin);pin.scope.index.objectStoreIdentitySha256=capture.configurationDigest;pin.scope.index.objectCapturedAt=capture.observedAt;return{pin,artifact:{body:'unit-preparation',sha256:pin.sha256}};},
   stagePrepared:async()=>{events.push('stage');return{versionId:'role-original-preparation'};},publishPrepared:async()=>{events.push('root-write');assert.equal(getReport().rootReference.state,'PREPARED_ROOT_REFERENCE_ONLY');published=true;},
   verifySet:async()=>{if(!published)throw new Error('No original root');events.push('root-read');const report=getReport();return{kind:'ARCHIVED_SET_VERIFIED' as const,restoreMode:'QUARANTINE_ONLY' as const,captureConsistency:'EXTERNAL_VERIFICATION_REQUIRED' as const,
    sha256:report.rootReference.pin.sha256,rootVersionId:'role-original-root',documentCount:1,objectCount:1,snapshotInterval:interval,objectInventorySha256:commonCaptureObjectInventory(report),completedIntervalBindingVerified:true as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};}};
  const head=await f.store.observe(),request={candidateId:randomUUID(),attemptId:head.value.attemptId,controlRevision:head.revision,captureConfigurationDigest:capture.configurationDigest,metadataWindowConfigurationDigest:w.configurationDigest,
-  journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest(),captureAuthorizationDigest:profile.configurationDigest(),sqlPrivilegeConfigurationDigest:authorization.catalogueConfigurationDigest};
+  journalConfigurationDigest:journal.configurationDigest(),archiveConfigurationDigest:archive.configurationDigest(),captureAuthorizationDigest:profile.configurationDigest(),sqlPrivilegeConfigurationDigest:authorization.catalogueConfigurationDigest,
+  ...(retiredResult&&retiredResult.report.format===2?{retirementConfigurationDigest:retirement!.retirement.configurationDigest(),readComparisonConfigurationDigest:retirement!.retirement.readComparisonConfigurationDigest(),
+   retirementRequestPin:retiredResult.requestPin,retirementReadBaselinePin:retiredResult.report.readBaselinePin,retirementReportPin:retiredResult.reportPin}:{})};
  const source=async(_snapshot:unknown,_signal:AbortSignal,ctx:unknown)=>{sourceCalls++;context=ctx;events.push('source');return{visit:async()=>{},prepareArchiveInput:async()=>{events.push('input');return{};}};};
- return{f,coordinator,journal,archive,request,source,profile,getReport,events,sourceCalls:()=>sourceCalls,context:()=>context,published:()=>published};
+ return{f,coordinator,journal,archive,request,source,profile,getReport,events,retirement,sourceCalls:()=>sourceCalls,context:()=>context,published:()=>published};
 }
 
 test('format4 common path binds original request/role evidence and root reference; cold readers preserve quarantine',async()=>{
@@ -1187,7 +1196,7 @@ test('format4 report refuses version, role, authority and catalogue-evidence sub
   r=>{r.capture.jwtVerification.sqlRole.oid='1';},r=>{r.authorization.projectRef='z'.repeat(20);},r=>{Object.assign(r.sqlPrivilegeWindow,{preexistingAssignedTransactionsExcludedAtEntry:false});},
   r=>{Object.assign(r.sqlPrivilegeWindow.catalogues[0]!,{held:false});},r=>{r.sqlPrivilegeWindow.capture.name='other';},r=>{r.metadataWindow.relations.pop();}];
  for(const mutate of mutations){
-  const report=structuredClone(x.getReport());mutate(report);const{observationDigest,...core}=report;assert.throws(()=>anyReportArtifact({...core,observationDigest:hash(JSON.stringify(core))}));
+  const report=readRoleCommonCandidateReportSchema.parse(structuredClone(x.getReport()));mutate(report);const{observationDigest,...core}=report;assert.throws(()=>anyReportArtifact({...core,observationDigest:hash(JSON.stringify(core))}));
  }
 });
 
@@ -1221,9 +1230,9 @@ test('unsupported capture catalogue permissions refuse before maintenance acquis
  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
 });
 
-async function captureControlRetirementFixture(integrated=false,withComparison=false){
+async function captureControlRetirementFixture(integrated=false,withComparison=false,readProfile?:unknown,selectedReadFixture?:ReturnType<typeof retiredControlReadFixture>){
  const f=fixture();let deleted=false,deleteCalls=0,lostDelete=false,extraKey=false;
- const readFixture=withComparison?retiredControlReadFixture({installationId:config.installationId,controlId:'11111111-1111-4111-8111-111111111111'}):undefined;
+ const readFixture=withComparison?(selectedReadFixture??retiredControlReadFixture({installationId:config.installationId,controlId:'11111111-1111-4111-8111-111111111111'})):undefined;
  const readProbe=readFixture?.create(),readDescriptor=readProbe?.configurationDescriptor();
  const registry={installationId:config.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
  const provider=new SupabaseStorageWriterControl(registry,'synthetic-management',async(input,init)=>{
@@ -1240,7 +1249,7 @@ async function captureControlRetirementFixture(integrated=false,withComparison=f
  });
  const create=(selectedClient?:S3Client,execution=true)=>new ManagedCaptureControlRetirement(config,provider,f.store,credentials,selectedClient??f.client,
   readDescriptor?{descriptor:JSON.parse(JSON.stringify(readDescriptor)),...(execution?{probe:readProbe}:{})}:undefined),retirement=create();
- const profile={observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('synthetic-read-role'),
+ const profile=readProfile??{observeCompatibility:async()=>({catalogueLockAclPredicatesObserved:true}),configurationDigest:()=>hash('synthetic-read-role'),
   assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
  // This fixture's existing legacy proof transports share the original closure
  // flag. Keep that model while using the real retirement provider instance.
@@ -1387,8 +1396,11 @@ test('format12 acknowledges intent before canary reads and exact baseline before
  assert.equal(inspection.recordedRetiredControlCanaryGetRefusalObserved,true);assert.equal(inspection.freshRetiredControlDataPlaneRefusalVerified,false);
  assert.equal(x.readFixture!.state.requests.length,11);
  const lists=x.f.calls.filter(v=>v==='candidate-list').length;
- await assert.rejects(new ManagedCandidateCaptureJournal(config,credentials,x.f.client).discoverCurrentCandidates(x.f.store,1));
- assert.equal(x.f.calls.filter(v=>v==='candidate-list').length,lists);
+ const current=await new ManagedCandidateCaptureJournal(config,credentials,x.f.client).discoverCurrentCandidates(x.f.store,1);
+ assert.equal(current.plan.format,12);assert.equal(current.catalogue.records.length,0);assert.equal(current.originalAcknowledgementReconstructed,false);
+ assert.ok(x.f.calls.filter(v=>v==='candidate-list').length>lists);
+ const retained=await new ManagedSavedRetirementCustody(config,credentials,x.f.client).inspect(await x.f.store.observe(),x.plan);
+ assert.deepEqual(retained.bundle.report.pin,result.reportPin);assert.equal(retained.currentProviderFencingVerified,false);
  const before=x.readFixture!.state.requests.length,writes=x.f.artifacts.size,now=Date.now();
  t.mock.method(Date,'now',()=>now+600000);assert.throws(()=>x.readFixture!.positive.readRoleVerificationEvidence());
  x.readProbe!.configurationDescriptor=()=>{throw new Error('cold reader must not use original execution object');};
@@ -1419,6 +1431,8 @@ test('format12 SDK custody preserves all three original records and refuses pin 
  const x=await captureControlRetirementFixture(true,true),sdk=archivedSdkBackend({...archivedSdkConfig,installationId:config.installationId,bucket:config.bucket,storageKeyArn:config.kmsKeyArn}),client=sdk.s3();
  try{
   const result=await x.create(client).retire(x.plan);assert.equal(result.report.format,2);assert.equal(sdk.writes,3);assert.equal(sdk.objects.size,3);assert.equal(sdk.generates,0);
+  const reader=new ManagedSavedRetirementCustody(config,credentials,client),saved=await reader.inspect(await x.f.store.observe(),x.plan);
+  assert.deepEqual(saved.bundle.report.pin,result.reportPin);assert.equal(saved.originalAcknowledgementReconstructed,false);assert.equal(JSON.stringify(reader),'{}');assert.equal(sdk.writes,3);
   const before=x.readFixture!.state.requests.length;assert.equal((await x.create(client,false).inspect(x.plan)).report.format,2);assert.equal(sdk.writes,3);
   await assert.rejects(x.create(client).retire(x.plan));assert.equal(sdk.objects.size,3);assert.equal(x.readFixture!.state.requests.length,before);
  }finally{sdk.close();client.destroy();}
@@ -1445,5 +1459,83 @@ test('format12 rechecks the original head and cancellation around the new baseli
   }});
   await assert.rejects(x.coordinator.retireCaptureControl(controller.signal));assert.equal(x.deletes,0,mode);
   assert.equal([...x.f.artifacts.keys()].some(k=>k.endsWith('/capture-control-observation.json')),false);
+ }
+});
+
+test('format5 capture pins original retirement records, source context and quarantine root; current discovery rereads independent custody',async()=>{
+ const x=await readRoleCommonParentFixture(true),result=await x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ assert.equal(result.candidate.kind,'MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CANDIDATE');assert.equal(result.candidate.binding.format,5);assert.equal(x.sourceCalls(),1);
+ if(result.candidate.kind!=='MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CANDIDATE')throw new Error('wrong candidate kind');
+ assert.equal(result.actionAuthorized,false);assert.equal(x.retirement!.readFixture!.state.requests.length,21);
+ const context=x.context() as {bindingDigest:string};assert.equal(context.bindingDigest,hash(JSON.stringify(result.candidate.binding)));
+ const before=x.f.artifacts.size,cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),found=await cold.discoverCurrentCandidates(x.f.store,1);
+ assert.equal(found.plan.format,12);assert.equal(found.catalogue.records[0]!.binding.format,5);assert.equal(found.catalogue.records[0]!.commonRoot?.pin.sha256,result.candidate.rootReference.pin.sha256);
+ assert.equal('retirementEvidence' in found,true);assert.equal(found.originalAcknowledgementReconstructed,false);assert.equal(x.f.artifacts.size,before);
+ await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,cold,x.archive as never,x.source));assert.equal(x.sourceCalls(),1);
+});
+
+test('format5 original candidate ACK precedes fresh probes and source; substituted retirement pins refuse before writes',async()=>{
+ const x=await readRoleCommonParentFixture(true),probes=x.retirement!.readFixture!.state.requests.length;
+ x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.includes('/capture-candidate/')&&command.input.Key.endsWith('/baseline.json'))throw new Error('synthetic lost original candidate ACK');});
+ await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.retirement!.readFixture!.state.requests.length,probes);
+ x.f.setFault(()=>undefined);await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,new ManagedCandidateCaptureJournal(config,credentials,x.f.client),x.archive as never,x.source));assert.equal(x.sourceCalls(),0);
+ const y=await readRoleCommonParentFixture(true),request=structuredClone(y.request),before=y.f.artifacts.size;request.retirementReportPin!.versionId='wrong-original-version';
+ await assert.rejects(y.coordinator.captureRetiredControlCommonQuarantined(request,y.journal,y.archive as never,y.source));assert.equal(y.sourceCalls(),0);assert.equal(y.f.artifacts.size,before);
+ await assert.rejects(y.coordinator.captureReadRoleCommonQuarantined(y.request,y.journal,y.archive as never,y.source));assert.equal(y.sourceCalls(),0);
+});
+
+test('format5 report and root ACK losses preserve original prepared state without automatic publication repair',async()=>{
+ for(const mode of ['report','root']){
+  const x=await readRoleCommonParentFixture(true);
+  if(mode==='report')x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.includes('/capture-candidate/')&&command.input.Key.endsWith('/observation.json'))throw new Error('synthetic lost format5 report ACK');});
+  else{const original=x.archive.publishPrepared;x.archive.publishPrepared=async()=>{await original();throw new Error('synthetic lost root ACK');};}
+  await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),1);assert.equal(x.published(),mode==='root');
+  x.f.setFault(()=>undefined);const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client),seen=await cold.discoverCurrentCandidates(x.f.store,1),row=seen.catalogue.records[0]!;
+  assert.equal(row.binding.format,5);assert.ok(row.commonRoot);
+  if(mode==='report')await assert.rejects(cold.verifyDiscoveredCommonRoot(row.binding,x.archive as never));else assert.equal((await cold.verifyDiscoveredCommonRoot(row.binding,x.archive as never)).actionAuthorized,false);
+  const before=x.f.artifacts.size;await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,cold,x.archive as never,x.source));assert.equal(x.f.artifacts.size,before);assert.equal(x.sourceCalls(),1);
+ }
+});
+
+test('format5 cold discovery refuses missing or replaced original retirement objects despite the embedded report copy',async()=>{
+ for(const mode of ['missing','replacement','wrong-key']){
+  const x=await readRoleCommonParentFixture(true);await x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+  const key=[...x.f.artifacts.keys()].find(k=>k.endsWith('/capture-control-read-baseline.json'))!;
+  if(mode==='missing')x.f.artifacts.delete(key);else if(mode==='replacement')x.f.artifacts.get(key)!.version+='-replacement';
+  const before=x.f.artifacts.size,probes=x.retirement!.readFixture!.state.requests.length;
+  if(mode==='wrong-key')await assert.rejects(new ManagedSavedRetirementCustody({...config,kmsKeyArn:config.kmsKeyArn.replace('11111111-','99999999-')},credentials,x.f.client).inspect(await x.f.store.observe(),x.coordinator.planDescriptor()));
+  else {
+   const cold=new ManagedCandidateCaptureJournal(config,credentials,x.f.client);
+   await assert.rejects(cold.discoverCurrentCandidates(x.f.store,1));
+   await assert.rejects(cold.verifyDiscoveredCommonRoot(x.getReport().binding,x.archive as never));
+  }
+  assert.equal(x.f.artifacts.size,before);assert.equal(x.retirement!.readFixture!.state.requests.length,probes);
+ }
+});
+
+test('format5 refuses altered retirement pins, plan, canary evidence and broad authority claims with recomputed outer hashes',async()=>{
+ const x=await readRoleCommonParentFixture(true);await x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ for(const mode of ['pin','plan','canary-key','capture-key','authority']){
+  const v=retiredControlCommonCandidateReportSchema.parse(structuredClone(x.getReport()));
+  if(mode==='pin')v.retirement.evidence.readBaseline.pin.versionId='not-original';
+  if(mode==='plan'&&v.retirement.plan.format===12)v.retirement.plan.captureControlRetirement='0'.repeat(64);
+  if(mode==='capture-key')v.capture.jwtVerification.verificationKeySha256='0'.repeat(64);
+  if(mode==='authority')Object.assign(v,{retainedPrivilegedCredentialsExcluded:true});
+  if(mode==='canary-key'){
+   const p=v.retirement.before.freshReadRefusal;p.positiveJwt.verificationKeySha256='0'.repeat(64);
+   const facts={format:p.format,kind:p.kind,configurationDigest:p.configurationDigest,baselineSha256:p.baselineSha256,retiredControlId:p.retiredControlId,canarySha256:p.canarySha256,bytes:p.bytes,status:p.status,startedAt:p.startedAt,observedAt:p.observedAt,positiveJwt:p.positiveJwt};p.observationDigest=hash(JSON.stringify(facts));
+  }
+  const{observationDigest,...core}=v;assert.throws(()=>anyReportArtifact({...core,observationDigest:hash(JSON.stringify(core))}));
+ }
+});
+
+test('format5 current head movement or a failed post-source canary comparison prevents source or archive publication',async()=>{
+ for(const mode of ['head','after']){
+  const x=await readRoleCommonParentFixture(true);let source=x.source;
+  if(mode==='head'){
+   const original=x.retirement!.readProbe!.verifyRefusal.bind(x.retirement!.readProbe!);x.retirement!.readProbe!.verifyRefusal=async(...args)=>{const result=await original(...args);x.f.value={...x.f.value,publicationId:randomUUID()};return result;};
+  }else{const original=source;source=async(...args)=>{const result=await original(...args);x.retirement!.readFixture!.state.afterFault='hash';return result;};}
+  await assert.rejects(x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,source));
+  assert.equal(x.sourceCalls(),mode==='head'?0:1);assert.equal(x.published(),false);assert.equal(x.events.includes('prepare'),false);
  }
 });

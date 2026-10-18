@@ -1,3 +1,13 @@
+## 18 October: retired-control common capture and original-record discovery
+
+Explicit plan 12 now selects candidate format 5, binding the original retirement
+intent/baseline/report through source-job context and archive custody. Fresh
+canary refusal comparisons bracket capture using the preserved baseline. Cold
+catalogue and direct root verification reread the original retirement objects;
+embedded copies cannot replace them. Plan 11 still refuses and legacy meanings
+remain unchanged. See [contract and proof limits](managed-retired-control-common-candidate.md).
+Local synthetic coverage does not establish new native format-5 execution,
+actual provider/IAM/current authority or independent physical-host-loss proof.
 ## 18 October: intent, canary baseline and retirement result custody
 
 Explicit format 12 now binds the original intent ACK before credential reads,

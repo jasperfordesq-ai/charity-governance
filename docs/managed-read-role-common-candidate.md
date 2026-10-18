@@ -75,3 +75,7 @@ the bounded engineering path, not actual supplier IAM, current independent
 authority, hosted token/key/release identity or usable independent host recovery.
 Exact revisions, durations, logs, CI and deployed-state distinctions are recorded
 in the ignored private handoff.
+
+## 18 October integration update
+
+Plan 12 now uses [candidate format 5 and original-record cold discovery](managed-retired-control-common-candidate.md). This supersedes earlier pending-integration notes above. Plan 11 remains refused. Actual native format-5 execution and provider/current-authority/host-loss acceptance remain open.

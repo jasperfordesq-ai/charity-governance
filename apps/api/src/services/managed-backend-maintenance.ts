@@ -1,4 +1,4 @@
-import {commonCandidateRequestSchema,commonCandidateBindingSchema,commonCandidateReportSchema,anyCommonCandidateBindingSchema,readRoleCommonCandidateRequestSchema,readRoleCommonCandidateBindingSchema,readRoleCommonCandidateReportSchema} from './managed-common-candidate-contract.js';
+import {commonCandidateRequestSchema,commonCandidateBindingSchema,commonCandidateReportSchema,anyCommonCandidateBindingSchema,readRoleCommonCandidateRequestSchema,readRoleCommonCandidateBindingSchema,readRoleCommonCandidateReportSchema,retiredControlCommonCandidateRequestSchema,retiredControlCommonCandidateBindingSchema,retiredControlCommonCandidateReportSchema} from './managed-common-candidate-contract.js';
 import type {ArchivedRecoverySets} from './archived-recovery-set.js';
 import type {ManagedDatabaseSnapshot} from './managed-storage-metadata-window.js';
 import {managedSnapshotInterval,type ManagedSnapshotInterval} from './managed-snapshot-interval.js';
@@ -241,12 +241,16 @@ export class ManagedBackendMaintenance {
  async captureReadRoleCommonQuarantined(raw:unknown,journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
   source:(snapshot:ManagedDatabaseSnapshot,signal:AbortSignal,context:ReturnType<ManagedBackendMaintenance['commonSourceContext']>)=>Promise<{
    visit:Parameters<SupabaseRecoveryCapture['capture']>[0];prepareArchiveInput:(captured:ManagedReadRoleCapturedFiles,interval:ManagedSnapshotInterval,signal?:AbortSignal)=>Promise<unknown>;
-  }>,caller?:AbortSignal){
+  }>,caller?:AbortSignal){return this.captureConfiguredReadRoleCommon(raw,journal,archive,source,caller,false);}
+ async captureRetiredControlCommonQuarantined(raw:unknown,journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
+  source:Parameters<ManagedBackendMaintenance['captureReadRoleCommonQuarantined']>[3],caller?:AbortSignal){return this.captureConfiguredReadRoleCommon(raw,journal,archive,source,caller,true);}
+ private async captureConfiguredReadRoleCommon(raw:unknown,journal:ManagedCandidateCaptureJournal,archive:ArchivedRecoverySets,
+  source:Parameters<ManagedBackendMaintenance['captureReadRoleCommonQuarantined']>[3],caller:AbortSignal|undefined,retiredControl:boolean){
   let session:ReturnType<ManagedCandidateCaptureJournal['forCandidate']>|undefined,acknowledged=false;
   try{
-   if(!this.readRole||typeof source!=='function')throw new Error();caller?.throwIfAborted();
+   if(!this.readRole||retiredControl&&!this.retirement||typeof source!=='function')throw new Error();caller?.throwIfAborted();
    this.readRole.assertMaintenanceScope(this.config);this.readRole.assertStorageScope(this.storage.candidateCaptureScope());
-   const request=readRoleCommonCandidateRequestSchema.parse(raw),authorization=this.readRole.configurationDescriptor();
+   const request=(retiredControl?retiredControlCommonCandidateRequestSchema:readRoleCommonCandidateRequestSchema).parse(raw),authorization=this.readRole.configurationDescriptor();
    if(request.captureAuthorizationDigest!==this.readRole.configurationDigest()||request.captureConfigurationDigest!==authorization.captureConfigurationDigest
     ||request.sqlPrivilegeConfigurationDigest!==authorization.catalogueConfigurationDigest||request.metadataWindowConfigurationDigest!==authorization.metadataWindowConfigurationDigest
     ||request.journalConfigurationDigest!==journal.configurationDigest()||request.archiveConfigurationDigest!==archive.configurationDigest())throw new Error();
@@ -255,21 +259,34 @@ export class ManagedBackendMaintenance {
      ||head.value.installationId!==this.config.installationId||head.value.maintenanceEpoch!==this.config.maintenanceEpoch)throw new Error();return head;};
    await check();if((await this.readRole.observeCompatibility(caller)).catalogueLockAclPredicatesObserved!==true)throw new Error();
    await check();await this.inspect();const bootstrap=await journal.observePlanBootstrap(await check(),caller);await check();
-   if(bootstrap.plan.format!==10||bootstrap.plan.captureAuthorization!==request.captureAuthorizationDigest)throw new Error();
-   const binding=readRoleCommonCandidateBindingSchema.parse({format:4,kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CAPTURE_V4',...this.config,...request,planDigest:this.planDigest()});
+   if((retiredControl?bootstrap.plan.format!==12:bootstrap.plan.format!==10)||!('captureAuthorization' in bootstrap.plan)||bootstrap.plan.captureAuthorization!==request.captureAuthorizationDigest)throw new Error();
+   const binding=retiredControl?retiredControlCommonCandidateBindingSchema.parse({format:5,kind:'MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CAPTURE_V5',...this.config,...request,planDigest:this.planDigest()})
+    :readRoleCommonCandidateBindingSchema.parse({format:4,kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CAPTURE_V4',...this.config,...request,planDigest:this.planDigest()});
+   if(binding.format===5){
+    if(bootstrap.plan.format!==12||binding.retirementConfigurationDigest!==this.retirement!.configurationDigest()||binding.readComparisonConfigurationDigest!==this.retirement!.readComparisonConfigurationDigest())throw new Error();
+    const saved=await this.retirement!.inspect(bootstrap.plan,caller);await check();
+    if(!saved.evidence||JSON.stringify(binding.retirementRequestPin)!==JSON.stringify(saved.evidence.request.pin)||JSON.stringify(binding.retirementReadBaselinePin)!==JSON.stringify(saved.evidence.readBaseline.pin)
+     ||JSON.stringify(binding.retirementReportPin)!==JSON.stringify(saved.evidence.report.pin)
+     ||createHash('sha256').update(JSON.stringify({format:1,policy:'IMMUTABLE_CANDIDATE_REQUEST_REPORT_V1',...saved.evidence.storage})).digest('hex')!==binding.journalConfigurationDigest)throw new Error();
+   }
    session=journal.forCandidate(binding);const requestPin=await session.reserve(caller);acknowledged=true;await check();
+   const retirementBefore=retiredControl?await this.retirement!.inspectForCapture(bootstrap.plan,caller):undefined;await check();
    const guarded=await this.readRole.runWithSnapshot(async(snapshot,signal)=>{
     const context=this.commonSourceContext(binding,session!,requestPin,signal,check),prepared=await source(snapshot,signal,context);
     signal.throwIfAborted();await check();if(typeof prepared.visit!=='function'||typeof prepared.prepareArchiveInput!=='function')throw new Error();
     return{visit:prepared.visit,value:prepared.prepareArchiveInput};
    },caller);
    await check();await this.inspect();await check();
+   const retirementAfter=retiredControl?await this.retirement!.inspectForCapture(bootstrap.plan,caller):undefined;await check();
+   if(retirementBefore&&JSON.stringify(retirementBefore.evidence)!==JSON.stringify(retirementAfter?.evidence))throw new Error();
    if(guarded.configurationDigest!==request.captureAuthorizationDigest)throw new Error();
    const captured=readRoleSupabaseCaptureSchema.parse(guarded.captured),interval=managedSnapshotInterval(guarded.snapshotInterval);
    const input=await guarded.sourceValue(captured,interval,caller);await check();
    const prepared=await archive.prepareImported(input,interval,caller);await check();
    const staged=await archive.stagePrepared(prepared.pin,prepared.artifact,caller);await check();
-   const parsed=readRoleCommonCandidateReportSchema.parse({kind:'MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE',binding,
+   const boundary=(v:NonNullable<typeof retirementBefore>)=>({metadataBefore:v.metadataBefore,metadataAfter:v.metadataAfter,freshReadRefusal:v.freshReadRefusal});
+   const parsed=(retiredControl?retiredControlCommonCandidateReportSchema:readRoleCommonCandidateReportSchema).parse({kind:retiredControl?'MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CANDIDATE':'MANAGED_QUARANTINED_READ_ROLE_COMMON_CANDIDATE',binding,
+    ...(retirementBefore&&retirementAfter?{retirement:{plan:bootstrap.plan,evidence:retirementBefore.evidence,before:boundary(retirementBefore),after:boundary(retirementAfter)},configuredRetiredControlCanaryRefusalObserved:true}:{}),
     bindingDigest:createHash('sha256').update(JSON.stringify(binding)).digest('hex'),requestPin,capture:captured,
     metadataWindow:interval.metadataWindow,databaseSnapshot:interval.databaseSnapshot,authorization,sqlPrivilegeWindow:guarded.sqlPrivilegeWindow,
     configuredJwtSqlRoleMatched:true,providerTokenRoleVerified:false,providerProjectDatabaseVerified:false,unfilteredBucketVisibilityVerified:false,retainedPrivilegedCredentialsExcluded:false,

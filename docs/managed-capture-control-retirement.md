@@ -95,3 +95,7 @@ baseline ACK precedes DELETE. The version-2 report includes the original baselin
 pin and saved GET-refusal comparison. The coordinator distinguishes a verified
 recorded canary refusal from a fresh refusal, which inspection does not perform.
 All global writer exclusion, provider currency and action-authority limits remain.
+
+## 18 October integration update
+
+Plan 12 now uses [candidate format 5 and original-record cold discovery](managed-retired-control-common-candidate.md). This supersedes earlier pending-integration notes above. Plan 11 remains refused. Actual native format-5 execution and provider/current-authority/host-loss acceptance remain open.

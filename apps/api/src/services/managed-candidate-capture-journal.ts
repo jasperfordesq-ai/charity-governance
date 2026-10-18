@@ -1,4 +1,5 @@
 import {ManagedProofJobCustody} from './managed-proof-job-custody.js';
+import {ManagedSavedRetirementCustody} from './managed-retirement-custody.js';
 import {ManagedPlanBootstrap,managedClosedHead} from './managed-plan-bootstrap.js';
 import {requireProtocol9ClosedHead,type S3ManagedMaintenanceControl} from './managed-maintenance-control.js';
 import {discoverManagedCandidateCatalogue} from './managed-candidate-catalogue.js';
@@ -43,16 +44,23 @@ export class ManagedCandidateCaptureJournal {
    const before=await head(),saved=await this.bootstrap.observe(before,signal);
    // Retirement plans need a new candidate binding and current retirement
    // evidence. Neither legacy nor format-4 discovery may imply that coverage.
-   if(saved.plan.format===11||saved.plan.format===12)throw failure();
+   if(saved.plan.format===11)throw failure();
+   const retirement=saved.plan.format===12?await new ManagedSavedRetirementCustody(this.storage,this.credentials,this.client).inspect(before,saved.plan,signal):null;
    const catalogue=await this.discoverCandidates({attemptId:before.value.attemptId,planDigest:before.value.planDigest,
     sourceSha:saved.plan.sourceSha,maintenanceEpoch:before.value.maintenanceEpoch,controlRevision:before.revision},signal);
    for(const row of catalogue.records){
-    if(saved.plan.format===10){if(row.binding.format!==4||row.binding.captureAuthorizationDigest!==saved.plan.captureAuthorization)throw failure();}
-    else if(row.binding.format===4)throw failure();
+    if(saved.plan.format===12){const b=row.binding;if(b.format!==5||!retirement||b.captureAuthorizationDigest!==saved.plan.captureAuthorization
+     ||b.retirementConfigurationDigest!==saved.plan.captureControlRetirement||b.readComparisonConfigurationDigest!==saved.plan.captureControlReadComparison
+     ||JSON.stringify(b.retirementRequestPin)!==JSON.stringify(retirement.bundle.request.pin)||JSON.stringify(b.retirementReadBaselinePin)!==JSON.stringify(retirement.bundle.readBaseline.pin)
+     ||JSON.stringify(b.retirementReportPin)!==JSON.stringify(retirement.bundle.report.pin))throw failure();}
+    else if(saved.plan.format===10){if(row.binding.format!==4||row.binding.captureAuthorizationDigest!==saved.plan.captureAuthorization)throw failure();}
+    else if(row.binding.format===4||row.binding.format===5)throw failure();
    }
+   if(retirement){const after=await new ManagedSavedRetirementCustody(this.storage,this.credentials,this.client).inspect(await head(),saved.plan,signal);
+    if(JSON.stringify(after.bundle)!==JSON.stringify(retirement.bundle))throw failure();}
    const after=await head();if(after.revision!==before.revision)throw failure();
    return{kind:'MANAGED_CURRENT_CANDIDATE_BOOTSTRAP_V1' as const,head:managedClosedHead(before,this.storage.installationId),bootstrapPin:saved.pin,plan:saved.plan,catalogue,
-    minimumEpoch,descriptorPlanDigestMatched:true as const,liveHeadStableAtBoundaries:true as const,
+    minimumEpoch,descriptorPlanDigestMatched:true as const,liveHeadStableAtBoundaries:true as const,...(retirement?{retirementEvidence:retirement.bundle,currentProviderFencingVerified:false as const}:{}),
     monotonicHistoryVerified:false as const,currentTenantAuthorityVerified:false as const,sourceHostLossProven:false as const,
     originalAcknowledgementReconstructed:false as const,savedObservationAuthorizesExecution:false as const,
     archivedSetAdmitted:false as const,actionAuthorized:false as const};
@@ -113,10 +121,21 @@ export class ManagedCandidateCaptureJournal {
   if(binding.format===2||binding.archiveConfigurationDigest!==archive.configurationDigest())throw failure();
   const session=this.forCandidate(binding),request=await session.discoverRequest(signal),saved=await session.discoverReport(request.pin,signal);
   if(saved.value.kind==='MANAGED_QUARANTINED_STORAGE_CANDIDATE')throw failure();
+  const verifyRetirement=async()=>{
+   if(saved.value.kind!=='MANAGED_QUARANTINED_RETIRED_CONTROL_COMMON_CANDIDATE')return;
+   if(binding.format!==5)throw failure();
+   const original=await new ManagedSavedRetirementCustody(this.storage,this.credentials,this.client).inspectBoundRecords({
+    installationId:binding.installationId,attemptId:binding.attemptId,planDigest:binding.planDigest,sourceSha:binding.sourceSha,
+    maintenanceEpoch:binding.maintenanceEpoch,controlRevision:binding.controlRevision,retirementConfigurationDigest:binding.retirementConfigurationDigest
+   },saved.value.retirement.plan,signal);
+   if(JSON.stringify(original.bundle)!==JSON.stringify(saved.value.retirement.evidence))throw failure();
+  };
+  await verifyRetirement();
   const result=await archive.verifySet(saved.value.rootReference.pin,undefined,signal),interval=result.snapshotInterval;
   if(result.completedIntervalBindingVerified!==true||!interval||interval.metadataWindow.observationDigest!==saved.value.metadataWindow.observationDigest
    ||JSON.stringify(interval.databaseSnapshot)!==JSON.stringify(saved.value.databaseSnapshot)||result.objectCount!==saved.value.capture.objects.length
    ||result.objectInventorySha256!==commonCaptureObjectInventory(saved.value))throw failure();
+  await verifyRetirement();
   return{root:result,requestPin:request.pin,reportPin:saved.pin,originalAcknowledgementReconstructed:false as const,
    savedObservationAuthorizesExecution:false as const,archivedSetAdmitted:false as const,actionAuthorized:false as const};
  }
