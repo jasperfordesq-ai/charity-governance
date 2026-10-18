@@ -11,8 +11,11 @@ const legacyManagedPlanSchema=z.object({format:z.literal(9),installationId:ident
  resumableProofPolicy:z.literal('ALL_CONFIGURED_ORIGINAL_TUS_MANIFEST_BEFORE_REVOCATION_V1'),signedResumableProofPolicy:z.literal('ORIGINAL_SIGNED_TUS_BASELINE_PIN_BEFORE_REVOCATION_V1'),
  s3ProofPolicy:z.literal('EXPLICIT_MODE_ORIGINAL_S3_BASELINE_BEFORE_CLOSURE_V1'),provider:sha,database:sha,storage:sha,readProof:sha,writeProof:sha,
  signedProof:sha,resumableProof:sha,signedResumableProof:sha,s3Proof:sha}).strict();
-export const managedPlanSchema=z.discriminatedUnion('format',[legacyManagedPlanSchema,legacyManagedPlanSchema.extend({format:z.literal(10),
- capturePolicy:z.literal('EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1'),captureAuthorization:sha}).strict()]);
+const readRolePlan=legacyManagedPlanSchema.extend({format:z.literal(10),
+ capturePolicy:z.literal('EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1'),captureAuthorization:sha}).strict();
+export const managedPlanSchema=z.discriminatedUnion('format',[legacyManagedPlanSchema,readRolePlan,
+ readRolePlan.extend({format:z.literal(11),storageCredentialPolicy:z.literal('REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1'),
+ captureControlRetirement:sha}).strict()]);
 const closed=z.object({revision:sha,value:z.object({installationId:identity,maintenanceEpoch:z.number().int().positive().max(2147483647),
  planDigest:sha,phase:z.literal('OBSERVED_CLOSED'),attemptId:z.string().uuid()})});
 export type ManagedClosedHead=z.infer<typeof closed>;

@@ -1,4 +1,7 @@
 import {managedReadRoleConfigurationSchema} from '../services/managed-read-role-configuration.js';
+import {ManagedCaptureControlRetirement} from '../services/managed-capture-control-retirement.js';
+import {managedPlanSchema} from '../services/managed-plan-bootstrap.js';
+import {backend as archivedSdkBackend,config as archivedSdkConfig} from './fixtures/archived-custody.js';
 import {readRoleCommonCandidateReportSchema} from '../services/managed-common-candidate-contract.js';
 import {commonCandidateBindingSchema,commonCandidateReportSchema,commonCaptureObjectInventory,candidateReportArtifact as anyReportArtifact} from '../services/managed-common-candidate-contract.js';
 import {candidateBindingSchema,candidateReportArtifact} from '../services/managed-candidate-capture-contract.js';
@@ -58,7 +61,7 @@ function fixture(options:{retired?:{id:string;secret:string}[];epoch?:number}={}
   if(path.Key!==`managed-maintenance/${config.installationId}/control.json`){
    if(command instanceof PutObjectCommand){calls.push('artifact-put');assert.equal(command.input.IfNoneMatch,'*');if(artifacts.has(path.Key!))throw new Error('synthetic existing artifact');
     const row={body:String(command.input.Body),version:'artifact-'+(artifacts.size+1)};artifacts.set(path.Key!,row);return{...metadata(),VersionId:row.version};}
-   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.includes('/capture-job/')||path.Key?.endsWith('/plan-bootstrap.json'));
+   calls.push('artifact-get');const row=artifacts.get(path.Key!)!;if(command.input.VersionId!==undefined)assert.equal(command.input.VersionId,row.version);else assert.ok(path.Key?.includes('/capture-candidate/')||path.Key?.includes('/capture-job/')||path.Key?.endsWith('/plan-bootstrap.json')||path.Key?.endsWith('/capture-control-baseline.json')||path.Key?.endsWith('/capture-control-observation.json'));
    return{...metadata(),VersionId:row.version,ETag:'"'+row.version+'"',ContentLength:Buffer.byteLength(row.body),ChecksumSHA256:Buffer.from(hash(row.body),'hex').toString('base64'),ChecksumType:'FULL_OBJECT',Body:Readable.from([Buffer.from(row.body)])};
   }
   if(command instanceof GetObjectCommand){reads++;calls.push('get');assert.equal(command.input.VersionId,undefined);
@@ -1215,4 +1218,107 @@ test('unsupported capture catalogue permissions refuse before maintenance acquis
  await assert.rejects(coordinator.close());assert.equal(f.puts,0);assert.equal(f.reads,reads);assert.equal(f.calls.length,before);assert.equal(f.value.phase,'READY');
  const x=await readRoleCommonParentFixture(),count=x.f.artifacts.size;x.profile.observeCompatibility=async()=>({catalogueLockAclPredicatesObserved:false});
  await assert.rejects(x.coordinator.captureReadRoleCommonQuarantined(x.request,x.journal,x.archive as never,x.source));assert.equal(x.sourceCalls(),0);assert.equal(x.f.artifacts.size,count);
+});
+
+async function captureControlRetirementFixture(){
+ const f=fixture();let deleted=false,deleteCalls=0,lostDelete=false,extraKey=false;
+ const registry={installationId:config.installationId,projectRef:'abcdefghijklmnopqrst',region:'eu-west-1',bucket:'synthetic-governance',organisationId:'org-synthetic',captureKeyId:'11111111-1111-4111-8111-111111111111',writerKeys:[{id:'22222222-2222-4222-8222-222222222222',type:'secret'}]};
+ const provider=new SupabaseStorageWriterControl(registry,'synthetic-management',async(input,init)=>{
+  const url=new URL(String(input));assert.equal(url.origin,'https://api.supabase.com');
+  if(init?.method==='DELETE'){
+   assert.equal(url.pathname,'/v1/projects/'+registry.projectRef+'/api-keys/'+registry.captureKeyId);assert.equal(url.searchParams.get('reveal'),'false');
+   deleteCalls++;deleted=true;if(lostDelete)throw new Error('synthetic accepted DELETE without ACK');return Response.json({id:registry.captureKeyId,type:'secret',api_key:'discard-provider-secret-field'});
+  }
+  assert.equal(init?.method,'GET');
+  if(url.pathname.endsWith('/config/storage'))return Response.json({features:{s3Protocol:{enabled:false}}});
+  if(url.pathname.endsWith('/api-keys/legacy'))return Response.json({enabled:false});
+  if(url.pathname.endsWith('/api-keys')){assert.equal(url.searchParams.get('reveal'),'false');return Response.json([...(deleted?[]:[{id:registry.captureKeyId,type:'secret'}]),...(extraKey?[{id:'33333333-3333-4333-8333-333333333333',type:'secret'}]:[])]);}
+  return Response.json({ref:registry.projectRef,organization_id:registry.organisationId,region:registry.region,status:'ACTIVE_HEALTHY'});
+ });
+ const create=(selectedClient?:S3Client)=>new ManagedCaptureControlRetirement(config,provider,f.store,credentials,selectedClient??f.client),retirement=create();
+ const plan=managedPlanSchema.parse({...f.coordinator.planDescriptor(),format:11,storageCredentialPolicy:'REVOKE_REVIEWED_KEYS_THEN_RETIRE_CAPTURE_CONTROL_V1',
+  capturePolicy:'EXPLICIT_JWT_SQL_PRIVILEGE_AND_METADATA_WINDOW_V1',captureAuthorization:hash('synthetic-read-role'),captureControlRetirement:retirement.configurationDigest()});
+ // Only this unit fixture supplies a protocol11 coordinator. Production has no
+ // constructor/route activation for the new policy yet.
+ Object.defineProperty(f.coordinator,'planDescriptor',{value:()=>structuredClone(plan)});f.value.planDigest=hash(JSON.stringify(plan));
+ await f.coordinator.close();
+ await f.coordinator.publishCaptureBootstrap(new ManagedCandidateCaptureJournal(config,credentials,f.client));
+ return{f,provider,retirement,create,plan,get deletes(){return deleteCalls;},get deleted(){return deleted;},set lostDelete(v:boolean){lostDelete=v;},set extraKey(v:boolean){extraKey=v;}};
+}
+
+test('format11 retirement records original intent before exact key deletion; cold inspection is read-only',async()=>{
+ const x=await captureControlRetirementFixture();let requestAcknowledged=false;
+ const original=x.provider.retireCaptureControl.bind(x.provider);
+ x.provider.retireCaptureControl=async signal=>{assert.equal(requestAcknowledged,true);return original(signal);};
+ x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-baseline.json'))requestAcknowledged=true;});
+ const result=await x.retirement.retire(x.plan);assert.equal(x.deletes,1);assert.equal(x.deleted,true);
+ assert.equal(result.report.originalDeleteAcknowledgementObserved,true);assert.equal(result.report.observation.retainedCaptureKeys,0);
+ assert.equal(JSON.stringify(result).includes('discard-provider-secret-field'),false);assert.equal(result.wholeBackendQuiesced,false);
+ const before=x.f.artifacts.size,writes=x.f.puts;
+ const cold=await x.create().inspect(x.plan);assert.equal(cold.originalAcknowledgementReconstructed,false);assert.equal(cold.savedObservationAuthorizesExecution,false);
+ assert.equal(cold.current.controlPlaneWritersExcluded,false);assert.equal(x.f.artifacts.size,before);assert.equal(x.f.puts,writes);assert.equal(x.deletes,1);
+ await assert.rejects(x.retirement.retire(x.plan));await assert.rejects(x.create().retire(x.plan));assert.equal(x.deletes,1);
+ const lists=x.f.calls.filter(v=>v==='candidate-list').length;
+ await assert.rejects(new ManagedCandidateCaptureJournal(config,credentials,x.f.client).discoverCurrentCandidates(x.f.store,1));
+ assert.equal(x.f.calls.filter(v=>v==='candidate-list').length,lists);
+});
+
+test('lost retirement request acknowledgement prevents DELETE and cannot be reconstructed by a fresh caller',async()=>{
+ const x=await captureControlRetirementFixture();let lose=true;
+ x.f.setFault(command=>{if(lose&&command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-baseline.json'))throw new Error('synthetic lost original request ACK');});
+ await assert.rejects(x.retirement.retire(x.plan));assert.equal(x.deletes,0);assert.equal(x.f.artifacts.size>0,true);
+ lose=false;await assert.rejects(x.create().retire(x.plan));await assert.rejects(x.create().inspect(x.plan));assert.equal(x.deletes,0);
+});
+
+test('accepted DELETE with unknown ACK preserves requested-only evidence, never replaying or inventing a report',async()=>{
+ const x=await captureControlRetirementFixture();x.lostDelete=true;
+ await assert.rejects(x.retirement.retire(x.plan));assert.equal(x.deletes,1);assert.equal(x.deleted,true);
+ assert.equal([...x.f.artifacts.keys()].some(k=>k.endsWith('capture-control-observation.json')),false);
+ assert.equal((await x.provider.observeCaptureControlRetired()).retainedCaptureKeys,0);
+ await assert.rejects(x.create().retire(x.plan));await assert.rejects(x.create().inspect(x.plan));assert.equal(x.deletes,1);
+});
+
+test('lost retirement report acknowledgement allows saved inspection but never a repeated DELETE',async()=>{
+ const x=await captureControlRetirementFixture();let lose=true;
+ x.f.setFault(command=>{if(lose&&command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-observation.json'))throw new Error('synthetic lost report ACK');});
+ await assert.rejects(x.retirement.retire(x.plan));assert.equal(x.deletes,1);lose=false;
+ assert.equal((await x.create().inspect(x.plan)).originalAcknowledgementReconstructed,false);
+ await assert.rejects(x.create().retire(x.plan));assert.equal(x.deletes,1);
+});
+
+test('retirement refuses changed policy, head, registry, cancellation and recreated keys',async()=>{
+ for(const mode of ['legacy-plan','digest','head-after-request','extra-key','cancelled']){
+  const x=await captureControlRetirementFixture(),plan=structuredClone(x.plan),before=x.f.artifacts.size;
+  if(mode==='legacy-plan'){(plan as {format:number}).format=10;}
+  if(mode==='digest'&&plan.format===11)plan.captureControlRetirement=hash('wrong');
+  if(mode==='head-after-request')x.f.setFault(command=>{if(command instanceof GetObjectCommand&&command.input.Key?.endsWith('capture-control-baseline.json'))x.f.value={...x.f.value,publicationId:randomUUID()};});
+  if(mode==='extra-key')x.extraKey=true;const controller=new AbortController();if(mode==='cancelled')controller.abort();
+  await assert.rejects(x.retirement.retire(plan,controller.signal));assert.equal(x.deletes,0,mode);
+  if(['legacy-plan','digest','cancelled'].includes(mode))assert.equal(x.f.artifacts.size,before,mode);
+ }
+ const x=await captureControlRetirementFixture();await x.retirement.retire(x.plan);x.extraKey=true;
+ await assert.rejects(x.create().inspect(x.plan));assert.equal(x.deletes,1);
+});
+
+test('retirement custody uses real SDK serialization, exact-version readback and conditional conflict without KMS generation',async()=>{
+ const x=await captureControlRetirementFixture(),sdk=archivedSdkBackend({...archivedSdkConfig,installationId:config.installationId,bucket:config.bucket,storageKeyArn:config.kmsKeyArn}),client=sdk.s3();
+ try{
+  const original=await x.create(client).retire(x.plan);assert.equal(x.deletes,1);assert.equal(sdk.writes,2);assert.equal(sdk.generates,0);
+  const cold=await x.create(client).inspect(x.plan);assert.deepEqual(cold.reportPin,original.reportPin);assert.equal(sdk.writes,2);
+  await assert.rejects(x.create(client).retire(x.plan));assert.equal(x.deletes,1);assert.equal(sdk.writes,3);assert.equal(sdk.objects.size,2);
+  assert.deepEqual((await x.create(client).inspect(x.plan)).reportPin,original.reportPin);
+ }finally{sdk.close();client.destroy();}
+});
+
+test('retirement inspection refuses internally altered reports even when latest transport checksums agree',async()=>{
+ for(const change of ['observation','pin','claim','binding']){
+  const x=await captureControlRetirementFixture();await x.retirement.retire(x.plan);
+  const row=[...x.f.artifacts].find(([key])=>key.endsWith('capture-control-observation.json'))![1];
+  const report=JSON.parse(row.body);
+  if(change==='observation')report.observation.stateSha256=hash('changed');
+  if(change==='pin')report.requestPin.versionId='substituted-version';
+  if(change==='claim')report.observation.wholeStorageQuiesced=true;
+  if(change==='binding')report.binding.sourceSha='9'.repeat(40);
+  row.body=JSON.stringify(report);await assert.rejects(x.create().inspect(x.plan));assert.equal(x.deletes,1);
+ }
 });

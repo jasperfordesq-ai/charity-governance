@@ -33,7 +33,7 @@ export type MaintenanceArtifactPin = {
   byteLength: number;
 };
 export type MaintenanceArtifactPolicy<P extends MaintenanceArtifactPin> = {
-  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability' | 's3-capability-cohort' | 's3-current-feature' | 'capture-candidate' | 'capture-job';
+  namespace: 'write' | 'signed' | 'resumable' | 'resumable-cohort' | 'signed-resumable' | 's3-capability' | 's3-capability-cohort' | 's3-current-feature' | 'capture-candidate' | 'capture-job' | 'capture-control';
   /** Scoped capability/candidate records only; never a caller-supplied path. */
   scopeDigest?: string;
   pinSchema: z.ZodType<P>;
@@ -64,7 +64,7 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
     this.policy = { ...policy, limits: { ...policy.limits } };
     this.config = configuration.parse(raw);
     if (!credentials) throw this.policy.failure();
-    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability', 's3-capability-cohort', 's3-current-feature', 'capture-candidate', 'capture-job']).parse(policy.namespace);
+    z.enum(['write', 'signed', 'resumable', 'resumable-cohort', 'signed-resumable', 's3-capability', 's3-capability-cohort', 's3-current-feature', 'capture-candidate', 'capture-job', 'capture-control']).parse(policy.namespace);
     if (policy.namespace === 's3-capability' || policy.namespace === 'capture-candidate' || policy.namespace === 'capture-job')
       z.string().regex(/^[a-f0-9]{64}$/).parse(policy.scopeDigest);
     else if (policy.scopeDigest !== undefined) throw this.policy.failure();
@@ -310,7 +310,7 @@ export class S3MaintenanceArtifactStore<P extends MaintenanceArtifactPin> {
   /** Candidate custody discovery only. Saved reads never authorise execution or
    * reconstruct a lost acknowledgement for any maintenance baseline. */
   async inspectCandidateArtifact(kind:MaintenanceArtifactKind,caller?:AbortSignal){
-    if(!['capture-candidate','capture-job'].includes(this.policy.namespace)||!['BASELINE','OBSERVATION'].includes(kind))throw this.policy.failure();
+    if(!['capture-candidate','capture-job', 'capture-control'].includes(this.policy.namespace)||!['BASELINE','OBSERVATION'].includes(kind))throw this.policy.failure();
     const controller=new AbortController(),signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
     const timer=setTimeout(()=>controller.abort(),15000);let body:Readable|undefined;
     try{

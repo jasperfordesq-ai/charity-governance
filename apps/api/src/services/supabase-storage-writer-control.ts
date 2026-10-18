@@ -57,6 +57,7 @@ const hash = (value: unknown) =>
 export class SupabaseStorageWriterControl {
   private readonly config: Configuration;
   private attempted = false;
+  private retirementAttempted = false;
   constructor(
     raw: unknown,
     private readonly token: string,
@@ -86,6 +87,9 @@ export class SupabaseStorageWriterControl {
         .filter((k) => k.type === 'secret')
         .map((k) => k.id),
     };
+  }
+  captureControlRetirementScope() {
+    return { ...this.candidateCaptureScope(), storageConfigurationDigest: this.configurationDigest() };
   }
   configurationDigest(installationId = this.config.installationId) {
     if (id.parse(installationId) !== this.config.installationId)
@@ -346,6 +350,44 @@ export class SupabaseStorageWriterControl {
       if (hash(first) !== hash(second)) throw failure();
       return this.proof(second);
     });
+  }
+  private retired(state: Awaited<ReturnType<SupabaseStorageWriterControl['snapshot']>>) {
+    if (state.s3Enabled || state.legacyEnabled || state.keys.length !== 0) throw failure();
+  }
+  private retirementProof(state: Awaited<ReturnType<SupabaseStorageWriterControl['snapshot']>>) {
+    const facts = { format: 1 as const, kind: 'SUPABASE_CAPTURE_CONTROL_RETIRED_V1' as const,
+      ...this.captureControlRetirementScope(), observedAt: new Date().toISOString(), stateSha256: hash(state) };
+    return { ...facts, observationDigest: hash(facts), listedModernKeysAbsent: true as const,
+      legacyKeysDisabled: true as const, s3ProtocolDisabled: true as const, retainedCaptureKeys: 0 as const,
+      dataPlaneRejectionVerified: false as const, controlPlaneWritersExcluded: false as const,
+      signedCapabilitiesRevoked: false as const, inFlightWritesDrained: false as const,
+      wholeStorageQuiesced: false as const, actionAuthorized: false as const };
+  }
+  /** Read-only absence observation. Never reconstructs the original DELETE ACK. */
+  async observeCaptureControlRetired(caller?: AbortSignal) {
+    return this.work(async budget => {
+      const first = await this.snapshot(budget); this.retired(first);
+      const second = await this.snapshot(budget); this.retired(second);
+      if (hash(first) !== hash(second)) throw failure();
+      return this.retirementProof(second);
+    }, caller);
+  }
+  /** Internal one-attempt primitive. Requires the separate retirement policy's
+   * original durable request ACK; existing KEEP_CAPTURE plans must not call it. */
+  async retireCaptureControl(caller?: AbortSignal) {
+    if (this.retirementAttempted) throw failure();
+    this.retirementAttempted = true;
+    return this.work(async budget => {
+      const first = await this.snapshot(budget); this.closed(first);
+      const second = await this.snapshot(budget); this.closed(second);
+      if (hash(first) !== hash(second)) throw failure();
+      const deleted = keySchema.parse(await this.request('/api-keys/' + this.config.captureKeyId + '?reveal=false', 'DELETE', budget));
+      if (deleted.id !== this.config.captureKeyId || deleted.type !== 'secret') throw failure();
+      const after = await this.snapshot(budget); this.retired(after);
+      const checked = await this.snapshot(budget); this.retired(checked);
+      if (hash(after) !== hash(checked)) throw failure();
+      return this.retirementProof(checked);
+    }, caller);
   }
   async close() {
     if (this.attempted) throw failure();

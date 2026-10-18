@@ -1,3 +1,12 @@
+## 18 October: retained control-key retirement component
+
+An explicit format-11 component now binds an original conditional retirement
+request, one named control-key DELETE and a separate saved report. Legacy plans
+cannot call it; cold reads cannot reconstruct ACKs or replay deletion. Current
+candidate discovery refuses format 11 pending the new retirement-aware binding.
+See [contract and outstanding integration](managed-capture-control-retirement.md).
+No provider key or tenant record was changed. Exact tests/source/deployment
+states are recorded privately; real provider/global writer/host-loss gates remain.
 ## 18 October: read-only capture compatibility preflight
 
 The explicit read-role coordinator now checks the configured observer's ACL
