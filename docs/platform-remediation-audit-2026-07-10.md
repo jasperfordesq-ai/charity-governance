@@ -1,3 +1,19 @@
+## 18 October: capture SQL read-role boundary
+
+The remaining capture credential is still a privileged server key. Official
+Supabase custom-role documentation and pinned Storage source support a custom
+JWT-role read lane, but do not attest this project's hosted role or grants.
+Read [capture SQL role boundary](managed-capture-read-role-boundary.md).
+
+A new bounded READ ONLY / Repeatable Read observation checks a dedicated
+NOLOGIN/NOINHERIT SELECT-only role, rejecting role-switch memberships, RLS bypass,
+column/table mutations, ownership, schema creation and executable definer paths.
+It changes no grants and keeps provider-token, full visibility, global writer
+and action claims false. Unit tests passed; exact native execution, source and
+provider limits are recorded privately. JWT verification and guarded privilege
+interval integration remain unfinished; existing capture authentication is not
+silently changed. Independent provider/host-loss acceptance remains open.
+
 ## 18 October: bounded custody native failure acceptance passed
 
 The actual service cohort passed consumed original claim/unknown ACK, original

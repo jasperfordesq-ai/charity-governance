@@ -199,6 +199,32 @@ export async function proveStorageGrantBoundary({admin,url}){
   assert.equal(inventory.configurationDigest(),originalInventoryDigest);
   assert.equal((await inventory.observe()).capture.name,config.capture.name);
   await proveStorageMetadataWindow({admin,fencer,actor,capture,config});
+  // Dedicated NOLOGIN JWT-role shape: direct SELECT only, no inherited or
+  // switchable roles. This is a disposable SQL contract, not hosted JWT proof.
+  await admin.$executeRaw`CREATE ROLE storage_probe_reader NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`;
+  await admin.$executeRaw`GRANT USAGE ON SCHEMA public TO storage_probe_reader`;
+  await admin.$executeRaw`GRANT SELECT ON public.synthetic_storage_boundary TO storage_probe_reader`;
+  await admin.$executeRaw`CREATE POLICY synthetic_reader_select ON public.synthetic_storage_boundary FOR SELECT TO storage_probe_reader USING (true)`;
+  await admin.$executeRaw`INSERT INTO public.synthetic_storage_boundary(value) VALUES ('synthetic-reader-control') ON CONFLICT DO NOTHING`;
+  const [readerRole]=await admin.$queryRaw`SELECT rolname AS name,oid::text AS oid FROM pg_roles WHERE rolname='storage_probe_reader'`;
+  const readerBoundary=new ManagedStorageDatabaseInventory(admin,{...config,capture:readerRole});
+  const boundary=await readerBoundary.observeCaptureRoleBoundary();assert.equal(boundary.configuredCaptureSqlReadOnlyObserved,true);
+  assert.equal(boundary.captureCredentialReadOnlyVerified,false);assert.equal(boundary.providerTokenRoleVerified,false);assert.equal(boundary.wholeBackendQuiesced,false);
+  const visible=await admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;return tx.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_storage_boundary WHERE value='synthetic-reader-control'`;});
+  assert.equal(visible[0].total,1);
+  await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
+  await admin.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`;
+  await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`;
+  await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`;
+  await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE storage_probe_alternate FROM storage_probe_reader`;
+  await admin.$executeRaw`GRANT EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) TO storage_probe_reader`;
+  await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE EXECUTE ON FUNCTION public.synthetic_storage_elevated_write(text) FROM storage_probe_reader`;
+  await admin.$executeRaw`GRANT CREATE ON SCHEMA public TO storage_probe_reader`;
+  await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE CREATE ON SCHEMA public FROM storage_probe_reader`;
+  await admin.$executeRaw`ALTER ROLE storage_probe_reader BYPASSRLS`;
+  await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`ALTER ROLE storage_probe_reader NOBYPASSRLS`;
+  assert.equal((await readerBoundary.observeCaptureRoleBoundary()).configuredCaptureSqlReadOnlyObserved,true);
+  console.log('PASS custom capture SQL role: positive RLS read, actual 42501 write refusal, column mutation, SET ROLE, definer EXECUTE, schema CREATE and BYPASSRLS rejected; no provider-token/global-authority claim');
   // Read-only report must refuse truncation instead of hiding another definer.
   await admin.$executeRaw`DO $fixture$ BEGIN FOR i IN 1..257 LOOP
    EXECUTE format('CREATE FUNCTION public.synthetic_inventory_overflow_%s() RETURNS integer LANGUAGE sql SECURITY DEFINER AS %L',i,'SELECT 1');

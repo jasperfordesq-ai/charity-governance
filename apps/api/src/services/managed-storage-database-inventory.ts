@@ -20,6 +20,7 @@ const grant=z.object({roleOid:oid,relationOid:oid,select:z.boolean(),insert:z.bo
  columnInsert:z.boolean(),columnUpdate:z.boolean(),columnReferences:z.boolean()}).strict();
 const member=z.object({roleOid:oid,memberOid:oid,grantorOid:oid,admin:z.boolean(),inherit:z.boolean(),set:z.boolean()}).strict();
 const definer=z.object({oid,schema:z.string(),name:z.string(),ownerOid:oid,executableBy:z.array(oid).max(256)}).strict();
+const captureAuthority=z.object({ownsDatabase:z.boolean(),ownsSchema:z.boolean(),ownsRelation:z.boolean(),ownsRoutine:z.boolean(),databaseCreate:z.boolean(),schemaCreate:z.boolean(),systemDefinerExecute:z.boolean()}).strict();
 /** Read-only internal discovery, NOT a permission fence or live operator entry.
  * No role passwords, function bodies, object contents or request claims are read.
  * Caller supplies a separately trusted registry and TLS-verified Prisma client. */
@@ -27,7 +28,18 @@ export class ManagedStorageDatabaseInventory {
  private readonly config:z.infer<typeof configuration>;
  constructor(private readonly prisma:PrismaClient,raw:unknown){this.config=configuration.parse(raw);}
  configurationDigest(){return createHash('sha256').update(JSON.stringify(this.config)).digest('hex');}
- async observe(){
+ observe(){return this.inspect(false);}
+ async observeCaptureRoleBoundary(){
+  try{const observed=await this.inspect(true);if(!observed.captureRoleBoundary)throw new Error();
+   const facts={format:1,kind:'MANAGED_CAPTURE_SQL_ROLE_BOUNDARY_V1' as const,configurationDigest:this.configurationDigest(),
+    inventoryObservationDigest:observed.observationDigest,capture:observed.capture,relations:observed.relations.map(r=>({schema:r.schema,name:r.name,oid:r.oid})),
+    observedAt:observed.identity.observedAt,authority:observed.captureRoleBoundary};
+   return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
+    configuredCaptureSqlReadOnlyObserved:true as const,providerTokenRoleVerified:false as const,unfilteredBucketVisibilityVerified:false as const,
+    captureCredentialReadOnlyVerified:false as const,allWritersInventoried:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
+  }catch{throw new Error('Managed capture SQL role boundary is unverified');}
+ }
+ private async inspect(requireCaptureBoundary:boolean){
   try{return await this.prisma.$transaction(async tx=>{
    await tx.$executeRaw`SET TRANSACTION READ ONLY`;
    await tx.$executeRaw`SET LOCAL search_path=pg_catalog`;
@@ -75,10 +87,29 @@ export class ManagedStorageDatabaseInventory {
      WHERE has_function_privilege(r.oid,p.oid,'EXECUTE') ORDER BY r.oid) AS "executableBy"
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef
     AND n.nspname<>'information_schema' AND n.nspname!~'^pg_' ORDER BY p.oid LIMIT 257`);
+   let captureRoleBoundary:z.infer<typeof captureAuthority>|undefined;
+   if(requireCaptureBoundary){
+    const selected=roles.find(r=>r.oid===c.capture.oid&&r.name===c.capture.name)!;
+    if(selected.login||selected.superuser||selected.createRole||selected.createDb||selected.replication||selected.bypassRls||selected.inherit
+     ||memberships.some(m=>m.memberOid===selected.oid)||relations.some(t=>t.ownerOid===selected.oid||!t.rowSecurity)
+     ||definers.some(f=>f.executableBy.includes(selected.oid)))throw new Error();
+    const selectedGrants=grants.filter(g=>g.roleOid===selected.oid);
+    if(selectedGrants.length!==relations.length||selectedGrants.some(g=>!g.select||g.insert||g.update||g.delete||g.truncate||g.references||g.trigger||g.columnInsert||g.columnUpdate||g.columnReferences))throw new Error();
+    const [authority]=z.array(captureAuthority).length(1).parse(await tx.$queryRaw`SELECT
+     EXISTS(SELECT 1 FROM pg_database WHERE datdba=r.oid) AS "ownsDatabase",
+     EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspowner=r.oid) AS "ownsSchema",
+     EXISTS(SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace WHERE t.relowner=r.oid) AS "ownsRelation",
+     EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.proowner=r.oid) AS "ownsRoutine",
+     has_database_privilege(r.oid,d.oid,'CREATE') AS "databaseCreate",
+     EXISTS(SELECT 1 FROM pg_namespace n WHERE has_schema_privilege(r.oid,n.oid,'CREATE')) AS "schemaCreate",
+     EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef AND (n.nspname='information_schema' OR n.nspname~'^pg_') AND has_function_privilege(r.oid,p.oid,'EXECUTE')) AS "systemDefinerExecute"
+     FROM pg_roles r,pg_database d WHERE r.oid::text=${c.capture.oid} AND r.rolname=${c.capture.name} AND d.datname=current_database()`);
+    if(!authority||Object.values(authority).some(v=>v))throw new Error();captureRoleBoundary=authority;
+   }
    const facts={format:1,kind:'MANAGED_STORAGE_DATABASE_AUTHORITY_INVENTORY_V1',configurationDigest:this.configurationDigest(),
     identity,capture:{...c.capture},relations,roles,memberships,grants,definers};
    return{...facts,observationDigest:createHash('sha256').update(JSON.stringify(facts)).digest('hex'),
-    scope:'CONFIGURED_RELATIONS_CATALOGUE_OBSERVATION_ONLY' as const,
+    ...(requireCaptureBoundary?{captureRoleBoundary}:{}),scope:'CONFIGURED_RELATIONS_CATALOGUE_OBSERVATION_ONLY' as const,
     grantsChanged:false as const,functionsExecuted:false as const,metadataWindowHeld:false as const,
     captureCredentialReadOnlyVerified:false as const,allWritersInventoried:false as const,
     wholeBackendQuiesced:false as const,actionAuthorized:false as const};
