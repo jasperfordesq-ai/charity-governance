@@ -1,3 +1,22 @@
+## 18 October: retained outcome source path verified natively
+
+Kernel-contained common-candidate execution now requires the explicit retained
+outcome handoff and delivered SDK receipt. Native API, wire and full SQL/recovery
+regressions passed, including source-parent SIGKILL with the independently
+managed receiver still live. The original source rechecks its scope after SDK
+readiness; the owner probes before dispatch and publishes once; the source
+observes the exact receipt without a duplicate PUT before response accounting.
+Unknown or changed receipts fail closed. Exact source, hosted CI and deployment
+states are recorded privately and must not be conflated.
+
+The parent-loss test supervisor captures original receiver identity and redacted
+endpoint inode over live IPC before loss, verifies the kernel identity before
+and after loss, and tears down only that original synthetic invocation. Cold
+readers still gain no cleanup/replay authority. The initial final-unit-gate
+failure and subsequent repair are retained privately. Actual claim-ACK loss,
+service expiry, second custody-job preservation, real provider/current-authority
+and physical-host-loss acceptance remain explicit open gates.
+
 ## 18 October: retained outcome source integration under verification
 
 Kernel-contained common-candidate work now requires the explicit retained-SDK
