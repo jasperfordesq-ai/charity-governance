@@ -5,10 +5,11 @@ import {SupabaseRecoveryCapture} from '../apps/api/dist/services/supabase-recove
 import {PrismaClient} from '@prisma/client';
 import {proveStorageMetadataWindow} from './storage-metadata-window-postgres-proof.mjs';
 import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
+import {proveCaptureRoleWindow} from './capture-role-window-postgres-proof.mjs';
 
 /** Explicit provider model: real JWT crypto + actual TLS role-scoped SQL,
  * not a hosted Storage server or a held provider privilege interval. */
-async function proveReadRoleJwtCapture(admin,readerRole,boundary){
+async function proveReadRoleJwtCapture(admin,readerRole,boundary,readerBoundary){
  const pair=generateKeyPairSync('ec',{namedCurve:'prime256v1'}),subject=randomUUID(),now=Math.floor(Date.now()/1000),projectRef='abcdefghijklmnopqrst';
  const authentication={kind:'SUPABASE_CAPTURE_CUSTOM_ROLE_JWT_V1',sqlRole:readerRole,subject,
   verificationKey:{...pair.publicKey.export({format:'jwk'}),alg:'ES256',kid:'synthetic-read-role',use:'sig'}};
@@ -32,6 +33,14 @@ async function proveReadRoleJwtCapture(admin,readerRole,boundary){
  assert.equal(visited,1);assert.equal(result.kind,'SUPABASE_READ_ROLE_CANDIDATE_CAPTURE_V1');assert.equal(result.jwtVerification.signatureVerified,true);
  assert.deepEqual(result.jwtVerification.sqlRole,boundary.capture);assert.equal(result.jwtVerification.providerSqlRoleVerified,false);assert.equal(result.credentialWriteAuthorityExcluded,false);
  assert.equal(JSON.stringify(result).includes(token),false);assert.equal(JSON.stringify(capture).includes(token),false);assert.ok(calls>=5);
+ const guarded=await capture.captureWithSqlRoleWindow(readerBoundary,async(_file,bytes)=>assert.equal(bytes.toString(),'synthetic-reader-control'),{maxWindowMs:5000});
+ assert.equal(guarded.kind,'SUPABASE_SQL_ROLE_WINDOW_CANDIDATE_V1');assert.equal(guarded.configuredJwtSqlRoleMatched,true);assert.equal(guarded.providerTokenRoleVerified,false);
+ assert.equal(guarded.sqlPrivilegeWindow.listedCatalogueChangesExcludedDuringCallback,true);assert.equal(JSON.stringify(guarded).includes(token),false);
+ let mismatchCalls=0;const mismatched=new SupabaseRecoveryCapture({installationId:'synthetic-reader',projectRef,bucket:'synthetic-read-bucket',credential:{id:subject,sha256:createHash('sha256').update(token).digest('hex')},authentication:{...authentication,sqlRole:{...readerRole,oid:'1'}}},token,async()=>{mismatchCalls++;throw new Error();});
+ await assert.rejects(mismatched.captureWithSqlRoleWindow(readerBoundary,async()=>{}, {maxWindowMs:5000}));assert.equal(mismatchCalls,0);
+ let held;const cancelled=new AbortController();
+ await assert.rejects(capture.captureWithSqlRoleWindow(readerBoundary,async(_file,bytes)=>{held=bytes;cancelled.abort();await new Promise(()=>{});},{maxWindowMs:5000},cancelled.signal));
+ assert.ok(held?.every(v=>v===0));
  await assert.rejects(()=>asRole(tx=>tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='jwt-must-not-write' WHERE value='synthetic-reader-control'`),e=>e?.code==='P2010'&&e?.meta?.code==='42501');
  console.log('PASS capture JWT/native SQL composition: verified asymmetric custom-role bearer, actual role-scoped reads and 42501 write refusal, token-free output; provider transport is synthetic, no hosted privilege-interval claim');
 }
@@ -246,7 +255,8 @@ export async function proveStorageGrantBoundary({admin,url}){
   const visible=await admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;return tx.$queryRaw`SELECT count(*)::integer AS total FROM public.synthetic_storage_boundary WHERE value='synthetic-reader-control'`;});
   assert.equal(visible[0].total,1);
   await denied(()=>admin.$transaction(async tx=>{await tx.$queryRaw`SELECT set_config('role','storage_probe_reader',true)`;await tx.$executeRaw`UPDATE public.synthetic_storage_boundary SET value='reader-must-not-write' WHERE value='synthetic-reader-control'`;}));
-  await proveReadRoleJwtCapture(admin,readerRole,boundary);
+  await proveReadRoleJwtCapture(admin,readerRole,boundary,new ManagedStorageDatabaseInventory(fencer,{...config,capture:readerRole}));
+  await proveCaptureRoleWindow({admin,fencer,actor,config,readerRole});
   await admin.$executeRaw`GRANT INSERT(value) ON public.synthetic_storage_boundary TO storage_probe_reader`;
   await assert.rejects(()=>readerBoundary.observeCaptureRoleBoundary());await admin.$executeRaw`REVOKE INSERT(value) ON public.synthetic_storage_boundary FROM storage_probe_reader`;
   await admin.$executeRaw`GRANT storage_probe_alternate TO storage_probe_reader WITH INHERIT FALSE, SET TRUE`;

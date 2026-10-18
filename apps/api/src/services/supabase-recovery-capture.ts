@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {SupabaseCaptureJwt,supabaseCaptureJwtConfiguration} from './supabase-capture-jwt.js';
+import {ManagedStorageDatabaseInventory} from './managed-storage-database-inventory.js';
 
 const failure = () => new Error('Supabase recovery capture is unresolved');
 const configSchema = z
@@ -321,6 +322,22 @@ export class SupabaseRecoveryCapture {
       file.bytes,
       file.mimeType,
     );
+  }
+  /** Exact configured JWT/SQL role join, held only while this capture executes.
+   * Does not attest hosted token acceptance or complete provider visibility. */
+  async captureWithSqlRoleWindow(inventory:ManagedStorageDatabaseInventory,visit:Parameters<SupabaseRecoveryCapture['capture']>[0],options:unknown,caller?:AbortSignal){
+    try{
+      if(!this.#jwt||!('authentication' in this.config)||!(inventory instanceof ManagedStorageDatabaseInventory))throw failure();
+      const role=this.config.authentication.sqlRole;this.#jwt.assertActive();
+      const guarded=await inventory.runCaptureRoleWindow(async(boundary,signal)=>{
+        if(boundary.capture.name!==role.name||boundary.capture.oid!==role.oid)throw failure();
+        this.#jwt!.assertActive();return this.capture(visit,signal);
+      },options,caller);
+      this.#jwt.assertActive();
+      return{kind:'SUPABASE_SQL_ROLE_WINDOW_CANDIDATE_V1' as const,captured:guarded.value,sqlPrivilegeWindow:guarded.evidence,
+        configuredJwtSqlRoleMatched:true as const,providerTokenRoleVerified:false as const,
+        unfilteredBucketVisibilityVerified:false as const,wholeBackendQuiesced:false as const,actionAuthorized:false as const};
+    }catch{throw failure();}
   }
   /** Read only a pre-existing, separately approved synthetic canary. This does
    * not create one or substitute a governance document as a credential probe. */

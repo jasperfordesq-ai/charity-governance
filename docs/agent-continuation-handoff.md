@@ -1,3 +1,13 @@
+## 18 October: bounded capture privilege window
+
+An explicit internal SQL catalogue window now joins the configured asymmetric
+JWT role to a live SQL role identity during capture, while holding the eight
+listed privilege catalogues. Cancellation and lost/expired authority discard
+the candidate. Read [the contract and proof limits](managed-capture-privilege-window.md).
+No hosted provider grant or application activation is performed. Exact source,
+test and deployed-state evidence is recorded privately; legacy authorization
+still refuses the new JWT mode pending explicit protocol integration.
+
 ## 18 October: explicit capture JWT component
 
 An inactive, versioned asymmetric JWT capture lane now verifies configured
