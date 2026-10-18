@@ -1,3 +1,12 @@
+## 18 October: private original claim transport
+
+Read [outcome transfer](managed-original-outcome-transfer.md). The private Unix
+claim component binds the original nonce/digest to one source/receiver/input,
+requires verification before/after claim, and refuses unknown ACK or timeout.
+Native socket tests use a test verifier. Actual child/kernel wiring, custody
+service, outcome delivery and source activation remain unfinished. Exact source,
+test and deployment states are private; no new runtime activation is inferred.
+
 ## 18 October: original outcome-transfer component
 
 Read [outcome transfer](managed-original-outcome-transfer.md). The original live

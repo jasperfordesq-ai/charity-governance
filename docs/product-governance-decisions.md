@@ -1,3 +1,12 @@
+## 18 October: private original claim transport
+
+The original transfer now has a bounded private Unix claim-channel component.
+It requires a trusted receiver verifier before/after consuming the original
+claim; scope/input/capability mismatch or missing ACK refuses without retry.
+The channel carries no private ticket or credentials. Its native socket tests
+use a test verifier, not actual kernel attestation. Custody-service bootstrap,
+kernel wiring and source activation remain unfinished. See [outcome transfer](managed-original-outcome-transfer.md).
+
 ## 18 October: original outcome-transfer component
 
 The original live job context can issue one bounded private outcome-authority

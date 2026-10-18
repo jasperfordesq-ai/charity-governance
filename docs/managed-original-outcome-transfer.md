@@ -62,10 +62,37 @@ deadline preservation, stalled credential/claim resolution and accepted-write
 ACK loss. These are component tests, not proof of an independent live process.
 Exact source/test/deployment results are recorded in the private checkpoint.
 
-The private bootstrap/claim socket, actual custody user service, original kernel
-authentication, outcome delivery and source-runner integration remain unfinished.
+The private claim socket component is described below. The actual custody user
+service, original kernel authentication, outcome delivery and source-runner
+integration remain unfinished.
 Before activation, prove actual issuer SIGKILL after receiver readiness, outcome
 retention by the surviving receiver, claim/response loss refusal and receiver
 loss quarantine. Keep runtime credentials out of Docker workers and outcome
 artifacts. Actual provider IAM and independent physical-host-loss recovery
 acceptance remain separate required gates.
+
+## Private claim channel component
+
+`scripts/managed-outcome-claim-channel.mjs` creates an exclusive owner-only Unix
+socket directory. The original caller binds one expected receiver input digest
+before any connection is accepted. The packet carries only the original ticket
+nonce/digest, job/source/receiver identity, a channel capability and a fresh
+exchange nonce. It carries neither the private ticket nor cloud credentials.
+
+A mandatory trusted verifier callback runs before and after consuming the
+original live claim. Missing verification, changed identity, wrong capability,
+wrong scope, timeout or lost acknowledgement refuses the channel. No second
+attempt can revive it. The parent reports an acknowledgement as sent; only the
+receiving client can report observing the exact nonce-bound reply. Neither
+observation means the SDK writer is ready or a daemon request may run.
+
+Cleanup applies only to the original directory inode and expected socket name;
+uncertain pending callbacks preserve the directory. No unit, PID, Docker object
+or other job is removed. The service adapter must close the channel explicitly.
+
+Linux native socket regressions use a test verifier and prove transport ordering,
+privacy and failure handling only. The callback is not selectable by packet or
+CLI input, has no permissive default, and must be wired to actual original
+kernel/source verification before runtime use. The current source runner does
+not use this channel yet. An independently managed custody process and its
+provider-backed parent-death proof remain unfinished.
