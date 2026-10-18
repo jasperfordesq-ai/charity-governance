@@ -1,3 +1,16 @@
+## 18 October: current recovery cannot silently fall back to a historical epoch
+
+The original externally retained checkpoint governs epoch-chain discovery.
+After caller loss, a completed earlier archive remains historical quarantine;
+it must not be presented as a completed current capture or a reopening grant.
+Missing original execution acknowledgements remain unknown even when readable
+bytes survive. The shared epoch2 SIGKILL proof now demonstrates this separation
+alongside the existing single-attempt loss proofs; see the native contract.
+Process-caller loss on one machine does not establish independent provider/IAM,
+physical-host recovery or current tenant authority. Audit deployable operator/
+provider review artifacts against current source before any separately authorised
+activation. A prototype, public source commit or native pass supplies no spend,
+legal, access, disposal or real-tenant policy authority.
 ## 18 October: S3 epoch custody uses append-only head slots
 
 Separate reader/writer adapters now bind real S3 version IDs, owner/KMS/checksum

@@ -90,9 +90,19 @@ root is discovered separately through the verified historical chain and checked
 into quarantine. It cannot become an automatic current fallback. New writes,
 data-key generation, replay, admission and recovered ACKs remain forbidden.
 
-This source integration requires exact-source native execution and regression of
-the existing format-3/5 caller-loss paths before it is counted as passed. It is
-not physical-host loss, actual independent cloud IAM or current tenant authority.
+Exact source `4703d5ef82a66e8dffcfc575542e45fabdd4a6c6` passed this dedicated case
+in 36,360 ms after a fresh API build and five Linux boundary tests. The fresh
+reader verified two original publication receipts and chain entries, one current
+unresolved candidate, zero current verified roots and one historical quarantined
+root. No source candidate IDs, archive pins or local job pins were supplied to it.
+The original source cgroup was empty; the independent owner/custody survived.
+
+The existing full separate-custody cohort then passed at that same exact source
+in 315,196 ms, including both original format-3/5 SIGKILL cases, the original
+22-candidate recovery matrix and the normal shared two-epoch check. Eight new
+protected failure workspaces were verified and separately inventoried. Two older
+failed-job containers stayed preserved. This is not physical-host loss, actual
+independent cloud IAM, complete resource reconciliation or current tenant authority.
 
 ### Native original-acknowledgement loss cohort
 
@@ -187,13 +197,17 @@ genuine legacy/retired-control caller SIGKILL cases remain separate. Their
 namespace reports its own two-entry chain and one latest-epoch root.
 
 The executed scope above is source-specific. Dated native results, receipts and
-failures belong in the ignored private handoff. New epoch
-later read-refusal extensions and genuine
-caller loss within the shared two-epoch path still require their own native
-execution. Modelled SDK tests cover those store boundaries separately.
+failures belong in the ignored private handoff. Source changes must not inherit
+earlier execution or hosted-CI results without appropriate verification.
 
 Actual provider IAM/no-delete/no-copy/lifecycle/rollback controls, independently
 retained genesis/checkpoints and key custody, whole-backend writer exclusion,
 current tenant preservation/disposal authority and physical-host-loss recovery
 remain acceptance gates. No admission, cleanup, replay, reopening or external
 provider authorization follows from this fixture.
+
+Before actual provider exercises, audit the deployment/operator review artifacts
+against the current compiled topology and source. Older shape-only prototypes
+are not activation instructions. Provider identity, catalogue compatibility,
+global management actors and independent custody must be established through
+their own observed authority and evidence gates.

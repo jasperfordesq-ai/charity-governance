@@ -1,3 +1,19 @@
+## 18 October: genuine shared epoch-2 caller loss passed
+
+Exact source `4703d5ef` passed genuine SIGKILL during observed epoch2 work in
+36.4 seconds. The original source cgroup became empty while independent owner/
+custody and original resources survived. With externally retained original ACK2,
+a fresh reader verified chain2, one unresolved current candidate, zero current
+roots and one separately verified historical quarantined root. It received no
+source candidate IDs, archive pins or local job pins; it made no writes/data keys.
+The existing full format3/5 caller-loss and recovery regression also passed at
+that exact source in315.2 seconds, with eight protected failure workspaces.
+See [the executed scope](managed-recovery-epoch-native.md).
+Actual provider/operator compatibility, independent IAM/checkpoint/key custody,
+global writers/current authority and physical-host recovery remain open. Earlier
+intermittent daemon failures and two preserved older resources remain unresolved;
+later passes do not invent their cause or original history. No deployment or
+external provider/tenant action followed this source-only proof.
 ## 18 October: shared epoch-2 caller-loss source integration
 
 The dedicated epoch caller-loss test now reuses the original live cgroup/owner/
