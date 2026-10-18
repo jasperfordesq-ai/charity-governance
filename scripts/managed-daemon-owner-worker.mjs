@@ -14,7 +14,7 @@ const no=stage=>{const error=new Error('Original daemon owner unresolved; preser
 /** Only fixed stage codes cross this stderr boundary. Never forward arbitrary
  * child messages, environment, command operands or provider response bodies. */
 export function parseManagedDaemonOwnerFailureStage(stderr){
- const matched=typeof stderr==='string'?/^Original daemon owner unresolved \[stage=([A-Z_]+)\]\n$/.exec(stderr):null;
+ const matched=typeof stderr==='string'&&stderr.length<=65536?/(?:^|\n)Original daemon owner unresolved \[stage=([A-Z_]+)\]\n/.exec(stderr):null;
  return matched&&failureStages.includes(matched[1])?matched[1]:undefined;
 }
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===keys.split(',').sort().join(',');

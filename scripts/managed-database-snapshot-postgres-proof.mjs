@@ -69,6 +69,10 @@ export async function proveManagedDatabaseSnapshot({admin,url,id,database,certif
     const path=join(output,'proof-job.request.json'),request=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):null;
     console.log('CONTAINED_SOURCE_FAILURE='+JSON.stringify({jobId:request?.jobId??null,requestRecorded:!!request,serviceRecorded:existsSync(join(output,'proof-job.service.json')),
      outcomeRecorded:existsSync(join(output,'proof-job.observation.json')),dumpPresent:existsSync(join(output,'common.dump')),reportPresent:existsSync(join(output,'common.json'))}));
+    const records=readdirSync(output),responses=records.filter(n=>/^proof-daemon\.\d{3}\.response\.json$/.test(n)).sort().slice(0,64).map(name=>{
+     const value=JSON.parse(readFileSync(join(output,name),'utf8'));return{sequence:Number.isSafeInteger(value.sequence)?value.sequence:null,status:Number.isSafeInteger(value.status)?value.status:null,transportError:value.transportError===true,signal:value.signal===true};
+    });
+    console.log('CONTAINED_DAEMON_FAILURE='+JSON.stringify({intents:records.filter(n=>/^proof-daemon\.\d{3}\.intent\.json$/.test(n)).length,responses}));
     if(sourceFailure)console.log('CONTAINED_HELPER_DIAGNOSTIC='+JSON.stringify(sourceFailure));
    }throw error;
   }

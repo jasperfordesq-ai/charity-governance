@@ -54,6 +54,14 @@ test('owner dispatcher replaces direct mutations only after original intent ACK 
   assert.deepEqual(order,fail?['HEADER','INTENT','OWNER']:['HEADER','INTENT','OWNER','RESPONSE','END']);
  }finally{f.close();}}
 });
+test('a later cleanup refusal retains only the original fixed owner failure stage and never dispatches again',()=>{
+ const f=fixture();let calls=0;try{
+  const j=createManagedDaemonRequestJournal(f.scope,{imageVolumes:()=>['/var/lib/postgresql/data'],dispatchOwner(){calls++;const error=new Error('private-owner-body');error.phase='RETAINED_PROBE';throw error;}});
+  assert.throws(()=>j.dispatch(runArgs(),()=>assert.fail('No direct fallback')));
+  for(const attempt of [()=>j.dispatch(['rm','-f','charitypilot-source-snapshot-123-456-abcdef12'],()=>assert.fail('No cleanup dispatch')),()=>j.finish()])assert.throws(attempt,error=>{assert.match(error.message,/stage=RETAINED_PROBE/);assert.doesNotMatch(error.message,/private-owner-body/);return true;});
+  assert.equal(calls,1);
+ }finally{f.close();}
+});
 
 test('idempotent daemon removal absence is distinct from an unknown create and is not a retry grant',()=>{
  const f=fixture();try{

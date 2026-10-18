@@ -51,7 +51,8 @@ test('unknown OWNER never executes; unknown OUTCOME withholds output and never r
 });
 test('only exact known owner failure stages cross stderr; raw child errors and caller secrets are discarded',async()=>{
  assert.equal(parseManagedDaemonOwnerFailureStage('Original daemon owner unresolved [stage=RETAINED_PROBE]\n'),'RETAINED_PROBE');
- for(const value of ['Original daemon owner unresolved [stage=PRIVATE_SECRET]\n','Original daemon owner unresolved [stage=RETAINED_PROBE]\nprivate-payload','private-payload',undefined])assert.equal(parseManagedDaemonOwnerFailureStage(value),undefined);
+ assert.equal(parseManagedDaemonOwnerFailureStage('systemd status\nOriginal daemon owner unresolved [stage=RETAINED_PROBE]\nprivate-payload'),'RETAINED_PROBE');
+ for(const value of ['Original daemon owner unresolved [stage=PRIVATE_SECRET]\n','private-payload',undefined])assert.equal(parseManagedDaemonOwnerFailureStage(value),undefined);
  await assert.rejects(runManagedDaemonOwner(fixture(),{identity(){throw new Error('private-identity-payload');}}),error=>{assert.equal(error.phase,'LIVE_IDENTITY');assert.doesNotMatch(error.message,/private-identity-payload/);return true;});
 });
 
