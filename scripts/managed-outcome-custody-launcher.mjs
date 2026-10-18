@@ -13,7 +13,7 @@ const safeEnvironment=source=>Object.fromEntries(['PATH','HOME','USER','LOGNAME'
 export function prepareOutcomeCustodyLaunch(raw,environment=process.env){
  const input=validateOutcomeCustodianInput(raw),unit=containmentUnit(input.receiverId);
  return{unit,environment:safeEnvironment(environment),input:Buffer.from(JSON.stringify(input)),args:[
-  '--user','--quiet','--pipe','--unit='+unit,'--service-type=exec','--property=KillMode=control-group','--property=Restart=no',
+  '--user','--quiet','--collect','--pipe','--unit='+unit,'--service-type=exec','--property=KillMode=control-group','--property=Restart=no',
   '--property=RuntimeMaxSec=120s','--property=TimeoutStopSec=2s','--property=NoNewPrivileges=yes','--property=MemoryMax=128M',
   '--property=TasksMax=32','--property=CPUQuota=50%','--property=UnsetEnvironment=NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH',
   process.execPath,fileURLToPath(new URL('./managed-outcome-custodian.mjs',import.meta.url)),'--stdin']};

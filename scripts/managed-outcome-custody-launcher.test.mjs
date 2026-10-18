@@ -10,7 +10,7 @@ test('private ticket remains on stdin and ambient provider/loader credentials ar
  const raw=input(),v=prepareOutcomeCustodyLaunch(raw,{PATH:'/fixed-bin',HOME:'/fixed-home',AWS_SECRET_ACCESS_KEY:'synthetic-secret',NODE_OPTIONS:'--import arbitrary',LD_PRELOAD:'arbitrary',DATABASE_URL:'private-db'});
  assert.deepEqual(JSON.parse(v.input.toString()),raw);assert.deepEqual(v.environment,{PATH:'/fixed-bin',HOME:'/fixed-home'});
  assert.equal(JSON.stringify(v.args).includes('private-stdin-marker'),false);assert.equal(JSON.stringify(v.args).includes('synthetic-secret'),false);
- assert.equal(v.args.at(-1),'--stdin');assert.match(v.args.at(-2),/managed-outcome-custodian\.mjs$/);
+ assert.ok(v.args.includes('--collect'));assert.equal(v.args.at(-1),'--stdin');assert.match(v.args.at(-2),/managed-outcome-custodian\.mjs$/);
  assert.ok(v.args.includes('--property=KillMode=control-group'));assert.ok(v.args.includes('--property=NoNewPrivileges=yes'));
  v.input.fill(0);
 });
