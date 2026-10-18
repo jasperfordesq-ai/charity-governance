@@ -23,7 +23,7 @@ function start(id,role,input){
  const done=terminal(child);let stderr='';child.stderr.on('data',b=>{stderr+=b;if(stderr.length>4096)child.stderr.destroy();});
  const ready=new Promise((yes,no)=>{let body='';const timer=setTimeout(()=>no(Error('Synthetic issuer readiness expired')),20000);
   child.stdout.on('data',b=>{body+=b;if(body.length>32768){clearTimeout(timer);no(Error('Synthetic issuer output exceeded bound'));return;}
-   if(body.endsWith('\n')){clearTimeout(timer);try{yes(JSON.parse(body));}catch{no(Error('Synthetic issuer readiness malformed'));}});
+   if(body.endsWith('\n')){clearTimeout(timer);try{yes(JSON.parse(body));}catch{no(Error('Synthetic issuer readiness malformed'));}}});
   void done.then(()=>{clearTimeout(timer);no(Error('Synthetic issuer exited: '+stderr));},no);
  });void ready.catch(()=>{});child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify(input));return{child,done,ready};
 }
