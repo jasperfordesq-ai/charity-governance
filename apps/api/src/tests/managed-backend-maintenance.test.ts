@@ -1096,3 +1096,14 @@ test('explicit read-role policy uses a distinct protocol10 plan and refuses lega
  assert.equal(f.calls.length,before);assert.equal(f.puts,0);
  await assert.rejects(coordinator.close());assert.equal(f.calls.includes('provider-suspend'),false);assert.equal(f.puts,0);
 });
+
+test('protocol10 original closure and bootstrap preserve the capture authorization in fresh read-only discovery',async()=>{
+ const f=fixture(),profile={configurationDigest:()=>hash('reviewed-read-role-registry'),assertMaintenanceScope:(_raw:unknown)=>{},assertStorageScope:(_raw:unknown)=>{}};
+ const coordinator=new ManagedBackendMaintenance(operation,f.provider as never,f.database as never,f.store,f.storage as never,f.proof as never,f.write as never,f.signedFixture.factory(),f.resumableFixture.factory(),f.signedTusFixture.factory(),f.s3Fixture.factory(),profile as never);
+ // Provision only this synthetic fixture's READY head for the distinct plan.
+ f.value.planDigest=coordinator.planDigest();assert.equal((await coordinator.close()).phase,'OBSERVED_CLOSED');
+ const journal=new ManagedCandidateCaptureJournal(config,credentials,f.client);await coordinator.publishCaptureBootstrap(journal);
+ const cold=new ManagedCandidateCaptureJournal(config,credentials,f.client),seen=await cold.discoverCurrentCandidates(f.store,1);
+ assert.equal(seen.plan.format,10);assert.equal('captureAuthorization' in seen.plan&&seen.plan.captureAuthorization,profile.configurationDigest());
+ assert.equal(seen.catalogue.records.length,0);assert.equal(seen.savedObservationAuthorizesExecution,false);assert.equal(seen.originalAcknowledgementReconstructed,false);
+});
