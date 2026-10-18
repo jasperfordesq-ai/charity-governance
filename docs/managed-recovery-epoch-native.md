@@ -140,6 +140,16 @@ these retained failure workspaces. Retention is not an original ACK, execution,
 cleanup or recovery-admission grant; remote synthetic custody is still ephemeral
 and this does not prove physical-host recovery.
 
+The full separate-custody kernel cohort passed at exact source
+`deb26613e1eaea1544b3ae93444fb3eb60552a35` in 322,447 ms. It verified eight retained
+source-failure workspaces as owned, real directories with mode 0700; a separate
+read-only inventory matched all eight original request files to that source SHA
+and verified their owner/mode 0600. Both existing genuine caller-SIGKILL cases,
+the original 22-candidate recovery matrix and the shared two-epoch cold-reader
+check also passed. Two older failed-job containers remained preserved; this is
+not a global empty-resource or cleanup-authority claim. The original intermittent
+failure cause remains unproven despite these passing runs.
+
 The original independent legacy/read-role/retired-control ACK-loss cohorts and
 genuine legacy/retired-control caller SIGKILL cases remain separate. Their
 22-current-candidate counts do not become multi-epoch evidence. The new shared

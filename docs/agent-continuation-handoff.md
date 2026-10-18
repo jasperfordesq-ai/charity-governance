@@ -1,3 +1,17 @@
+## 18 October: native loss, read-refusal and failure-evidence checks passed
+
+Exact source `5bc0cb00` passed the five-case original publication loss cohort,
+all six rollback/drift/configuration refusals and seven fresh positive comparisons.
+Exact source `deb26613` then passed the full separate-custody kernel cohort in
+322.4 seconds: eight protected failure workspaces, both existing caller-SIGKILL
+cases, the original recovery matrix and the two-epoch cold-reader check.
+See [the evidence contract](managed-recovery-epoch-native.md).
+Earlier intermittent daemon-accounting failures remain unexplained; passing runs
+are not a root-cause fix. Two older synthetic containers remain preserved pending
+proper reconciliation. No cleanup grant follows from their labels or saved logs.
+Genuine caller loss within the shared two-epoch path, actual provider/IAM/current
+authority and physical-host-loss acceptance remain open. No application deployment
+or external provider/tenant action followed these source-only checks.
 ## 18 October: native loss/read cohort passed; earlier daemon failures remain open
 
 The new native checkpoint/read probes passed all six refusals and seven fresh
