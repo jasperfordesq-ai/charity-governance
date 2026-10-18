@@ -1,8 +1,10 @@
-## 18 October: dedicated two-epoch native source integration
+## 18 October: dedicated two-epoch native proof passed
 
 The separate-custody native cohort now has an opt-in shared namespace, original
 publication receipts retained by its supervisor and a fresh anchored recovery
-reader. The integration must be executed before claiming native two-epoch proof.
+reader. Exact be05913b passed real TLS SQL/source/archive/kernel execution and
+cold recovery: two entries, epoch2, one current quarantined root, two original
+receipts. Existing genuine caller-loss cases also passed separately.
 See [fixture scope and remaining gates](managed-recovery-epoch-native.md).
 Existing caller-SIGKILL/ACK-loss cases remain separate. Actual provider IAM,
 current tenant authority and physical-host-loss acceptance remain open.

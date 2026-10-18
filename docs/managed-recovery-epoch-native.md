@@ -1,5 +1,26 @@
 # Native two-epoch synthetic recovery proof
 
+## Executed evidence, 18 October 2026
+
+Exact source `be05913b272409e45d755af120b3e865704269a3` passed the complete
+separate-custody cohort in 313,689 ms after a fresh API build. Both Linux bootstrap
+boundary tests also passed. The fresh reader checked 28 synthetic sessions and
+968 records, including eight archive roots. Its dedicated epoch observation
+verified two entries, latest epoch 2, two original publication receipts retained
+by the supervisor, and one current epoch-2 quarantined root. The first epoch's
+historical root was verified separately by the archive reader.
+
+The original 22 current-candidate observations remain distinct: six verified
+roots and sixteen unresolved outcomes. Both genuine caller-SIGKILL cases
+(formats 3 and 5) passed; they do not establish caller loss within the new shared
+two-epoch lifecycle. Selected proof containers and containment units were absent
+at completion. This bounded inventory is not a claim about every unattached
+volume, pending daemon request or kernel resource. The application checkout stayed
+at its deployed revision throughout the source-only proof. No tenant/provider
+policy, grant, purge, application deployment or admission followed the test.
+
+## Workflow
+
 The opt-in `CHARITYPILOT_TEST_SEPARATE_CUSTODY=1` cohort in
 `scripts/synthetic-custody-process.native.test.mjs` includes a dedicated shared
 namespace for two strictly increasing maintenance epochs. Run it only from an
@@ -47,8 +68,8 @@ genuine legacy/retired-control caller SIGKILL cases remain separate. Their
 22-current-candidate counts do not become multi-epoch evidence. The new shared
 namespace reports its own two-entry chain and one latest-epoch root.
 
-Source integration alone is not an executed native proof. Dated exact-source
-native results and failures belong in the ignored private handoff. New epoch
+The executed scope above is source-specific. Dated native results, receipts and
+failures belong in the ignored private handoff. New epoch
 entry/head ACK-loss, external-checkpoint rollback/version/list drift and genuine
 caller loss within the shared two-epoch path still require their own native
 execution. Modelled SDK tests cover those store boundaries separately.
