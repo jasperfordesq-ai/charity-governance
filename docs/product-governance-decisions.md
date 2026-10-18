@@ -1,3 +1,14 @@
+## 18 October: S3 epoch custody uses append-only head slots
+
+Separate reader/writer adapters now bind real S3 version IDs, owner/KMS/checksum
+metadata and canonical records. Logical head CAS conditionally creates the next
+immutable slot; it does not equate ETags with version IDs. The writer requires its
+own original entry ACK before a single head attempt. Cold observations cannot
+promote a saved pin into publication permission. Readback, pagination and drift
+checks are described in [the adapter contract](managed-recovery-epoch-s3.md).
+Signed-SDK tests use modelled cloud transport. Actual independent provider IAM,
+genesis/checkpoint custody, native multi-epoch loss and physical-host-loss/current
+authority acceptance remain open. No provider or tenant was activated.
 ## 18 October: explicit closed-epoch catalogue and anchored inspection
 
 A new read-only catalogue validates original closed-control/plan lineage against

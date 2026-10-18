@@ -1,5 +1,6 @@
 import {managedReadRoleConfigurationSchema} from '../services/managed-read-role-configuration.js';
 import {ManagedRecoveryEpochCatalogue,ManagedRecoveryEpochPublisher,managedRecoveryEpochSchemas as epochSchemas,type ManagedRecoveryEpochReader,type ManagedRecoveryEpochWriter} from '../services/managed-recovery-epoch-catalogue.js';
+import {S3ManagedRecoveryEpochReader,S3ManagedRecoveryEpochWriter} from '../services/managed-recovery-epoch-s3.js';
 import {ManagedCaptureControlRetirement} from '../services/managed-capture-control-retirement.js';
 import {managedPlanSchema} from '../services/managed-plan-bootstrap.js';
 import {retiredControlReadFixture} from './fixtures/retired-control-read.js';
@@ -1666,4 +1667,192 @@ test('epoch head drift and substituted reader configuration cannot yield a parti
  await assert.rejects(store.catalogue().observe());assert.equal(store.counts.headAttempts,1);
  store.state.onHeadRead=undefined;const reader={...store.reader,configurationDigest:()=>hash('substituted-store')};
  assert.throws(()=>new ManagedRecoveryEpochCatalogue(store.selected,reader));
+});
+
+async function sdkEpochFixture(){
+ const storage={installationId:config.installationId,bucket:archivedSdkConfig.bucket,accountId:archivedSdkConfig.accountId,kmsKeyArn:archivedSdkConfig.storageKeyArn};
+ const backend=archivedSdkBackend({...archivedSdkConfig,installationId:storage.installationId}),client=backend.s3();
+ const reader=()=>new S3ManagedRecoveryEpochReader(storage,credentials,client),writer=()=>new S3ManagedRecoveryEpochWriter(storage,credentials,client);
+ const genesis=epochStoreFixture().current.artifact,prefix='managed-maintenance/'+storage.installationId+'/recovery-epochs/';
+ // Explicit synthetic original provisioning, outside the adapter/publication API.
+ await client.send(new PutObjectCommand({Bucket:storage.bucket,ExpectedBucketOwner:storage.accountId,Key:prefix+'heads/00000.json',IfNoneMatch:'*',Body:genesis.body,
+  ContentType:'application/json',ServerSideEncryption:'aws:kms',SSEKMSKeyId:storage.kmsKeyArn,BucketKeyEnabled:false,ChecksumSHA256:Buffer.from(genesis.sha256,'hex').toString('base64')}));
+ const selected={installationId:storage.installationId,storeConfigurationDigest:reader().configurationDigest(),genesisHeadSha256:genesis.sha256,trustedCheckpoint:{sequence:0,sha256:genesis.sha256}};
+ const catalogue=()=>new ManagedRecoveryEpochCatalogue(selected,reader()),publisher=()=>new ManagedRecoveryEpochPublisher(catalogue(),reader(),writer());
+ const coldClients:S3Client[]=[];
+ return{storage,backend,client,prefix,reader,writer,selected,catalogue,publisher,
+  freshCatalogue(){const client=backend.s3();coldClients.push(client);return new ManagedRecoveryEpochCatalogue(selected,new S3ManagedRecoveryEpochReader(storage,credentials,client));},
+  async close(){client.destroy();for(const client of coldClients)client.destroy();backend.close();}};
+}
+
+test('actual signed SDK epoch adapter composes two closed epochs, read-only cold discovery and anchored format5 recovery',async()=>{
+ const x=await readRoleCommonParentFixture(true);await x.coordinator.captureRetiredControlCommonQuarantined(x.request,x.journal,x.archive as never,x.source);
+ const sdk=await sdkEpochFixture();
+ try{
+  assert.equal(JSON.stringify(sdk.reader()),'{}');assert.equal(JSON.stringify(sdk.writer()),'{}');assert.equal('createEntry' in sdk.reader(),false);
+  const h=await sdk.catalogue().observe();await sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archive.configurationDigest(),h.head.revision);
+  const anchored=await x.journal.inspectAnchoredCurrentRecovery(sdk.catalogue(),x.f.store,x.archive as never);
+  assert.equal(anchored.epochCatalogueBoundAtReadBoundaries,true);assert.equal(anchored.currentTenantAuthorityVerified,false);
+  const second=await closedEpochFixture(2);await sdk.publisher().publishClosedEpoch(second.f.store,second.journal,second.archiveDigest,(await sdk.catalogue().observe()).head.revision);
+  const writes=sdk.backend.writes,generates=sdk.backend.generates,observed=await sdk.freshCatalogue().observe();assert.equal(observed.entryCount,2);assert.equal(observed.latest!.plan.maintenanceEpoch,2);
+  assert.equal(sdk.backend.objects.size,5);assert.equal(sdk.backend.writes,writes);assert.equal(sdk.backend.generates,generates);assert.equal(generates,0);
+  await assert.rejects(x.journal.inspectAnchoredCurrentRecovery(sdk.catalogue(),x.f.store,x.archive as never));
+  assert.equal(sdk.backend.writes,writes);assert.deepEqual([...sdk.backend.objects.keys()].sort(),[sdk.prefix+'heads/00000.json',sdk.prefix+'heads/00001.json',sdk.prefix+'heads/00002.json',sdk.prefix+'entries/00001.json',sdk.prefix+'entries/00002.json'].sort());
+ }finally{await sdk.close();}
+});
+
+test('SDK epoch adapter lost entry/head PUT ACKs preserve originals and refuse fresh publication replay',async()=>{
+ for(const loss of ['entry','head']){
+  const sdk=await sdkEpochFixture(),x=await closedEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler);
+  let lost=false;const target=sdk.prefix+(loss==='entry'?'entries':'heads')+'/00001.json';
+  mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{const result=await original(...args);if(!lost&&args[0].method==='PUT'&&args[0].path==='/'+target){lost=true;result.response.body?.destroy();throw new Error('PRIVATE stored SDK ACK lost');}return result;});
+  try{
+   await assert.rejects(sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,(await sdk.catalogue().observe()).head.revision),e=>e instanceof Error&&!e.message.includes('PRIVATE'));
+   assert.equal(lost,true);const cold=await sdk.catalogue().observe();assert.equal(cold.entryCount,loss==='head'?1:0);assert.equal(cold.originalAcknowledgementReconstructed,false);
+   if(loss==='entry'){
+    const row=sdk.backend.objects.get(target)!,head=epochSchemas.head.parse({format:1,kind:'MANAGED_RECOVERY_EPOCH_HEAD_V1',installationId:sdk.storage.installationId,sequence:1,
+     entryPin:{kind:'BASELINE',versionId:row.version,sha256:hash(row.body.toString()),byteLength:row.body.length},publicationId:randomUUID()});
+    const body=JSON.stringify(head),writes=sdk.backend.writes,reads=sdk.backend.reads;
+    await assert.rejects(sdk.writer().replaceHead(cold.head.revision,{body,sha256:hash(body)},new AbortController().signal));
+    assert.equal(sdk.backend.writes,writes);assert.equal(sdk.backend.reads,reads);
+   }
+   await assert.rejects(sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,cold.head.revision));
+   assert.equal(sdk.backend.objects.size,loss==='head'?3:2);assert.equal(sdk.backend.generates,0);
+  }finally{await sdk.close();}
+ }
+});
+
+test('SDK epoch object metadata, byte drift and malformed listings refuse without writes or data keys',async()=>{
+ for(const mode of ['version','kms','checksum','checksum-type','size','bucket-key','delete-marker','encoding','noncanonical','scope','gap']){
+  const sdk=await sdkEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler);
+  mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{
+   const result=await original(...args),request=args[0],headers=result.response.headers;
+   if(request.query['list-type']==='2'&&mode==='scope'){
+    const body='<ListBucketResult><Name>'+sdk.storage.bucket+'</Name><Prefix>other/</Prefix><MaxKeys>1000</MaxKeys><KeyCount>0</KeyCount><IsTruncated>false</IsTruncated></ListBucketResult>';
+    result.response.body?.destroy();result.response.body=Readable.from([Buffer.from(body)]);return result;
+   }
+   if(request.method==='GET'&&request.query['list-type']!=='2'){
+    if(mode==='version')headers['x-amz-version-id']='null';
+    if(mode==='kms')headers['x-amz-server-side-encryption-aws-kms-key-id']=sdk.storage.kmsKeyArn.replace(/key\/.+$/,'key/99999999-9999-4999-8999-999999999999');
+    if(mode==='checksum')headers['x-amz-checksum-sha256']=Buffer.alloc(32).toString('base64');
+    if(mode==='checksum-type')headers['x-amz-checksum-type']='COMPOSITE';
+    if(mode==='size')headers['content-length']='65537';
+    if(mode==='bucket-key')headers['x-amz-server-side-encryption-bucket-key-enabled']='true';
+    if(mode==='delete-marker')headers['x-amz-delete-marker']='true';
+    if(mode==='encoding')headers['content-encoding']='gzip';
+    if(mode==='noncanonical'){
+     const bytes=Buffer.from(' '+epochStoreFixture().current.artifact.body);result.response.body?.destroy();result.response.body=Readable.from([bytes]);
+     headers['content-length']=String(bytes.length);headers['x-amz-checksum-sha256']=Buffer.from(hash(bytes.toString()),'hex').toString('base64');
+    }
+   }
+   return result;
+  });
+  if(mode==='gap'){const row=sdk.backend.objects.get(sdk.prefix+'heads/00000.json')!;sdk.backend.objects.delete(sdk.prefix+'heads/00000.json');sdk.backend.objects.set(sdk.prefix+'heads/00001.json',row);}
+  try{const writes=sdk.backend.writes;await assert.rejects(sdk.catalogue().observe(),'metadata mode='+mode);assert.equal(sdk.backend.writes,writes);assert.equal(sdk.backend.generates,0);}finally{await sdk.close();}
+ }
+});
+
+test('SDK epoch reader distinguishes identical ETags/bodies from a changed physical version at the last boundary',async()=>{
+ const sdk=await sdkEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler);let currentReads=0;
+ mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{const result=await original(...args);
+  if(args[0].method==='GET'&&args[0].query['list-type']!=='2'&&!args[0].query.versionId&&++currentReads===2)result.response.headers['x-amz-version-id']='different-real-version-same-etag-and-bytes';return result;});
+ try{const writes=sdk.backend.writes;await assert.rejects(sdk.catalogue().observe());assert.equal(currentReads,2);assert.equal(sdk.backend.writes,writes);}finally{await sdk.close();}
+});
+
+test('SDK epoch cancellation discards a late GET response and starts no exact readback or publication',async()=>{
+ const sdk=await sdkEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler),abort=new AbortController();
+ let release!:()=>void,started!:()=>void,gets=0;const entered=new Promise<void>(resolve=>{started=resolve;});
+ mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{const result=await original(...args);
+  if(args[0].method==='GET'&&args[0].query['list-type']!=='2'){gets++;started();await new Promise<void>(resolve=>{release=resolve;});}return result;});
+ try{const writes=sdk.backend.writes,pending=sdk.reader().readHead(abort.signal);await entered;abort.abort();await assert.rejects(pending);release();
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(gets,1);assert.equal(sdk.backend.writes,writes);assert.equal(sdk.backend.generates,0);
+ }finally{await sdk.close();}
+});
+
+test('SDK epoch head pagination is complete and repeated tokens or listing drift cannot yield a head',async()=>{
+ for(const mode of ['complete','repeated-token','drift']){
+  const sdk=await sdkEpochFixture(),genesis=sdk.backend.objects.get(sdk.prefix+'heads/00000.json')!;
+  // Synthetic historical slots only; this is list geometry, not original ACK proof.
+  for(let n=1;n<=1000;n++){
+   const body=Buffer.from(JSON.stringify(epochSchemas.head.parse({format:1,kind:'MANAGED_RECOVERY_EPOCH_HEAD_V1',installationId:sdk.storage.installationId,sequence:n,
+    entryPin:{kind:'BASELINE',versionId:'historical-entry-'+n,sha256:hash('entry-'+n),byteLength:1},publicationId:randomUUID()})));
+   sdk.backend.objects.set(sdk.prefix+'heads/'+String(n).padStart(5,'0')+'.json',{...genesis,body,version:'historical-head-'+n,checksum:Buffer.from(hash(body.toString()),'hex').toString('base64')});
+  }
+  const handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler);let listings=0;
+  mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{
+   if(args[0].query['list-type']==='2'&&++listings===3&&mode==='drift')sdk.backend.objects.delete(sdk.prefix+'heads/01000.json');
+   const result=await original(...args);
+   if(mode==='repeated-token'&&args[0].query['continuation-token']){
+    const chunks:Buffer[]=[];for await(const chunk of result.response.body)chunks.push(Buffer.from(chunk));
+    const xml=Buffer.concat(chunks).toString().replace('<IsTruncated>false</IsTruncated>','<IsTruncated>true</IsTruncated>').replace('</ListBucketResult>','<NextContinuationToken>1000</NextContinuationToken></ListBucketResult>');
+    result.response.body=Readable.from([Buffer.from(xml)]);
+   }return result;
+  });
+  try{const writes=sdk.backend.writes;
+   if(mode==='complete'){const observed=await sdk.reader().readHead(new AbortController().signal);assert.equal(JSON.parse(observed.artifact.body).sequence,1000);assert.equal(listings,4);}
+   else await assert.rejects(sdk.reader().readHead(new AbortController().signal));
+   assert.equal(sdk.backend.writes,writes);assert.equal(sdk.backend.generates,0);
+  }finally{await sdk.close();}
+ }
+});
+
+test('concurrent signed SDK epoch publishers have one original winner and no overwritten slots',async()=>{
+ const sdk=await sdkEpochFixture(),x=await closedEpochFixture();
+ try{const revision=(await sdk.catalogue().observe()).head.revision;
+  const results=await Promise.allSettled([sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision),sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected').length,1);
+  assert.equal(sdk.backend.objects.size,3);assert.equal((await sdk.catalogue().observe()).entryCount,1);assert.equal(sdk.backend.generates,0);
+ }finally{await sdk.close();}
+});
+
+test('SDK epoch entry cancellation after provider acceptance cannot publish a head after late ACK',async()=>{
+ const sdk=await sdkEpochFixture(),x=await closedEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler),abort=new AbortController();
+ let release!:()=>void,started!:()=>void;const accepted=new Promise<void>(resolve=>{started=resolve;});
+ mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{const result=await original(...args);
+  if(args[0].method==='PUT'&&args[0].path.endsWith('/entries/00001.json')){started();await new Promise<void>(resolve=>{release=resolve;});}return result;});
+ try{const revision=(await sdk.catalogue().observe()).head.revision,pending=sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision,abort.signal);
+  await accepted;abort.abort();await assert.rejects(pending);release();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(sdk.backend.objects.size,2);assert.equal(sdk.backend.objects.has(sdk.prefix+'heads/00001.json'),false);assert.equal((await sdk.catalogue().observe()).latest,null);
+ }finally{await sdk.close();}
+});
+
+test('SDK epoch exact readback ACK loss never recovers original publication permission',async()=>{
+ for(const kind of ['entries','heads']){
+  const sdk=await sdkEpochFixture(),x=await closedEpochFixture(),handler=await sdk.client.config.requestHandler,original=handler.handle.bind(handler);let lost=false;
+  mock.method(handler,'handle',async(...args:Parameters<typeof original>)=>{const result=await original(...args);
+   if(!lost&&args[0].method==='GET'&&args[0].query.versionId&&args[0].path.endsWith('/'+kind+'/00001.json')){lost=true;result.response.body?.destroy();throw new Error('PRIVATE exact readback ACK lost');}return result;});
+  try{const revision=(await sdk.catalogue().observe()).head.revision;
+   await assert.rejects(sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,revision));assert.equal(lost,true);
+   const cold=await sdk.catalogue().observe();assert.equal(cold.entryCount,kind==='heads'?1:0);assert.equal(cold.originalAcknowledgementReconstructed,false);
+   await assert.rejects(sdk.publisher().publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,cold.head.revision));
+   assert.equal(sdk.backend.objects.size,kind==='heads'?3:2);assert.equal(sdk.backend.generates,0);
+  }finally{await sdk.close();}
+ }
+});
+
+test('SDK epoch configuration refuses unsupported bucket families and missing genesis never becomes an empty initialisation',async()=>{
+ const sdk=await sdkEpochFixture();
+ try{
+  const reads=sdk.backend.reads,writes=sdk.backend.writes;
+  for(const bucket of ['synthetic--zone--x-s3','synthetic--ol-s3','synthetic-s3alias','synthetic--table-s3'])assert.throws(()=>new S3ManagedRecoveryEpochReader({...sdk.storage,bucket},credentials,sdk.client));
+  assert.throws(()=>new S3ManagedRecoveryEpochReader({...sdk.storage,kmsKeyArn:sdk.storage.kmsKeyArn.replace(/key\/.+$/,'key/'+'-'.repeat(36))},credentials,sdk.client));
+  assert.throws(()=>new S3ManagedRecoveryEpochReader({...sdk.storage,endpoint:'https://untrusted.invalid'},credentials,sdk.client));
+  assert.equal(sdk.backend.reads,reads);assert.equal(sdk.backend.writes,writes);
+  sdk.backend.objects.delete(sdk.prefix+'heads/00000.json');await assert.rejects(sdk.reader().readHead(new AbortController().signal));
+  assert.equal(sdk.backend.objects.size,0);assert.equal(sdk.backend.writes,writes);
+ }finally{await sdk.close();}
+});
+
+test('SDK epoch head publication copies its validated bytes before awaited reads',async()=>{
+ const sdk=await sdkEpochFixture(),x=await closedEpochFixture(),original=sdk.writer();let originalBody='';
+ const writer:ManagedRecoveryEpochWriter={configurationDigest:()=>original.configurationDigest(),createEntry:(...args)=>original.createEntry(...args),
+  replaceHead:async(revision,artifact,signal)=>{
+   originalBody=artifact.body;const pending=original.replaceHead(revision,artifact,signal);
+   artifact.body=JSON.stringify({...JSON.parse(artifact.body),publicationId:randomUUID()});artifact.sha256=hash(artifact.body);return pending;
+  }};
+ try{const publisher=new ManagedRecoveryEpochPublisher(sdk.catalogue(),sdk.reader(),writer);
+  await assert.rejects(publisher.publishClosedEpoch(x.f.store,x.journal,x.archiveDigest,(await sdk.catalogue().observe()).head.revision));
+  assert.ok(originalBody);assert.equal(sdk.backend.objects.get(sdk.prefix+'heads/00001.json')!.body.toString(),originalBody);
+  assert.equal((await sdk.freshCatalogue().observe()).originalAcknowledgementReconstructed,false);
+ }finally{await sdk.close();}
 });

@@ -85,3 +85,7 @@ custody and deletion/lifecycle/rollback exclusion; native multi-epoch/process lo
 composition; current tenant authority and actual source-host-off, quarantined
 application replacement and guarded reopening proof. No tenant or route opts in
 automatically. Exact source/test/CI/VM state belongs in the private checkpoint.
+
+## S3 adapter update — 18 October
+
+The [S3 adapter](managed-recovery-epoch-s3.md) now supplies explicit read/write capabilities using append-only head slots and original ACK custody. This supersedes the missing-adapter implementation note above; actual provider policy/independence and native multi-epoch/host-loss acceptance remain open.
