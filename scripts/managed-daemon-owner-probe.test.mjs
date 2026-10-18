@@ -36,6 +36,15 @@ test('owner outcome stored after source closure with unknown ACK stays discovera
  console.log('ORIGINAL_OWNER_OUTCOME_ACK_LOSS='+JSON.stringify(value));
 });
 
+test('stored owner outcome with lost original wire ACK stays readable after source closure without retry',{
+ skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_DAEMON_OWNER!=='1',timeout:45000
+},async()=>{
+ const value=await probeIndependentDaemonOwner('outcome-wire-ack-lost');assert.equal(value.ownerOutcomeStored,true);
+ assert.equal(value.originalOutcomeAcknowledgementObserved,false);assert.equal(value.sourceContextClosedBeforeOutcome,true);
+ assert.equal(value.ownerOutcomeThroughPrivateChannel,true);assert.equal(value.pendingRequestResolved,false);assert.equal(value.actionAuthorized,false);
+ console.log('ORIGINAL_OWNER_OUTCOME_WIRE_ACK_LOSS='+JSON.stringify(value));
+});
+
 test('stored OWNER binding with lost original channel ACK cannot release the independent service',{
  skip:process.platform!=='linux'||process.env.CHARITYPILOT_TEST_DAEMON_OWNER!=='1',timeout:45000
 },async()=>{

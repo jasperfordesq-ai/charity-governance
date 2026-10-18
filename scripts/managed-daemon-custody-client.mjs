@@ -17,7 +17,7 @@ export async function requestManagedDaemonCustody(v){
   ||descriptor.path!==join(root,'gate.sock')||descriptor.jobId!==v.jobId||descriptor.inputDigest!==v.inputDigest||descriptor.sourceSha!==v.sourceSha||!(/^[a-f0-9]{64}$/).test(descriptor.capability))throw refuse();
  const s=lstatSync(descriptor.path);if(!s.isSocket()||s.uid!==process.getuid()||(s.mode&0o777)!==0o600)throw refuse();
  const a=v.artifact;if(!a||typeof a.body!=='string'||Buffer.byteLength(a.body)>8192||a.byteLength!==Buffer.byteLength(a.body)||createHash('sha256').update(a.body).digest('hex')!==a.sha256)throw refuse();
- if(!['HEADER','INTENT','RESPONSE','END','OWNER'].includes(v.kind))throw refuse();
+ if(!['HEADER','INTENT','RESPONSE','END','OWNER','OUTCOME'].includes(v.kind))throw refuse();
  const ordinal=['HEADER','END'].includes(v.kind)?0:JSON.parse(a.body).sequence,nonce=randomBytes(32).toString('hex');
  const body=JSON.stringify({kind:v.kind,jobId:v.jobId,inputDigest:v.inputDigest,sourceSha:v.sourceSha,nonce,capability:descriptor.capability,artifact:a})+'\n';if(Buffer.byteLength(body)>32768)throw refuse();
  await new Promise((yes,no)=>{

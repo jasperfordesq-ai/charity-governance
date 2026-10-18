@@ -1,3 +1,12 @@
+## 18 October: ordered owner-outcome custody transport
+
+The fixed private channel/client supports original OWNER-bound OUTCOME ACKs and
+parent-selected outcome-before-response accounting. Wrong/repeated owner pins,
+input substitution and unknown ACK refuse; a saved result grants no replay or
+queue resolution. The synthetic live probe joins this to the original writer
+after source-context closure. Product owner-worker activation and independent
+provider/host-loss proof remain open. See [request owner](managed-independent-request-owner.md).
+
 ## 17 October: inactive fixed owner worker component
 
 The bounded stdin request-owner component and strict original argument/storage

@@ -41,7 +41,7 @@ test('separate synchronous source client waits for original custody before dispa
    assert.equal(existsSync(join(root,'synthetic-dispatched.txt')),mode==='success'||mode.startsWith('response-')||mode.startsWith('end-'));
    assert.equal(responses,['success','response-refused','response-ACK-lost','end-refused','end-ACK-lost'].includes(mode)?1:0);
    assert.equal(ends,['success','end-refused','end-ACK-lost'].includes(mode)?1:0);
-   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,requireIndependentOwner:false,endAcknowledged:true,failed:false,inFlight:0});
+   if(mode==='success')assert.deepEqual(gate.snapshot(),{headerAcknowledged:true,intentCount:1,responseCount:1,ownerCount:0,ownerOutcomeCount:0,requireIndependentOwner:false,requireIndependentOutcome:false,endAcknowledged:true,failed:false,inFlight:0});
   }finally{await gate?.close();assert.equal(dirname(root),resolve(tmpdir()));assert.match(basename(root),/^charitypilot-daemon-barrier-test-[A-Za-z0-9]{6}$/);rmSync(root,{recursive:true,force:true});}
  }
 });
@@ -76,6 +76,36 @@ test('owner-required accounting refuses a client response without an original OW
   assert.equal(responses,0);assert.equal(gate.snapshot().failed,true);
  }finally{await gate.close();}
 });
+test('OUTCOME is original-owner-bound, once-only and required before opted-in response accounting',{skip:!enabled,timeout:30000},async()=>{
+ for(const mode of ['success','no-owner','wrong-owner','wrong-input','response-first','duplicate','refused','ACK-lost','wrong-ack-pin']){
+  const jobId=randomUUID(),inputDigest='b'.repeat(64),sourceSha='1'.repeat(40),ownerInputDigest='c'.repeat(64);let calls=0,responses=0,gate;
+  const record=value=>{const body=JSON.stringify(value);return{body,sha256:createHash('sha256').update(body).digest('hex'),byteLength:Buffer.byteLength(body)};};
+  const owner=record({kind:'MANAGED_DAEMON_REQUEST_OWNER_V1',jobId,sequence:1,identity:{inputDigest:ownerInputDigest}});
+  const outcome=record({kind:'MANAGED_DAEMON_OWNER_OUTCOME_V1',jobId,sequence:1,
+   ownerPin:{sha256:mode==='wrong-owner'?'0'.repeat(64):owner.sha256,byteLength:owner.byteLength},ownerInputDigest:mode==='wrong-input'?'0'.repeat(64):ownerInputDigest});
+  gate=await createManagedDaemonCustodyChannel({jobId,inputDigest,sourceSha,requireIndependentOwner:true,requireIndependentOutcome:true,
+   onHeader:async()=>saved(),onIntent:async()=>saved(),onOwner:async()=>({...saved(),independentOwnerDispatchVerified:false}),
+   onOwnerOutcome:async()=>{calls++;if(mode==='refused')throw new Error('synthetic owner outcome refused');if(mode==='ACK-lost')void gate.close();
+    return{...saved(mode==='wrong-ack-pin'?'BASELINE':'OBSERVATION'),independentOwnerDispatchVerified:false};},
+   onResponse:async()=>{responses++;return saved('OBSERVATION');},onEnd:async()=>saved('OBSERVATION')});
+  const send=(kind,artifact)=>requestManagedDaemonCustody({descriptorPath:gate.descriptorPath,kind,jobId,inputDigest,sourceSha,artifact});
+  const response=record({kind:'MANAGED_DAEMON_CLIENT_RESPONSE_V1',jobId,sequence:1});
+  try{
+   await send('HEADER',record({kind:'MANAGED_DAEMON_REQUEST_HEADER_V2',jobId,inputDigest}));
+   await send('INTENT',record({kind:'MANAGED_DAEMON_REQUEST_INTENT_V2',jobId,sequence:1}));
+   if(mode!=='no-owner')await send('OWNER',owner);
+   if(mode==='response-first')await assert.rejects(send('RESPONSE',response));
+   else if(['success','duplicate'].includes(mode)){
+    await send('OUTCOME',outcome);assert.equal(gate.snapshot().ownerOutcomeCount,1);
+    if(mode==='duplicate')await assert.rejects(send('OUTCOME',outcome));
+    else{await send('RESPONSE',response);assert.equal(responses,1);}
+   }else await assert.rejects(send('OUTCOME',outcome));
+   assert.equal(calls,['success','duplicate','refused','ACK-lost','wrong-ack-pin'].includes(mode)?1:0);
+   assert.equal(gate.snapshot().requireIndependentOutcome,true);assert.equal(gate.snapshot().failed,mode!=='success');
+  }finally{await gate.close();}
+ }
+});
+
 test('bound worker input refuses missing custody descriptor before any helper mutation',{timeout:15000},async()=>{
  const result=await child(fileURLToPath(new URL('./managed-proof-worker.mjs',import.meta.url)),{args:['prove-restore','--output-dir','/synthetic-not-created'],snapshot:{synthetic:true},jobId:randomUUID(),daemonCustodyRequired:true});
  assert.equal(result.code,1);assert.equal(result.body.includes('MANAGED_IMPORTED_PROOF_WORKER_V1'),false);

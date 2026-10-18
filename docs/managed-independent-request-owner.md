@@ -1,5 +1,23 @@
 # Independent daemon request owner acceptance
 
+## 18 October: ordered owner-outcome transport
+
+The existing private channel supports a nonce-bound OUTCOME after the original
+OWNER acknowledgement and before the source response. It checks the original
+local owner byte pin and input digest, and accepts only one outcome for that
+ordinal. The original parent may require an acknowledged outcome before source
+response accounting; packets cannot choose or downgrade this requirement.
+The callback must return an observation pin with no dispatch, queue-resolution
+or action authority. Failed or unknown ACK consumes the channel. Fresh saved
+reads do not recreate it.
+
+The synthetic service probe now sends outcomes through this channel after source
+context closure, including both SDK readback-ACK loss and original wire-ACK loss
+after storage. The test parent still holds the writer and credentials. The fixed
+product worker remains source-disabled: its actual service adapter, exact source
+binding, source-parent-loss outcome transfer and provider/host-loss proof are
+separate unfinished integration gates. Exact execution results are private.
+
 ## Inactive fixed worker component
 
 The bounded stdin worker and original-intent/argument/storage correlation are

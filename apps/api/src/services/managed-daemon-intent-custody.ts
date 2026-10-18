@@ -162,7 +162,7 @@ export class ManagedDaemonIntentCustody{
     if(revoked||performance.now()>=expires)throw failure();
     const saved=await store.publishObservation({body,sha256:candidateHash(body)},pin,signal);
     if(revoked||performance.now()>=expires)throw failure();
-    return{pin:saved,originalAcknowledgementReconstructed:false as const,pendingRequestResolved:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
+    return{pin:saved,originalAcknowledgementReconstructed:false as const,savedEvidenceAuthorizesDispatch:false as const,pendingRequestResolved:false as const,independentOwnerDispatchVerified:false as const,actionAuthorized:false as const};
    }catch{this.failed=true;throw failure();}
   }});
  }
