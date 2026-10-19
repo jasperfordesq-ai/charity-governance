@@ -1,3 +1,33 @@
+## 19 October: storage choice and provider selection are separate
+
+For an organisation choosing Confluence, deliberately selected governance
+documents and evidence can remain authoritative there. CharityPilot retains
+structured governance records, permissions, approvals, audit history and snapshots.
+Reference and monitor selected pages/versions; do not assume every source record
+must be copied to Confluence. Sensitive categories require their own assessment.
+Confluence stays optional for other organisations. A full Forge rewrite is not
+required by this architecture.
+
+No application-hosting or database supplier is selected by these requirements.
+The existing Render/Supabase-specific compiler, bootstrap and recovery adapters
+are conditional engineering prototypes, not procurement decisions or universal
+product dependencies. A Supabase login is not a prerequisite for continuing
+provider-independent product work, Confluence acceptance preparation, residency
+mapping or hosting/recovery comparison.
+
+Select infrastructure against reviewed data flows, actual residency coverage,
+tenant isolation, operational control, recovery capability and total operating
+cost. Assess application/database, documents, credentials, logs and recovery
+copies separately. A supplier's content residency setting does not attest the
+location of CharityPilot's external application data or every connected service.
+Current source: [Atlassian residency scope](https://support.atlassian.com/security-and-access-policies/docs/understand-data-residency/).
+
+The complete backend and independent usable recovery/host-loss proof remain
+required outcomes. Keep useful provider-specific work isolated until provider
+fit is established. Actual account access, spend, legal acceptance, new grants
+and destructive provider actions require their specific authority at execution.
+One unavailable candidate account must not block unrelated authorised work.
+
 ## 18 October: current recovery cannot silently fall back to a historical epoch
 
 The original externally retained checkpoint governs epoch-chain discovery.

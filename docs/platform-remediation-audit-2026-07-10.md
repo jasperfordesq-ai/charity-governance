@@ -1,3 +1,13 @@
+## 19 October: remove candidate-provider dependency from continuation
+
+A particular hosting/database account is not an audit requirement. Follow the
+latest [product decisions](product-governance-decisions.md) for organisation-level
+Confluence choice and separate hosting selection. Preserve provider-specific
+prototype evidence without treating its supplier choices as required architecture.
+Provider-independent implementation/acceptance preparation can proceed. Actual
+managed backend, independent custody and physical-host-loss proof remain open;
+neither a plan nor another local test closes those requirements.
+
 ## 18 October: explicit managed bootstrap creation with original receipts
 
 A bounded creation executor now fences a reviewed bootstrap plan with an exclusive

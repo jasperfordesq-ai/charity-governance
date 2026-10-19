@@ -1,3 +1,16 @@
+## 19 October: provider-independent continuation
+
+Provider selection remains open. Do not make a candidate Supabase account a
+blanket continuation dependency. Follow the latest
+[product decisions](product-governance-decisions.md): Confluence can be an
+organisation's selected authoritative document repository while CharityPilot
+retains structured governance authority; other organisations keep storage choice.
+Existing provider-specific prototypes are conditional, not selected infrastructure.
+Continue demonstrated local integration gaps, residency/data-flow review and
+costed hosting/recovery comparison. Preserve actual provider/host-loss proof and
+execution authority as separate outstanding gates. Current detailed continuation
+and corrected goal wording are retained in the ignored private handoff.
+
 ## 18 October: explicit managed bootstrap creation with original receipts
 
 A bounded creation executor now fences a reviewed bootstrap plan with an exclusive
