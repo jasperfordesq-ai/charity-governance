@@ -1,3 +1,12 @@
+## 19 October: source-instruction compatibility foundation in progress
+
+The next increment adds internal instruction/withdrawal services and typed audit
+readers, with database identity/append-only/recovery guards. It is not exposed
+through an HTTP creation route or form. Deploy compatible enum/readers before
+enabling any writes. Follow-up reporting, routes and the synthetic UI journey
+remain outstanding. See `confluence-source-instructions.md`; do not treat this
+foundation as a completed source-erasure workflow or provider permission.
+
 ## 19 October: reference-only registration released and recovery checked
 
 Activation commit `dc7f3ef0` passed exact-source CI and 258 first-attempt browser

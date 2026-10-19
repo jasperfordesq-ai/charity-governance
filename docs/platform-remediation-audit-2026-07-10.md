@@ -1,3 +1,12 @@
+## 19 October: original source-instruction foundation under verification
+
+Internal Owner decision/withdrawal records reuse append-only audit history,
+without a fabricated publication or deletion job. New audit enum readers must
+be deployed before creation is exposed. Native upgrade/tenant/withdrawal/freeze
+and restore tests are part of the retention gate. This increment does not expose
+the dashboard workflow: linked follow-up reports, routes, UI and their complete
+synthetic verification remain open, alongside actual provider lifecycle proof.
+
 ## 19 October: reference-only activation release verified
 
 Exact activation source `dc7f3ef0` passed canonical CI and 258 first-attempt

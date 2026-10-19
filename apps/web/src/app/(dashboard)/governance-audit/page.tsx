@@ -155,6 +155,9 @@ function eventDescription(event: AuditEvent, feed: string): string {
       CONFLUENCE_CITATION_REVIEW_RECORDED: 'Cited-page review report recorded',
       CONFLUENCE_SOURCE_REGISTERED: 'External Confluence source registered',
       CONFLUENCE_SOURCE_REMOVED: 'External Confluence reference removed',
+      CONFLUENCE_SOURCE_INSTRUCTION_RECORDED: 'Confluence source instruction recorded',
+      CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN: 'Confluence source instruction withdrawn',
+      CONFLUENCE_SOURCE_FOLLOWUP_RECORDED: 'Confluence source instruction follow-up recorded',
     }[String(event.type)] ?? 'Integration event';
     return `${label} · event ${String(event.id ?? 'unknown')}`;
   }

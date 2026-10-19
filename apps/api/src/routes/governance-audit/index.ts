@@ -58,6 +58,8 @@ const integrationEventTypes = [
   'CONFLUENCE_ERASURE_REVIEW_RECORDED',
   'CONFLUENCE_CITATION_REVIEW_RECORDED',
   'CONFLUENCE_SOURCE_REGISTERED', 'CONFLUENCE_SOURCE_REMOVED',
+  'CONFLUENCE_SOURCE_INSTRUCTION_RECORDED', 'CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN',
+  'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED',
 ] as const;
 
 function feedConfig(app: FastifyInstance, feed: Exclude<z.infer<typeof feedSchema>, 'data-request-links'>): FeedConfig {

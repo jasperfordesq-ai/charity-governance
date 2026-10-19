@@ -27,7 +27,7 @@
     "test:managed-web-tls": "node --test scripts/managed-web-tls.test.mjs",
     "test:managed-tls-delivery": "node --test scripts/managed-tls-delivery.test.mjs",
     "test:managed-api-build-pin": "node --test scripts/managed-api-build-pin.test.mjs",
-    "test:retention-policy": "node --test --test-concurrency=1 scripts/retention-calendar-sql.test.mjs scripts/retention-policy-migration.test.mjs scripts/recovery-bound-policy-migration.test.mjs scripts/confluence-retained-copy-review-migration.test.mjs scripts/confluence-reference-source-migration.test.mjs",
+    "test:retention-policy": "node --test --test-concurrency=1 scripts/retention-calendar-sql.test.mjs scripts/retention-policy-migration.test.mjs scripts/recovery-bound-policy-migration.test.mjs scripts/confluence-retained-copy-review-migration.test.mjs scripts/confluence-reference-source-migration.test.mjs scripts/confluence-source-instruction-migration.test.mjs",
     "test:confluence-copy-ledger-postgres": "npm run build -w @charitypilot/api && node --test scripts/confluence-copy-ledger-postgres.test.mjs",
     "test:complaint-resolution": "node --test scripts/complaint-resolution-migration.test.mjs",
     "test:complaint-recovery": "node --test scripts/complaint-recovery-migration.test.mjs",
