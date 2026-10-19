@@ -200,6 +200,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Admin web-only upstream observation reads a cited page using the active grant for an explicit human review; connector sessions cannot initiate it.',
   },
   {
+    path: '/api/v1/integrations/confluence/erasures/:deletionId/observation',
+    reason: 'Owner web-only recorded-target observation supports manual erasure review; it neither grants disposal nor completes a deletion job and is unavailable to connectors.',
+  },
+  {
     path: '/api/v1/integrations/confluence/copy-inventory',
     reason: 'Admin-only inventory joins recorded external page references with current Vault lifecycle and publication decisions for human audience review in Integrations.',
   },

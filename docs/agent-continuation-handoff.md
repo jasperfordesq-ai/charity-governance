@@ -1,3 +1,15 @@
+## 19 October: read-only recorded erasure-target observation
+
+The new Owner web-only observation endpoint reads an existing tenant-bound
+Confluence deletion target plus a separate legitimate control page. It distinguishes
+visible content, Trash, permission-ambiguous non-observation and unknown results.
+The reader refuses content writes; current site/grant and target checks discard
+changed observations. It never closes/requeues a job or asserts permanent/all-copy
+erasure. Existing destructive eraser and retained-primary authority gates remain.
+See docs/confluence-erasure-observation.md. Dashboard integration, durable
+instruction/action evidence, actual authorised provider readback and independent
+hosting/recovery remain open; no deployment or live provider action is implied.
+
 ## 19 October: reuse completed lifecycle evidence; supplier choice stays open
 
 The acceptance matrix now separates completed positive synthetic Owner

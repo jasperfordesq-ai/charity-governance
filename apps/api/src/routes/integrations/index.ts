@@ -25,7 +25,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
-import { requireAdmin } from '../../middleware/roles.js';
+import { requireAdmin, requireOwner } from '../../middleware/roles.js';
+import { observeConfluenceErasure } from '../../services/confluence-erasure-observation.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import {
@@ -1296,6 +1297,42 @@ export async function integrationRoutes(
 
         return sendSuccess(reply, { reference });
       } catch (error) {
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  app.get<{ Params: { deletionId: string } }>(
+    '/confluence/erasures/:deletionId/observation',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const { controlPageId } = z.object({ controlPageId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/) }).strict().parse(request.query);
+        const organisationId = request.user.organisationId;
+        const observation = await observeConfluenceErasure(app.prisma, {
+          organisationId, deletionId: request.params.deletionId, controlPageId,
+        }, { getConnection: async () => {
+          const integration = await findOwnConfluenceIntegration(app.prisma, organisationId);
+          const cloudId = integration && cloudIdFromConfig(integration.config);
+          if (!integration || integration.status !== 'CONNECTED' || !cloudId || !integration.connectedAt) return null;
+          const generation = `${integration.id}:${integration.connectedAt.toISOString()}`;
+          const isCurrent = async () => {
+            const current = await findOwnConfluenceIntegration(app.prisma, organisationId);
+            return current?.status === 'CONNECTED' && cloudIdFromConfig(current.config) === cloudId
+              && `${current.id}:${current.connectedAt?.toISOString()}` === generation;
+          };
+          const client = createConfluenceClient({ cloudId, getAccessToken: async () => {
+            if (!await isCurrent()) throw new Error('Connection changed');
+            const token = await currentAccessTokenForOrganisation(prisma, { organisationId }, deps);
+            if (!await isCurrent()) throw new Error('Connection changed');
+            return token;
+          } }, options.confluenceClientDeps ?? {});
+          return { cloudId, generation, client };
+        } });
+        return sendSuccess(reply, { observation });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
         return handleError(reply, error);
       }
     },

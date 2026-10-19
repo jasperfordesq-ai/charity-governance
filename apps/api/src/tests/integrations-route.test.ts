@@ -581,6 +581,61 @@ function connectedRow(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
   };
 }
 
+test('erasure observations refuse Members, Admins, connectors and low-level Owner sessions', async () => {
+  for (const actor of [ORG_A_MEMBER, ORG_A_ADMIN,
+    { ...ORG_A_ADMIN, role: 'OWNER' as const, clientKind: 'MCP_CONNECTOR' as const },
+    { ...ORG_A_ADMIN, role: 'OWNER' as const, accessLevel: 'READ' as const }]) {
+    const { app } = await buildApp({ actor });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/confluence/erasures/job-1/observation?controlPageId=control-1', headers: { authorization: bearer(actor) } });
+      assert.equal(response.statusCode, 403, response.body);
+    } finally { await app.close(); }
+  }
+});
+
+test('erasure observation validates Owner input before any target or provider access', async () => {
+  const actor = { ...ORG_A_ADMIN, role: 'OWNER' as const };
+  const { app } = await buildApp({ actor });
+  try {
+    const response = await app.inject({ method: 'GET', url: '/confluence/erasures/job-1/observation?controlPageId=../invalid', headers: { authorization: bearer(actor) } });
+    assert.equal(response.statusCode, 400, response.body);
+    assert.equal(response.headers['cache-control'], 'no-store');
+  } finally { await app.close(); }
+});
+
+test('Owner erasure observations bind recorded tenant targets and actual GET transport without completing jobs', async () => {
+  for (const mode of ['hidden-or-absent', 'control-unavailable', 'grant-changed'] as const) {
+    const actor = { ...ORG_A_ADMIN, role: 'OWNER' as const };
+    const transport: string[] = [];
+    const row = { id: 'job-1', targetRef: { kind: 'confluence', cloudId: 'site-1', pageId: 'page-1', attachmentIds: [] } };
+    const original = JSON.stringify(row);
+    const { app, store } = await buildApp({ actor, rows: [connectedRow()], confluenceFetch: async (url: string | URL, init: RequestInit) => {
+      assert.equal(init.method, 'GET'); transport.push(String(url));
+      const control = String(url).includes('/pages/control-1');
+      if (mode === 'grant-changed' && !control) store.integrations.get('integration-a')!.connectedAt = new Date('2026-10-19');
+      const available = control && mode !== 'control-unavailable';
+      return new Response(JSON.stringify(available ? { id: 'control-1', title: 'Control', spaceId: 'space-1', status: 'current', version: { number: 1 }, _links: {} } : {}),
+        { status: available ? 200 : 404, headers: { 'content-type': 'application/json' } });
+    } });
+    Object.assign(app.prisma.documentStorageDeletion, { findFirst: async ({ where }: { where: { id: string; organisationId: string; provider: string } }) => {
+      assert.equal(where.organisationId, 'org-a'); assert.equal(where.provider, 'confluence');
+      return where.id === row.id ? row : null;
+    } });
+    store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+    try {
+      const headers = { authorization: bearer(actor) };
+      const foreign = await app.inject({ method: 'GET', url: '/confluence/erasures/foreign/observation?controlPageId=control-1', headers });
+      assert.equal(foreign.statusCode, 404); assert.equal(transport.length, 0);
+      const response = await app.inject({ method: 'GET', url: '/confluence/erasures/job-1/observation?controlPageId=control-1', headers });
+      assert.equal(response.statusCode, 200, response.body);
+      const observation = response.json().data.observation;
+      assert.equal(observation.status, mode === 'hidden-or-absent' ? 'NOT_OBSERVED' : 'UNKNOWN');
+      assert.equal(observation.permanentErasureVerified, false); assert.equal(observation.jobUpdated, false);
+      assert.equal(response.headers['cache-control'], 'no-store'); assert.equal(JSON.stringify(row), original);
+    } finally { await app.close(); }
+  }
+});
+
 test('citation target names only the connected site and rejects an unreviewed or changed site', async () => {
   const { app } = await buildApp({ actor: ORG_A_ADMIN, rows: [connectedRow()] });
   try {

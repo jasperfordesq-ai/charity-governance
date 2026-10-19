@@ -1,3 +1,14 @@
+## 19 October: manual-remediation observation contract
+
+Current source exposes an Owner dashboard-only, tenant-scoped read of recorded
+Confluence deletion targets, separate from destructive erasure and operator
+completion reports. Legitimate control and exact site/grant/target checks support
+visible/Trash/non-observed/unknown results; permission-masked absence never proves
+permanent erasure. No job completion, requeue or provider content mutation occurs.
+The API contract and focused tests are implemented. Dashboard integration,
+persisted instruction/action evidence, actual sandbox outcomes and independent
+recovery remain unresolved. See docs/confluence-erasure-observation.md.
+
 ## 19 October: bounded catalogue ACL diagnostic for provider trials
 
 The operator command jobs:preflight-managed-capture-window now exposes the existing
