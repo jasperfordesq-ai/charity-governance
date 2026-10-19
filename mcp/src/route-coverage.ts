@@ -192,6 +192,14 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Admin-only external reference metadata can reveal third-party page targets and is managed in the Vault and Integrations dashboard.',
   },
   {
+    path: '/api/v1/integrations/confluence/reference-target',
+    reason: 'Admin web-only connected-site metadata supports a human Vault citation review; it is not a connector authority to choose a site.',
+  },
+  {
+    path: '/api/v1/integrations/confluence/references/by-id/:referenceId/check',
+    reason: 'Admin web-only upstream observation reads a cited page using the active grant for an explicit human review; connector sessions cannot initiate it.',
+  },
+  {
     path: '/api/v1/integrations/confluence/copy-inventory',
     reason: 'Admin-only inventory joins recorded external page references with current Vault lifecycle and publication decisions for human audience review in Integrations.',
   },

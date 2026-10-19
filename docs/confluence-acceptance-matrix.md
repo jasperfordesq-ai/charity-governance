@@ -117,6 +117,15 @@ billing and contributor observations in the ignored private inspection record.
 | Logs, monitoring and recovery history | Each destination's location, retention, access and independent custody, including deletion/preservation decisions after the last backup. |
 | Recovery sets and keys | Independent failure domain, separately held key, exact-source compatibility, usable restoration and actual host-loss drill. A same-host copy is insufficient. |
 
+The [application custody procedure](confluence-app-custody.md) distinguishes app
+ownership, site consent, local credential storage and independent recovery. The
+19 October read-only synthetic-app inspection found a sole Owner/Admin, the
+expected eight API scopes and local callback; local grant metadata additionally
+records `offline_access`. Multi-admin OAuth app ownership is supported without a
+Forge rewrite. This inspection closes the unknown test-app inventory, not the
+backup-operator, production-app or independent key-recovery gates. No access was
+changed and no secret was opened.
+
 ## Scoped sandbox run
 
 1. Bind the exact release, isolated tenant, approved sandbox site/space and synthetic

@@ -1,3 +1,19 @@
+## 19 October: OAuth custody inventory and connector contract correction
+
+Read-only inspection of the existing synthetic OAuth app now identifies its
+resource-level type, sole Owner/Admin contributor, eight configured Confluence
+API scopes and local callback. Local synthetic grant metadata records those
+scopes plus offline_access and two sealed credential rows. Independent operator/
+key custody and the production app remain unverified. The new operating custody
+procedure uses supported multi-admin OAuth app ownership, available since March
+2026; no Forge rewrite or provider access change is implied.
+
+Exact implementation CI found two new web-only citation GET routes missing from
+the connector exclusion inventory. Added explicit exclusions with their human
+review reasons; actual API permissions and connector tools are unchanged. Local
+MCP suite reproduces RED, then passes 427 tests with two existing Windows-specific
+skips. Exact new CI remains a separate release gate. Current source/provider
+version-monitoring evidence is retained; no VM deployment or external email.
 ## 19 October: live upstream version observation and uncite preservation
 
 A supervised sandbox run against application source 9611bd9f has now exercised
