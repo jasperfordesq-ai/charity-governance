@@ -1,3 +1,15 @@
+## 19 October: calendar-year document claims retain normal guards
+
+The retention migration proof now joins calendar cutoff enforcement to the
+existing document authorisation, claim, cleanup-job and audit dispatch path.
+Early claims, held records and withdrawn authority refuse; an elapsed term
+creates the scoped job and audit event while deleting only its synthetic record,
+all within a rolled-back transaction. Claim and authorisation guards stay enabled.
+The separate policy-mode creation fence remains in force. This is integration
+coverage for a previously isolated trigger test, not activation of calendar rules
+or independent recovery/physical-host-loss evidence. See the private checklist
+for dated verification and remaining work.
+
 ## 19 October: unfinished publications do not justify token refresh
 
 A strengthened dormancy regression reproduced a token request for a batch whose

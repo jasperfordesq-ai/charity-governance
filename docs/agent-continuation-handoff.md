@@ -1,3 +1,15 @@
+## 19 October: integrated calendar-year document claim proof
+
+The disposable retention migration suite now exercises a removed draft under a
+replacement calendar-year policy with the normal authorisation, claim and
+dispatch guards enabled. It checks early refusal, hold and withdrawal refusal,
+then an elapsed-term atomic record deletion, scoped cleanup job and audit event.
+Transactions roll back. Only fixture policy insertion and recovery-clock ageing
+bypass their named setup guards; those guards are restored before authorisation.
+Calendar policy creation remains disabled. This closes a specific integration
+coverage gap, not tenant policy adoption, provider disposal or host-loss recovery.
+Exact test results and remaining requirements are held in the private checklist.
+
 ## 19 October: no token refresh for publications without remote pages
 
 The reconciler now requires at least one non-null, non-empty remote page ID

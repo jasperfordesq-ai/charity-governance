@@ -1,4 +1,5 @@
 import { proveDocumentPolicyConflict } from './document-policy-conflict-proof.mjs';
+import { proveDocumentCalendarClaim } from './document-calendar-claim-proof.mjs';
 import { proveCopyBinding } from './copy-binding-proof.mjs';
 import { proveCopyAuthority } from './copy-authority-proof.mjs';
 import assert from 'node:assert/strict';
@@ -411,6 +412,7 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
     sql(calendarClaim('2024-02-29 12:34:56.789'), /must wait for calendar-year retention expiry/);
     assert.equal(sql(calendarClaim('2020-02-29 12:34:56.789')), '1');
     assert.equal(sql(`SELECT count(*) FROM "DocumentPurgeClaim" WHERE id='calendar-claim';`), '0');
+    proveDocumentCalendarClaim(sql, plan);
     const calendarCopy = (recordClass, anchor) => `BEGIN;
       INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('retention-calendar','Synthetic calendar charity',CURRENT_TIMESTAMP);
       INSERT INTO "User" (id,email,name,"passwordHash",role,"organisationId","updatedAt")
