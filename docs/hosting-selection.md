@@ -31,6 +31,14 @@ needs a comparable quote; published sample prices are not an EU quote. Keep
 network access restricted and verify TLS, regional coverage, independent custody
 and file-storage compatibility before proposing activation. No supplier is selected.
 
+The official regional calculator was subsequently observed for AWS Frankfurt:
+Standard-4 (1 vCore, 4 GB), 30 GB storage, no HA: USD87/month; with HA:
+USD174/month. It displays a 30-day basis and 2 TB networking included. These are
+dated calculator estimates, not a checkout quote or a supported combined stack.
+The private comparison includes conditional full-stack reserves and a source-matched
+trial sequence. Begin with existing compatibility observations; only an authorised
+synthetic trial can establish actual catalogue locks, writer closure and recovery.
+
 **Capability verdict, later on 19 October:** DigitalOcean's
 [documented administrator restriction](https://docs.digitalocean.com/support/how-do-i-fix-the-pg_dumpall-permission-denied-for-table-pg_authid-error/)
 confirms that `doadmin` cannot access `pg_authid`. The current recovery code reads
