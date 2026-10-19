@@ -1,3 +1,13 @@
+## 19 October: whole-stack cost model and candidate investigation order
+
+The ignored cost/fit comparison now includes four app roles, database/files,
+independent witness/storage/keys, restore overlap and operator effort. Prices and
+planning reserves are explicitly distinguished; no spending authority follows.
+Read [hosting selection](hosting-selection.md) for candidate order and hard
+compatibility gates. Investigate database authority before building or buying
+another provider implementation. Procurement, actual provider compatibility and
+host-loss acceptance remain open; the existing prototype is retained as fallback.
+
 ## 19 October: live administration and hosting compatibility review
 
 Read-only site/sandbox residency, sandbox entitlement and test OAuth ownership/

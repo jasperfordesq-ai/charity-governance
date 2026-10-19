@@ -1,3 +1,12 @@
+## 19 October: provider-neutral cost and feasibility review
+
+A full-category planning comparison is retained privately, with actual unit
+prices distinguished from reserves, labour assumptions and unverified checkout
+items. The [selection gates](hosting-selection.md) require database authority,
+transport/secret custody, storage lifecycle and independent recovery compatibility
+before activation. This advances selection; it is not supplier procurement,
+deployment, actual compatibility or host-loss closure.
+
 ## 19 October: current provider observations replace intended configuration
 
 The private continuation receipt now records fresh read-only Confluence
