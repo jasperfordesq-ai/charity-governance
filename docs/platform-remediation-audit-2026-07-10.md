@@ -1,3 +1,13 @@
+## 19 October: selected Confluence documents still require a file anchor
+
+Requirement reconciliation found an additional integration gap: the supported
+citation path requires an existing Vault upload. A standalone selected-document
+register is not implemented. `confluence-reference-only-spec.md` records the
+schema/service/UI evidence and acceptance criteria. Keep this item open through
+implementation and execution proof; prior citation tests do not establish the
+zero-upload journey. This finding does not invalidate existing file citations,
+authorise provider changes or close independent recovery requirements.
+
 ## 19 October: hosted calendar-test ambiguity corrected
 
 The hosted browser workflow passed with one flaky calendar test. Its first

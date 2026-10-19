@@ -1,3 +1,14 @@
+## 19 October: reference-only Confluence registration remains missing
+
+The current citation model requires a live uploaded Vault Document. Its checks,
+observations and saved-review writer also assume that file anchor. Existing
+citations can refer to different supporting pages, but do not provide a route
+to register a selected Confluence document without any Vault upload. See
+`confluence-reference-only-spec.md` for source evidence, decisions and acceptance
+criteria. This is newly reconciled incomplete work, not a shipped feature or
+an excuse to start supplier onboarding. Preserve existing tenant/recovery gates
+and historical receipts when implementing it.
+
 ## 19 October: calendar browser check identifies the exact policy revision
 
 The first hosted calendar-policy journey failed before passing on retry because

@@ -1,0 +1,100 @@
+# Confluence documents without a Vault upload
+
+Status: demonstrated implementation gap, 19 October 2026. Specification only;
+the current product has not implemented this path.
+
+## Requirement and current evidence
+
+Selected documents may remain authoritative in Confluence. CharityPilot must
+be able to register and monitor their page/version references without requiring
+an uploaded file as the starting point. Existing citations attached to Vault
+files remain useful and must continue working.
+
+The current implementation does not provide that independent starting point:
+
+- `Document` requires `fileUrl`, `fileSize` and `mimeType`; its supported create
+  service attaches a reserved upload intent and records an upload audit.
+- `ConfluenceReference.documentId` is required, with a composite foreign key to
+  a Document in the same organisation.
+- `citeConfluencePage` refuses a missing live Document before reading the page.
+- The reference POST requires a Document ID. The web citation panel opens from
+  a Vault document row.
+- Version checking, page observation and review recording also require the live
+  Document anchor. Making the foreign key nullable alone would not fix them.
+
+This is not evidence that each existing citation duplicates its cited page: a
+Vault file can legitimately cite different supporting material. It establishes
+the narrower missing capability: registering a selected Confluence document
+when no uploaded Vault file exists.
+
+## Product decisions
+
+1. Provide a restricted administrative register for selected Confluence
+   documents, using the existing opt-in connection. Do not download or persist
+   page bodies or attachments to create a register entry.
+2. Retain tenant, recorded site, page, observed version, title, actor and time.
+   A page version is a historical citation, not a mutable current-version field.
+3. Reuse citation observations, staleness and saved review semantics. Do not
+   introduce an unrelated provider client or a second erasure executor.
+4. Model an explicit non-file anchor rather than a fake storage URL, zero-byte
+   upload or an invented storage provider. Preserve the existing file anchor
+   and its guards. Enforce exactly one valid same-tenant anchor in PostgreSQL.
+5. Keep new entries Owner/Admin only initially. Existing byte-reviewed Member
+   file permissions do not authorise external-page disclosure or prove the
+   Member has permission in Confluence.
+6. Removing a reference changes local governance metadata only. It never
+   deletes the provider page, creates a disposal instruction, revokes upstream
+   access or asserts permanent erasure. Audit and saved reports survive.
+7. Preserve independent-recovery enforcement. A bound organisation must refuse
+   new unjournalled mutations, including direct SQL writes. Do not weaken the
+   existing freeze merely to make the new register operable.
+
+## Implementation order
+
+1. Extend the anchor model with a forward migration, tenant constraints and
+   recovery guards. Preserve all existing rows and historical report digests.
+   Include any new durable tables in recovery capture/inventory; an incomplete
+   backup is not an acceptable temporary implementation.
+2. Add the authenticated creation/list/removal service and routes with bounded
+   pagination, expected-site confirmation and commit-time actor/anchor checks.
+   Provider reads must complete before recording a successful citation; site
+   and connection changes must refuse or return explicit uncertainty.
+3. Adapt check/observation/report paths for both valid anchor types, keeping
+   existing saved report formats readable. Use meaningful audit identities for
+   non-file anchors, not Document IDs invented for audit compatibility.
+4. Add the administrative register UI with a clear external-source label,
+   exact connected-site review and no file-upload prerequisite.
+5. Verify the complete synthetic journey and exact release. Existing sandbox
+   page contents need no mutation for registration and observation tests.
+
+## Acceptance evidence
+
+- Start with a synthetic tenant containing zero Document rows. Register an
+  accessible page through the UI, observe version changes, save/read a review,
+  then remove its local reference. Document, upload-intent, publication and
+  deletion-job counts remain zero; no storage write or provider mutation occurs.
+- Preserve the cited version while reporting a newer upstream version. Refuse
+  unreadable/wrong-site pages; report revoked access as uncertainty, not erasure.
+- Other tenants and Members cannot create, list, observe, review or remove the
+  restricted source. Direct SQL cannot cross tenants, omit/bind both anchors,
+  mutate protected history or bypass recovery enforcement.
+- In-flight connection changes, local removal and actor-role changes cannot
+  create an accepted stale operation. Lost responses recover the original
+  outcome without duplicate metadata or fabricated provider actions.
+- Existing Vault citations, download access, recovery/deletion blockers and
+  saved review receipts retain their behaviour.
+- Capture and restore include the new metadata/audit state and preserve its
+  relations. Local component tests alone do not establish host-loss recovery.
+
+Run focused API tests with the repository API build and Node test runner, native
+PostgreSQL migration/guard tests through the existing isolated harness, and the
+repository's isolated browser runner for the end-to-end journey. Exact test file
+and command additions belong with implementation; no passing result is asserted
+by this specification.
+
+## Scope boundaries
+
+No new supplier, paid trial, production Confluence activation, hosting migration
+or real document reclassification is required. Actual purge remains a separately
+authorised action. This feature does not close independent host-loss recovery,
+key custody, organisational OAuth continuity or customer retention decisions.
