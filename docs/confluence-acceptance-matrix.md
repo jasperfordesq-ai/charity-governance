@@ -25,8 +25,11 @@ resolution and the provider read. Changed/disconnected sites, unavailable pages,
 provider errors and lower/invalid versions cannot prove CURRENT. No scheduler or
 list refresh keeps unused grants alive. Results are not retained as approvals or
 historical-content verification. The disposable browser proves CURRENT through
-the application/client; a clean-release live edit and SUPERSEDED observation are
-still required before closing that acceptance row.
+the application/client. A later supervised live sandbox run against application
+source `9611bd9f` observed CURRENT, an actual upstream edit, SUPERSEDED with the
+original citation unchanged, and specifically approved unciting with source
+preservation. See the scoped observation below; production-profile acceptance is
+still separate.
 
 The web-only `GET /integrations/confluence/reference-target` returns only the
 connected site ID and URL (null when disconnected), under the existing Admin
@@ -42,7 +45,29 @@ at 320/768/1024/1440 pixels against the disposable application/fake provider.
 Separate sandbox browser evidence observed a real page citation at version 2,
 its specifically approved local removal and unchanged upstream version history.
 The live runtime used documented source overlays; it is not a clean deployed
-release or the remaining live staleness-monitoring, purge or host-loss acceptance.
+release, purge or host-loss acceptance.
+
+### Live version monitoring and source preservation
+
+The later 19 October run used a fresh archive of `9611bd9f`, retained synthetic
+database and previously approved sandbox OAuth grant, without application-code
+overlays, migration or seed. The application cited a real sandbox page at its
+current version, checked CURRENT, then observed SUPERSEDED after a labelled
+synthetic edit through Confluence. Independent database readback proved the full
+citation and citation-audit rows were unchanged by both checks. After specific
+action-time authority, unciting removed only that row and added its audit event;
+no storage-deletion job appeared. Confluence history retained the new current
+version and earlier versions. Its attachment inventory retained the same ID,
+size and current version; this run did not re-download and hash attachment bytes.
+
+This is actual OAuth/provider and exact application-source evidence in a
+supervised loopback development runtime. Next.js regenerated its type declaration
+file; no application source was patched. The attempted compiled web runtime
+refused plain HTTP under public-production HTTPS guards, which were preserved.
+It is not private-VM/public-production certification, provider-wide inventory,
+purge, independent recovery or verification of historical page contents.
+Detailed identities, startup attempts and proof are held privately in
+`citation-monitor-live-run-2026-10-19.md`.
 
 On 19 October, a signed-in read-only check of the existing synthetic sandbox
 page observed its current version and version history. Its attachment inventory

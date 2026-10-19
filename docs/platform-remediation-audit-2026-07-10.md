@@ -1,3 +1,21 @@
+## 19 October: live upstream version observation and uncite preservation
+
+A supervised sandbox run against application source 9611bd9f has now exercised
+CURRENT, an actual synthetic Confluence edit, and SUPERSEDED while retaining the
+original citation/version and audit rows. Specifically authorised unciting then
+removed only the local row, retained its audit, and created no deletion job.
+Independent source history retained the new current page and earlier versions;
+attachment ID, size and current-version metadata remained present.
+
+The runtime used a fresh source archive and existing synthetic DB/approved grant,
+without application-code overlays, migrations or seeding. Next.js regenerated
+its normal type declaration. The compiled web experiment correctly refused this
+HTTP-only setup under public-production guards; the actual journey used the
+supervised development runtime. No security rule was relaxed. This is real OAuth
+provider evidence for that scope, not VM/public-production certification, a new
+attachment byte hash, purge, historical-content verification or host-loss proof.
+Exact private receipt: citation-monitor-live-run-2026-10-19.md. Prepared email
+remains unsent; independent hosting/recovery and other acceptance gates remain.
 ## 19 October: explicit upstream citation-version checks
 
 Owners/Admins can now check an individual Vault citation's upstream version.
