@@ -5,6 +5,18 @@ architecture to implementation and the evidence still required. A source path or
 a passing fake-provider test does not establish live provider acceptance.
 Private dated execution receipts belong in the ignored continuation handoff.
 
+## Dated live-provider observation
+
+On 19 October, a signed-in read-only check of the existing synthetic sandbox
+page observed its current version and version history. Its attachment inventory
+showed one current attachment version; an authenticated browser download returned
+243 bytes whose SHA-256 matched the original fixture and the retained 8 October
+restored-file receipt. This proves current access and byte identity for that one
+synthetic attachment. It is not an application OAuth test on the latest release,
+an exhaustive provider inventory, a new Trash/purge execution or host-loss proof.
+Exact targets, hash, downloaded bytes and screenshot remain in the private receipt
+`confluence-live-readback-2026-10-19.md`.
+
 ## Ownership and data flows
 
 | Data / operation | Authority and implementation | Acceptance evidence required |
