@@ -1,3 +1,20 @@
+## 19 October: current Confluence disclosure and reference guidance
+
+The rebuilt isolated browser exposed stale claims in the citation inventory and
+pre-connection disclosure. Current Vault removal refuses cited records and
+retains eligible drafts in Deleted Items; it does not erase their files
+immediately. The eraser checks current attachment inventory and normal/trashed
+recorded targets rather than relying on an ordinary page 404. Guidance, disclosure
+checks and architecture now describe those implemented boundaries. Selected
+Confluence authority is a settled product choice; actual residency and provider
+acceptance remain separate. No erasure logic or permissions were weakened.
+
+The private continuation records retain RED/GREEN route results, snapshot plus
+explicit source-overlay identities, the rebuilt synthetic runtime and the
+specifically approved sandbox OAuth connection. This is local application and
+sandbox evidence, not a private-VM deployment or public-production certification.
+Next review the missing end-user citation creation/removal journey before claiming
+complete authoritative-reference acceptance.
 ## 19 October: prevent accidental fallback during supplier configuration
 
 Explicit unimplemented/misspelled document-driver names now fail production

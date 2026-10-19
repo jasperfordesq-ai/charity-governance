@@ -609,14 +609,17 @@ claim.
 
 #### Confluence: erasure is best-effort, bounded by permissions the charity holds
 
-`confluence-erasure.ts` runs a fixed sequence per deletion row: for each
-attachment the row names, `delete` then `purge`; then the page, `delete` then
-`purge`; then a read of the page, which **must** return 404. The read is the
-proof. Issuing four DELETEs proves only that four requests were sent; the 404
-is what is actually known. A read that returns the page fails the attempt as
-`CONFLUENCE_ERASURE_UNVERIFIED`, which is transient — the page may be gone by
-the next attempt, and an Atlassian blip must not become a dead-letter a human
-has to clear by hand.
+`confluence-erasure.ts` first checks the current page and attachment inventory.
+An attachment outside the recorded target refuses deletion for human review.
+A page already in Trash must be restored and inventoried before purge. For an
+eligible recorded target, each attachment is deleted then purged before the page.
+Readback checks normal and trashed page records, each recorded attachment and
+the bounded site-wide trashed-attachment inventory. A normal 404 alone is not
+proof of permanent erasure. A recorded target that remains visible fails the
+attempt as `CONFLUENCE_ERASURE_UNVERIFIED`; unknown or incomplete observations
+must not become successful outcomes. These checks do not discover every external
+copy or prove provider backup erasure. Current source capability and live
+provider acceptance remain separate evidence.
 
 Three things bound that, and none of them can be engineered away from here.
 
@@ -637,169 +640,79 @@ the tenant's own trash.** It is restorable by **their** administrators, from
 **their** site. CharityPilot cannot prevent that and does not pretend to. The
 charity's Confluence site is the charity's, not the platform's.
 
-**And the proof does not currently distinguish trashed from purged — say so.**
-What the read-back establishes is that `GET /wiki/api/v2/pages/{id}` no longer
-serves the page. Whether that endpoint answers 404 or 200 for a page sitting in
-the tenant's trash has **not been verified against a real Atlassian site**; it
-is recorded as an explicit unknown in the "Facts verified against Atlassian"
-table of
-`docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md`, pending
-the Atlassian app install. If a trashed page 404s, then a delete that succeeded
-followed by a purge that returned success without actually purging would read
-back as proven erasure, and the row would say `PROCESSED` for content still
-restorable from the charity's trash. Nothing observed so far says that happens
-— but nothing verified says it cannot, and a DPO should be told the proof's
-scope, not a stronger version of it. The remedy, if the check comes back 404, is
-in that table: have `getPage` request the status explicitly so the read
-distinguishes purged from trashed.
+**3. Recorded targets are checked in current and trashed state; undiscovered
+copies remain outside the proof.** The eraser enumerates the current page's
+attachments before deletion and refuses an unrecorded attachment rather than
+purging content outside the authorised target. An already-trashed page cannot
+supply a trustworthy current inventory, so it requires restoration and review.
+After deletion/purge requests, readback must exclude recorded page and attachment
+IDs in normal and trashed reads, including bounded attachment Trash pagination.
 
-**3. The proof covers the page, not every attachment.** The eraser erases
-exactly the attachments the deletion row names. An attachment the row does not
-name is never enumerated — `listAttachments` is deliberately unused on this
-path — and the row still records `PROCESSED`. **The proof is therefore only as
-complete as the list the publish pipeline writes.** This is a known, open gap,
-recorded as item 5 of the Phase 4 note in
-`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`, and it
-is open on purpose: closing it means enumerating attachments from Confluence
-rather than trusting the row, and whether that is right depends on whether the
-page is exclusively CharityPilot's. If a charity's own staff may attach files
-to it, enumerating and purging would destroy data CharityPilot never put there
-— a different and worse harm than the gap it closes. Do not read this paragraph
-as a defect that has been fixed.
+The isolated 8 October provider exercise observed a normal page read returning
+`200` with `status=trashed`; restoring that synthetic page exposed its attachment
+inventory again. Current source handles those states explicitly. The 19 October
+manual readback confirmed the retained synthetic attachment's bytes, but neither
+that check nor local fake-provider tests establishes permanent erasure, complete
+external-copy discovery or provider backup purge. Preserve the separate actual
+provider and independent recovery acceptance gates.
 
 #### What to tell a data subject
 
-**An authorised draft deletion removes the Vault record, tracks primary-byte
-cleanup separately, and leaves any Confluence page in place.** The storage
-deletion outbox retries failures; the successful active-object readback is
-recorded separately and does not prove version or backup purge. `remove()` in
-`document.service.ts` no longer enqueues a
-`confluence` erasure row at all. Instead, a `DocumentPublication` that named a
-page moves to a fourth state, `RETIRED` (`retiredAt`, `retiredStoragePath`),
-rather than being erased or left dangling: `cloudId`, `pageId` and
-`attachmentId` survive on the retired row for audit and for the erasure
-request that may follow. `cancelConfluencePublication` is now
-`retireConfluencePublication` for exactly this reason — the same two locked
-passes as before, but retiring rather than enqueuing. A worker that records a
-page id after the document has already gone — the mid-flight race the old
-cancellation path had to handle — retires the row itself, so a page recorded
-during the delete window still reaches `RETIRED` rather than being orphaned,
-**provided that retiring write itself succeeds** — a transient database error
-inside `retirePublicationIfDocumentGone` leaves the row dead-lettered while
-still naming a page, and the database's own hard floor on erasure requests
-(`state = 'RETIRED'`) then means that page can never be erased through the
-product.
+**Removal, recovery and erasure are distinct.** Current supported Vault removal
+uses `document-recovery.service.ts`: an eligible unheld, unapproved DRAFT with
+an approved retention/removal policy enters recoverable Deleted Items. Existing
+citations, standard links or a predecessor relationship refuse that operation.
+Removal retains bytes for the configured recovery period; it is not immediate
+primary-byte erasure. Separate disposal and cleanup evidence is required before
+claiming active-object absence, and versions, exports and backups need their own
+proof. Do not say the file is gone merely because the active Vault view hides it.
 
-**Destroying the Confluence copy is a separate, explicitly authorised action,
-and the database enforces that it can only be taken against a publication
-already `RETIRED`.**
-`POST /api/v1/integrations/confluence/publications/:publicationId/erase`
-requires an admin role, an `ADMIN` session level, an action approval and the
-typed confirmation `ERASE CONFLUENCE COPY`; it refuses with
-`CONFLUENCE_ERASURE_SCOPE_MISSING` unless the tenant has granted both
-`delete:page:confluence` and `delete:attachment:confluence`.
-`GET /api/v1/integrations/confluence/publications` lists the retired
-publications an administrator can act on — without it, nothing would name a
-publication once its document is gone. It pages 50 at a time with a
-same-charity `before` cursor and is available on the Integrations dashboard
-even if the current connection is unavailable. The dashboard requires a
-per-copy reason and typed confirmation before calling the existing erasure
-route, then displays the queued technical job ID without claiming provider
-purge. Restricting erasure to a retired
-publication is deliberate: it makes destroying a Confluence page a two-step
-action (delete the document, then erase the copy) and stops an administrator
-destroying the page a *live* document still points at.
+**Unciting leaves the Confluence page unchanged.** The reference service records
+an observed page/version; removing that citation changes CharityPilot's reference
+and audit only. Ordinary Vault removal does not erase a Confluence page or its
+attachments. Historical audit and current citation inventory are different views.
 
-The `targetRef` the erase endpoint builds is read through the same
-`parseConfluenceErasureTarget` arbiter the eraser reads it with, so a target
-the eraser would refuse fails the erasure request itself rather than
-dead-lettering later.
+**Disposing of a published Confluence copy requires its own authority.** The
+retired-publication route and retained-copy review/permission/execution services
+preserve exact target identities, scoped administrator/Owner checks and explicit
+authority. Holds, changed source, changed connection or uncertain outcomes must
+not be bypassed. A recorded permission or queued job is not a verified provider
+purge. Read the current route and retained-copy services before execution; the
+older deletion-then-erasure narrative is not a supported shortcut.
 
-**What may now be said, and what may not.**
+Verification is bounded to the recorded targets and observed provider outcomes.
+Current and Trash readback are distinct from all-copy discovery, and neither a
+successful request nor an ordinary 404 proves permanent erasure. The actual
+sandbox lifecycle and independent preservation/disposal history remain separate
+acceptance gates; local tests alone cannot close them.
 
-- A draft's primary object is deleted through a tracked, retryable pipeline.
-  A processed new local/Supabase row records an active-object absence check;
-  a pending or dead-letter row does not. Versions, exports and backups need
-  their own evidence before claiming permanent erasure.
-- The Confluence page is **not touched by an ordinary deletion.** It stays
-  live, under the charity's own Confluence permissions, until an administrator
-  explicitly requests its erasure against the retired publication.
-- Once that explicit erasure is requested, it is **best-effort**, bounded by
-  permissions the charity holds. Everything in *"Confluence: erasure is
-  best-effort"* above applies unchanged: purge needs a higher permission than
-  delete and the charity grants it; between delete and purge — and after a
-  purge the site refuses — the content sits in **the charity's own trash**,
-  restorable by **their** administrators, from **their** site; and the
-  read-back proof does not yet distinguish trashed from purged.
-- **The Confluence side has not been exercised against a real Atlassian site.**
-  Every claim above the Supabase line is proven against fakes only. See the
-  real-site verification checklist in `docs/production-runbook.md`, to be run
-  before any tenant connects.
+#### Selected authoritative Confluence documents and residency
 
-So: do **not** tell a data subject that deleting a document erases a Confluence
-copy. Tell them that the Irish copy is provably gone the moment the document is
-deleted, that the Confluence page is untouched until someone with the admin
-role explicitly requests its erasure, and that once requested, erasure was
-issued and verified only as far as a 404 read-back allows, with the content
-possibly sitting in the charity's own trash until someone with the right
-permissions purges it there.
+The current product decision permits Confluence to be authoritative for
+deliberately selected documents and evidence. CharityPilot records references
+to their observed pages/versions, while retaining structured governance,
+permissions, approvals, deadlines, audit and historical snapshots. This is the
+reference model in `confluence-reference.service.ts`, separate from the published
+copy model. Confluence is optional per organisation. It does not become a default
+storage backend for every sensitive Vault record, and no Forge rewrite is required.
+The former unresolved-authority block in this section is superseded by that
+owner decision, not by a claim that provider acceptance is complete.
 
-**On the model this rests on.** The behaviour above — Supabase erased
-immediately, Confluence retired and erased only on explicit request — is fixed
-by the owner's 2026-09-19 ruling regardless of how Open Question 1 in
-`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md` is
-eventually resolved. That question is a different one — whether Confluence may
-ever hold a document's *authoritative* bytes, rather than a published copy —
-and remains **unresolved and the owner's to rule on**; see "Residency of a
-Confluence-authoritative document" below. Nothing in this section changes
-depending on that answer.
+The primary byte-store registry currently supports `local` and `supabase`.
+Confluence is a reference/publish integration, not an implementation of that
+byte-store interface. Supplier selection remains open; an alternative byte store
+needs its own supported lifecycle, provenance and recovery verification. A
+Confluence-authoritative reference does not imply that a duplicate Irish file
+exists or that every CharityPilot record is stored in Confluence.
 
-`documentStorageProviders` still registers only `supabase` and `local`.
-**Confluence is a publish target, never a storage provider**, so no
-organisation can hold a Confluence storage provider and no document's
-authoritative bytes can live there. Publication happens only for an
-organisation that has deliberately connected Confluence, which is still alpha.
-
-**Where a document is authoritative in Confluence, there is no Irish copy to
-fall back on, and the guarantee for that document is only ever the best-effort
-one.** Do not carry the Supabase guarantee across. Today no such document can
-exist, by the paragraph above; this stands as the rule if that ever changes.
-
-#### Residency of a Confluence-authoritative document — BLOCKED
-
-**Not documented here, deliberately. This is not an omission for whoever reads
-it next to fill in.** Whether Confluence may be authoritative at all is
-unresolved and is the owner's decision, not this document's: the storage spec
-is built on Confluence being a published mirror with Supabase (`eu-west-1`,
-Ireland) authoritative, while the architecture the DPO signed off on 2026-09-18
-has Confluence authoritative for chosen categories with CharityPilot holding
-references rather than duplicate copies. The two disagree about whether a
-charity's policy document is guaranteed to sit in Ireland, and a tenant's
-Confluence region is chosen by the tenant's own administrators — not
-configurable at all on Atlassian's Free plan.
-
-Tracked as Open Question 1 in
-`docs/superpowers/plans/2026-09-18-document-storage-providers-spec.md`. **Until
-the owner rules on it, make no residency claim about a document held in
-Confluence.** Publishing a residency claim that turns out to be wrong is worse
-than publishing none, because a DPO would be the one relying on it.
-
-**What exists as of 2026-09-21, and why it does not unblock the above.** An
-organisation can now record what it *declares* about its Atlassian environment —
-plan and residency — through `PUT /api/v1/integrations/confluence/declared-environment`,
-stored in dedicated `declared*` columns on `OrganisationIntegration` with the
-person and the date against it, and shown on the owner console.
-
-That is deliberately not a residency claim and must not be read as the start of
-one. It is a charity administrator's statement about their own tenancy, which
-CharityPilot cannot verify and does not control; every response carrying it also
-carries `controlledByCharityPilot: false`, and nothing in the product branches on
-the value. The block above is about what *CharityPilot* asserts. Recording what a
-charity asserts is the honest thing that could be built without the owner's
-ruling, and it is all that has been. See
-`services/integration-declared-environment.service.ts`, whose header says the
-same thing at greater length for whoever is tempted to add a lookup and turn a
-declaration into an assertion.
+Each actual site's residency, plan and exclusions must be observed independently.
+The organisation's `declared*` environment fields are attributed declarations,
+not CharityPilot verification or a guarantee. An unset residency setting is not
+EU pinning and does not prove that the data is outside the EU. Confluence content
+pinning does not establish the residency of CharityPilot's database, credentials,
+logs or independent recovery history. See [the acceptance matrix](confluence-acceptance-matrix.md)
+and [hosting compatibility gates](hosting-selection.md); exact tenant settings
+and dated evidence belong in the ignored continuation records.
 
 #### Disconnecting does not provably revoke anything at Atlassian
 
@@ -849,13 +762,12 @@ prose through.
 
 #### Confluence is alpha, and stays alpha
 
-Confluence remains an alpha-stage provider. The exit criteria in
-`docs/superpowers/plans/2026-09-18-provider-aware-erasure-phase-5.md` list what
-must be true before it is promoted, and one of them — an erasure of a published
-document removing the attachment and the page with a read-back that 404s —
-cannot be verified against a real site until the Atlassian app install unblocks
-Phase 4. Everything above is verified against fakes, and a fake cannot tell you
-Atlassian changed a status code.
+Confluence remains an alpha integration. The historical Phase 5 plan is not a
+substitute for the current [acceptance matrix](confluence-acceptance-matrix.md).
+A real synthetic site and app now exist, with limited observed publish, version,
+Trash/restore and attachment-byte evidence. Permanent erasure, current-release
+application acceptance, independent custody and whole-backend recovery remain
+unproved. Preserve these limits when interpreting fake-provider test results.
 
 ### Confluence OAuth: rotating refresh tokens, and why refreshes are serialised
 

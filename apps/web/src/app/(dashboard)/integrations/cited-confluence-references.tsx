@@ -51,7 +51,7 @@ export function CitedConfluenceReferences() {
 
   useEffect(() => { void load(); }, [load]);
 
-  return <AppSection title="Cited Confluence evidence pages" description="These are current retained references to pages managed by the charity, not copies CharityPilot published. Each citation records the page and version seen when it was added. The page, its version and its audience may have changed since then. Deleting a Vault document removes its citation record, so this is not a historical inventory. CharityPilot does not erase a cited page.">
+  return <AppSection title="Cited Confluence evidence pages" description="These are current retained references to pages managed by the charity, not copies CharityPilot published. Each citation records the page and version seen when it was added. The page, its version and its audience may have changed since then. Review and remove a document’s citations before moving it to Deleted Items. Removing a citation leaves the Confluence page unchanged. This list shows current citations, not their full audit history.">
     <Button size="sm" variant="flat" onPress={() => void load()} isLoading={loading}>Refresh citations</Button>
     {error ? <ErrorState title="Citation review needs attention" description={error}
       action={<Button size="sm" onPress={() => void load()}>Retry</Button>} /> : null}

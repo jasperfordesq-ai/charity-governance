@@ -1981,8 +1981,9 @@ test('the disclosure states the erasure limits the charity, not CharityPilot, co
   assert.match(text, /CharityPilot cannot\s+prevent that/);
   // A refused purge is reported, not quietly called success.
   assert.match(text, /does not quietly report success/);
-  // The proof covers the page, not every attachment.
-  assert.match(text, /only as complete as what CharityPilot published/);
+  // Current inventory is checked without authorising undiscovered copies.
+  assert.match(text, /unrecorded attachment.*refuses erasure/i);
+  assert.match(text, /not.*undiscovered copies/i);
   // No residency guarantee is claimed for content in the charity's own site.
   assert.match(text, /no data-residency guarantee/);
 });
@@ -1990,15 +1991,18 @@ test('the disclosure states the erasure limits the charity, not CharityPilot, co
 test('the disclosure says an ordinary deletion leaves the Confluence page in place', () => {
   const erasure = CONFLUENCE_CONNECT_DISCLOSURE.erasure.join(' ');
 
-  assert.match(erasure, /deleting a document in CharityPilot does not delete/i);
+  assert.match(erasure, /removing a citation leaves.*page.*attachments unchanged/i);
+  assert.match(erasure, /citation.*reviewed and removed before.*Deleted Items/i);
   assert.match(erasure, /separate|explicit/i);
 });
 
-test('the disclosure limits Confluence erasure proof to the current page endpoint', () => {
+test('the disclosure distinguishes current and trashed readback without claiming all-copy erasure', () => {
   const erasure = CONFLUENCE_CONNECT_DISCLOSURE.erasure.join(' ');
   assert.match(erasure, /attempts to delete and then purge/i);
-  assert.match(erasure, /current page endpoint returns 404/i);
-  assert.match(erasure, /does not prove erasure of versions or backups/i);
+  assert.match(erasure, /normal and trashed.*recorded attachment/i);
+  assert.match(erasure, /404 alone does not prove erasure/i);
+  assert.match(erasure, /not.*undiscovered copies.*versions or backups/i);
+  assert.doesNotMatch(erasure, /attachment.*never looked for/i);
 });
 
 test('the disclosure never claims CharityPilot revoked anything at Atlassian', async () => {

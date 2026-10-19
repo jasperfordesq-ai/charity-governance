@@ -137,17 +137,16 @@ import { CONFLUENCE_OAUTH_SCOPES, missingConfluenceScopes } from '../../services
  *   able to delete and unable to purge. That is an ordinary outcome.
  * - Between delete and purge, and after a refused purge, the content is in the
  *   charity's own trash, restorable by the charity's own administrators.
- * - The erasure proof covers the page; an attachment CharityPilot did not
- *   record is never enumerated.
+ * - The current attachment inventory must match the recorded target. Normal
+ *   and trashed readback covers recorded ids, not undiscovered copies/backups.
  * - Disconnecting deletes CharityPilot's copy of the credentials — provable —
  *   and *attempts* a withdrawal at an endpoint Atlassian does not document.
  *   It must never be phrased as "we revoked your access", and the 90-day
  *   expiry is Atlassian's documented behaviour, not a CharityPilot guarantee.
  *
- * Nothing here states where a document authoritative in Confluence is
- * *resident*: that turns on an unresolved question for the owner (Open
- * Question 1 of the storage spec), and a residency claim that turns out wrong
- * is worse than none. The disclaimer below is true either way it is ruled.
+ * Selected documents can be authoritative in Confluence through references.
+ * Their actual site residency and exclusions still require separate evidence;
+ * that product choice is not a guarantee about where every copy is held.
  *
  * **It goes on `authorize` and nowhere else.** `status` is a keys-allow-listed
  * connection report guarded by a substring test that forbids the word "refresh"
@@ -167,15 +166,15 @@ export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
     'Confluence is an alpha integration. Read these limits before you connect — they change what ' +
     'CharityPilot can promise a data subject who asks you to erase their data.',
   erasure: Object.freeze([
-    'Deleting a document in CharityPilot does not delete anything from your Confluence site. It ' +
-      'removes CharityPilot’s record and its reference; the page and its attachments stay where ' +
-      'they are, and your own administrators keep control of them.',
+    'Removing a citation leaves the Confluence page and its attachments unchanged. A document’s ' +
+      'citations must be reviewed and removed before it can enter Deleted Items. Ordinary Vault ' +
+      'removal does not erase Confluence content; your own administrators keep control of it.',
     'Erasure from your Confluence site is a separate action an administrator has to ask for ' +
       'explicitly, and it is best-effort: it is bounded by permissions you control, not ' +
       'permissions CharityPilot holds.',
     'When an erasure is requested, CharityPilot attempts to delete and then purge the page and ' +
-      'the attachments it recorded. It checks that the current page endpoint returns 404; this ' +
-      'does not prove erasure of versions or backups.',
+      'the attachments it recorded. It checks normal and trashed page records and recorded attachment ' +
+      'records, including the attachment Trash inventory. A 404 alone does not prove erasure.',
     'Purging needs a higher permission than deleting: the space manage/content permission for a ' +
       'page, and the administer space permission for an attachment. If the connection you grant ' +
       'cannot purge, CharityPilot reports the erasure as failed and needing a person with those ' +
@@ -183,8 +182,9 @@ export const CONFLUENCE_CONNECT_DISCLOSURE = Object.freeze({
     'Between the delete and the purge, and after a purge your site refuses, the content sits in ' +
       "your own Confluence trash and your own administrators can restore it. CharityPilot cannot " +
       'prevent that.',
-    'The proof covers the page. An attachment CharityPilot did not record is never looked for, so ' +
-      'the proof is only as complete as what CharityPilot published.',
+    'Before deletion, CharityPilot checks the current attachment inventory. If an unrecorded attachment ' +
+      'is found, CharityPilot refuses erasure for human review. A page already in Trash needs restoration and inventory review ' +
+      'before purge. Verification covers recorded target IDs, not undiscovered copies, versions or backups.',
     'Content in your Confluence site is held wherever Atlassian hosts that site, which your own ' +
       'administrators choose. CharityPilot makes no data-residency guarantee for it.',
   ] as const),
