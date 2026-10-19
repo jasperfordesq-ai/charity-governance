@@ -3014,7 +3014,8 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
       name !== "personal-local-readiness.spec.ts" &&
       name !== "dpo-session-replay-concurrency.spec.ts" &&
       name !== "document-control-refresh-concurrency.spec.ts" &&
-      name !== "retained-copy-review.spec.ts")
+      name !== "retained-copy-review.spec.ts" &&
+      name !== "retained-copy-permission.spec.ts")
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
   // The replay regression deliberately drops real auth responses to simulate
@@ -3057,6 +3058,16 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   assert.match(copyReviewSpec, /route\.fetch\(\{ maxRedirects: 0 \}\)/);
   assert.match(copyReviewSpec, /route\.abort\('failed'\)/);
   assert.doesNotMatch(copyReviewSpec, /\.(?:unroute|routeWebSocket|unrouteAll)\(/);
+  // Permission fault injection may lose a real committed response, never
+  // manufacture application success or replace the server-side observer.
+  const permissionSpec = readFileSync(join(ROOT, "e2e", "tests", "retained-copy-permission.spec.ts"), "utf8");
+  assert.match(permissionSpec, /test\.skip\(IS_DEPLOYED_QA,/);
+  assert.equal((permissionSpec.match(/\.route\(/g) ?? []).length, 2);
+  assert.match(permissionSpec, /\.route\(`\$\{root\}\/\$\{review\.id\}\/permission`,/);
+  assert.match(permissionSpec, /\.route\(`\$\{root\}\/permissions\/\$\{permission\[0\]\.id\}\/withdraw`,/);
+  assert.equal((permissionSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 2);
+  assert.equal((permissionSpec.match(/route\.fulfill\(\{ response \}\)/g) ?? []).length, 2);
+  assert.doesNotMatch(permissionSpec, /fulfill\(\{\s*(?:json|body|status)|\.(?:unroute|routeWebSocket|unrouteAll)\(/);
   const documentFaultCode = documentFaultSpec.split("\n")
     .filter((line) => !line.trimStart().startsWith("//"))
     .join("\n");

@@ -1,3 +1,15 @@
+## 19 October: composed synthetic permission acceptance
+
+The isolated browser suite now exercises successful Owner permission issuance
+and withdrawal through the actual application routes/services and PostgreSQL,
+including lost acknowledgements reconciled without duplicate decisions. Its
+source observation reads an uploaded local file and the private fake Atlassian
+page/version inventory. Maintenance scope insertion uses the guarded disposable
+database and real SQL trigger. No real provider action is authorised or proved.
+Read the [acceptance and data-flow matrix](confluence-acceptance-matrix.md) for
+the remaining live sandbox, custody/residency and independent recovery evidence.
+Exact execution results and the initial shared-IP throttling finding are private.
+
 ## 19 October: provider-independent continuation
 
 Provider selection remains open. Do not make a candidate Supabase account a

@@ -1,3 +1,13 @@
+## 19 October: successful synthetic permission browser coverage
+
+The positive Owner permission/withdrawal journey now composes real application
+and database decisions with the isolated fake provider, including receipt lookup
+after lost acknowledgements. Existing missing-scope refusal coverage is retained.
+This closes a browser coverage gap; it does not close live provider erasure,
+independent custody, residency, managed hosting or physical host-loss acceptance.
+Use the [acceptance matrix](confluence-acceptance-matrix.md) and private dated
+results to continue without reimplementing already verified controls.
+
 ## 19 October: remove candidate-provider dependency from continuation
 
 A particular hosting/database account is not an audit requirement. Follow the

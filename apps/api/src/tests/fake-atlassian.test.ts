@@ -3,6 +3,23 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createFakeAtlassian } from './fake-atlassian.js';
 
+test('synthetic retained-page fixture lists its exact version and no attachments', async () => {
+  const site = createFakeAtlassian();
+  site.seedPage({ id: 'retained-test', spaceId: 'space-1', title: 'Retained synthetic page' });
+  assert.throws(() => site.seedPage({ id: 'retained-test', spaceId: 'space-1', title: 'Duplicate' }));
+  const base = `https://api.atlassian.com/ex/confluence/${site.cloudId}/wiki/api/v2/pages/retained-test`;
+  const headers = { Authorization: 'Bearer access-1' };
+  const versions = await site.fetch(`${base}/versions`, { headers });
+  assert.equal(versions.status, 200);
+  assert.deepEqual(await versions.json(), { results: [{ number: 1, page: { id: 'retained-test' } }] });
+  const attachments = await site.fetch(`${base}/attachments`, { headers });
+  assert.deepEqual(await attachments.json(), { results: [] });
+  assert.equal((await site.fetch(`${base}/versions`)).status, 401);
+  assert.equal((await site.fetch(`${base}-missing/versions`, { headers })).status, 404);
+  await site.fetch(base, { method: 'DELETE', headers });
+  assert.equal((await site.fetch(`${base}/versions`, { headers })).status, 404);
+});
+
 test('an unrouted path is a 404, and every call is recorded', async () => {
   const site = createFakeAtlassian();
 

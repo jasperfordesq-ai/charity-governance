@@ -68,7 +68,7 @@ services:
       NODE_ENV: development
       FAKE_ATLASSIAN_PORT: "4000"
       FAKE_ATLASSIAN_HOST: 0.0.0.0
-      FAKE_ATLASSIAN_CLOUD_ID: fake-cloud-id
+      FAKE_ATLASSIAN_CLOUD_ID: 00000000-0000-4000-8000-000000000001
       NEXT_TELEMETRY_DISABLED: "1"
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=64m,mode=1777

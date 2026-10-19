@@ -896,7 +896,7 @@ export function expectedLocalServiceEnvironments(identity) {
       CHARITYPILOT_FAKE_ATLASSIAN_BASE_URL: "http://fake-atlassian:4000",
     },
     "fake-atlassian": {
-      FAKE_ATLASSIAN_CLOUD_ID: "fake-cloud-id",
+      FAKE_ATLASSIAN_CLOUD_ID: "00000000-0000-4000-8000-000000000001",
       FAKE_ATLASSIAN_HOST: "0.0.0.0",
       FAKE_ATLASSIAN_PORT: "4000",
       NEXT_TELEMETRY_DISABLED: "1",

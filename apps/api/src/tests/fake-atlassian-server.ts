@@ -33,10 +33,13 @@ if ((process.env.NODE_ENV ?? 'production') === 'production') {
 
 const port = Number.parseInt(process.env.FAKE_ATLASSIAN_PORT ?? '4000', 10);
 const host = process.env.FAKE_ATLASSIAN_HOST ?? '0.0.0.0';
-const cloudId = process.env.FAKE_ATLASSIAN_CLOUD_ID ?? 'fake-cloud-id';
+const cloudId = process.env.FAKE_ATLASSIAN_CLOUD_ID ?? '00000000-0000-4000-8000-000000000001';
 const siteUrl = process.env.FAKE_ATLASSIAN_SITE_URL ?? 'https://charity-e2e.atlassian.net';
 
-const site = createFakeAtlassian({ cloudId, siteUrl, siteName: 'Charity E2E' });
+const site = createFakeAtlassian({ cloudId, siteUrl, siteName: 'Charity E2E',
+  grantedScope: 'read:confluence-content.all write:confluence-content offline_access read:page:confluence read:attachment:confluence' });
+// An existing remote page, distinct from pages the publishing tests create.
+site.seedPage({ id: 'synthetic-retained-copy', spaceId: 'space-gov', title: 'Synthetic retained copy' });
 
 // Seeded so the space picker has something to offer. A test that needs more
 // can add them through the control endpoint below.

@@ -46,6 +46,8 @@ export type FakeAtlassian = {
   calls: FakeCall[];
   issuedRefreshTokens: string[];
   addSpace(space: { id: string; key: string; name: string }): void;
+  /** Test arrangement only; does not represent a product publishing request. */
+  seedPage(page: Pick<FakePage, 'id' | 'spaceId' | 'title'>): void;
   /**
    * Adds another site to what `accessible-resources` reports, so a test can
    * drive the multi-site case (`CONFLUENCE_MULTIPLE_SITES`) — previously
@@ -569,6 +571,15 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
         return withAuth(headers, () => listSpacesHandler(url));
       }
 
+      const pageVersionsMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)\/versions$/.exec(rest);
+      if (pageVersionsMatch && method === 'GET') {
+        return withAuth(headers, () => {
+          const page = pages.get(pageVersionsMatch[1]);
+          return page?.status === 'current' ? jsonResponse(200, { results:
+            Array.from({ length: page.version }, (_, i) => ({ number: i + 1, page: { id: page.id } })) }) : notFound();
+        });
+      }
+
       const pageAttachmentsMatch = /^\/wiki\/api\/v2\/pages\/([^/]+)\/attachments$/.exec(rest);
       if (pageAttachmentsMatch && method === 'GET') {
         return withAuth(headers, () => {
@@ -639,6 +650,10 @@ export function createFakeAtlassian(options: FakeAtlassianOptions = {}): FakeAtl
     cloudId,
     calls,
     issuedRefreshTokens,
+    seedPage(page): void {
+      if (pages.has(page.id)) throw new Error('Synthetic page already exists');
+      pages.set(page.id, { ...page, version: 1, status: 'current', properties: new Map() });
+    },
     addSpace(space: { id: string; key: string; name: string }): void {
       spaces.push({ ...space, type: 'global', status: 'current' });
     },

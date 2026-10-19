@@ -86,6 +86,8 @@ for (const outcome of ['recorded', 'lost-save', 'lost-withdrawal']) {
       expect(scan.violations.filter(issue => issue.impact === 'serious' || issue.impact === 'critical')).toEqual([]);
       await panel.screenshot({ path: test.info().outputPath('review-panel.png') });
     }
+    const receiptResponse = loseResponse ? null : page.waitForResponse(response =>
+      response.url().endsWith(`/publications/${publicationId}/reviews`) && response.request().method() === 'GET');
     await submit.click();
     if (loseResponse) {
       await expect(panel.getByText(/The save outcome needs reconciliation/)).toBeVisible();
@@ -95,6 +97,19 @@ for (const outcome of ['recorded', 'lost-save', 'lost-withdrawal']) {
       await panel.getByRole('button', { name: 'Refresh review receipts', exact: true }).click();
     } else {
       await expect(panel.getByText(/Review recorded:/)).toBeVisible();
+      const receipt = await receiptResponse!;
+      if (receipt.status() === 429) {
+        // These browser sessions deliberately share the runner gateway address.
+        // Honour its real read budget rather than weaken the production limiter
+        // or retry the already-committed review POST.
+        const seconds = Number(receipt.headers()['retry-after']);
+        expect(Number.isFinite(seconds) && seconds > 0 && seconds <= 60).toBe(true);
+        await page.waitForTimeout(seconds * 1000 + 100);
+        const refreshed = page.waitForResponse(response =>
+          response.url().endsWith(`/publications/${publicationId}/reviews`) && response.request().method() === 'GET');
+        await panel.getByRole('button', { name: 'Refresh review receipts', exact: true }).click();
+        expect((await refreshed).status()).toBe(200);
+      } else expect(receipt.status()).toBe(200);
     }
     await expect(panel.locator('li').filter({ hasText: `UI-REVIEW-${stamp}` })).toHaveCount(1);
     if (loseResponse) {
