@@ -1,3 +1,13 @@
+## 19 October: calendar browser check identifies the exact policy revision
+
+The first hosted calendar-policy journey failed before passing on retry because
+its broad evidence-text selector also matched an older policy's withdrawal.
+The artifact showed one approved and one correctly withdrawn revision, rather
+than duplicate active policies. A deterministic prior-policy fixture reproduces
+that ambiguity. The test now selects the exact returned revision and independently
+checks the previous policy's withdrawal. Runtime and migration code are unchanged;
+follow the corrected commit's exact CI before using the prepared release path.
+
 ## 19 October: calendar terms for supported operational policies
 
 Source now accepts distinct calendar-year terms for Vault drafts, complaints and

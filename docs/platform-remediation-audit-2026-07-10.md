@@ -1,3 +1,13 @@
+## 19 October: hosted calendar-test ambiguity corrected
+
+The hosted browser workflow passed with one flaky calendar test. Its first
+attempt matched both the new approval and an older withdrawal citing that same
+evidence reference. A prior-policy fixture reproduced the strict-locator failure
+locally with retries disabled. The selector now binds the returned policy revision
+and checks the earlier withdrawal in the database. This is a test reliability
+correction, not a duplicate-policy application fix. Old successful workflow status
+must not substitute for exact corrected-source verification or deployment.
+
 ## 19 October: scoped calendar-year policy creation
 
 The API and form now distinguish calendar years from elapsed days. The new

@@ -9,6 +9,18 @@ test('calendar-year retention keeps units separate and records exact approved te
   test.skip(IS_DEPLOYED_QA, 'Synthetic policy requires the runner-owned disposable database.');
   await gotoWithDevServerRetry(ownerPage, '/documents');
   const policies = ownerPage.getByRole('region', { name: 'Draft retention policies' });
+  // A replacement approval puts its evidence reference on the withdrawn row
+  // too. Keep prior history so broad text selectors fail deterministically.
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '30');
+  await policies.getByRole('button', { name: 'Review approval' }).click();
+  const baseline = ownerPage.getByRole('dialog', { name: 'Approve draft retention policy' });
+  await reliableFill(baseline.getByLabel('Policy approval evidence reference'), 'SYNTHETIC-CALENDAR-BASELINE');
+  await baseline.getByRole('checkbox', { name: /I have authority to approve these exact terms/ }).check();
+  const baselineSaved = ownerPage.waitForResponse(response => response.url().endsWith('/documents/policy-revisions') && response.request().method() === 'POST');
+  await baseline.getByRole('button', { name: 'Approve and replace earlier approvals' }).click();
+  const baselineResponse = await baselineSaved;
+  expect(baselineResponse.status()).toBe(201);
+  const baselineId = (await baselineResponse.json()).data.id;
   await policies.getByLabel('Retention rule', { exact: true }).selectOption('AFTER_CALENDAR_YEARS');
   await expect(policies.getByLabel('Minimum retention calendar years')).toHaveValue('');
   await reliableFill(policies.getByLabel('Recovery days after removal'), '30');
@@ -25,13 +37,18 @@ test('calendar-year retention keeps units separate and records exact approved te
   await dialog.getByRole('button', { name: 'Approve and replace earlier approvals' }).click();
   const response = await saved;
   expect(response.status()).toBe(201);
-  const id = (await response.json()).data.id;
+  const { id, revision } = (await response.json()).data;
   const state = await withDb(client => client.query(`SELECT "retentionMode","retentionDays","retentionYears","retentionAnchor",state,
     "approvalEvidenceRef" FROM "DataRetentionPolicyRevision" WHERE id=$1 AND "organisationId"=$2`, [id, owner.organisationId]));
   expect(state.rows).toEqual([{ retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6,
     retentionAnchor: 'CREATED_AT', state: 'APPROVED', approvalEvidenceRef: 'SYNTHETIC-CALENDAR-001' }]);
+  const withdrawal = await withDb(client => client.query(`SELECT "evidenceRef" FROM "DataRetentionPolicyWithdrawal"
+    WHERE "policyId"=$1 AND "organisationId"=$2`, [baselineId, owner.organisationId]));
+  expect(withdrawal.rows).toEqual([{ evidenceRef: 'SYNTHETIC-CALENDAR-001' }]);
   await policies.getByRole('button', { name: 'Load policy history' }).click();
-  const row = policies.getByRole('listitem').filter({ hasText: 'SYNTHETIC-CALENDAR-001' });
+  const row = policies.getByRole('listitem').filter({ has: ownerPage.getByRole('heading', { name: `Revision ${revision}: Approved`, exact: true }) });
+  await expect(row).toHaveCount(1);
+  await expect(row.getByText('Approval evidence: SYNTHETIC-CALENDAR-001', { exact: true })).toBeVisible();
   await row.getByRole('button', { name: 'Copy terms into form' }).click();
   await expect(policies.getByLabel('Minimum retention calendar years')).toHaveValue('6');
   await policies.getByLabel('Retention rule', { exact: true }).selectOption('AFTER_ANCHOR');
