@@ -1,3 +1,13 @@
+## 19 October: live administration and hosting compatibility review
+
+Read-only site/sandbox residency, sandbox entitlement and test OAuth ownership/
+scope observations now have a dated ignored private receipt. Do not infer actual
+pinning, licence renewal or recovery custody from intended configuration. Follow
+the [acceptance matrix](confluence-acceptance-matrix.md) before any location move.
+The strict production document-store implementation is still local/Supabase;
+an alternative supplier requires an accepted adapter rather than weakening that
+guard. Full cost comparison and actual provider/host-loss evidence remain open.
+
 ## 19 October: composed synthetic permission acceptance
 
 The isolated browser suite now exercises successful Owner permission issuance

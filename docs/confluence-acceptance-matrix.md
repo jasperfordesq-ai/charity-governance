@@ -25,6 +25,15 @@ scheduler under `apps/api/src/jobs/` and integration routes under
 
 ## Residency and custody evidence
 
+Treat current administration observations as authoritative over an intended
+configuration in correspondence. An unset location is not EU pinning and does
+not, by itself, prove that data is outside the EU. Observe the production site
+and sandbox separately. Before requesting a move, review its exact app scope,
+Marketplace compatibility and downtime; do not change organisation-wide defaults
+as a shortcut. [Atlassian's migration guidance](https://support.atlassian.com/security-and-access-policies/docs/move-data-to-another-location/)
+describes the interruption and editor implications. Keep tenant-specific settings,
+billing and contributor observations in the ignored private inspection record.
+
 | Material | Required observation |
 | --- | --- |
 | Confluence pages and attachments | Actual site/app residency setting, in-scope coverage, current plan/entitlement and exclusions. Tenant declaration and independently observed setting remain distinct. |
@@ -57,3 +66,14 @@ scheduler under `apps/api/src/jobs/` and integration routes under
 
 Confluence remains optional for other organisations. Do not transfer real
 Governance Hub content or sensitive records as part of this synthetic run.
+
+## Hosting compatibility boundary
+
+Supplier selection remains open, but storage implementation is not yet supplier
+neutral. `apps/api/src/services/storage.service.ts` supports local/Supabase
+provenance; the strict public-production guard in `apps/api/src/utils/env.ts`
+rejects local default storage. An alternative document store needs a supported
+adapter and verification of per-record provenance, authenticated delivery,
+retention, cleanup and recovery before activation. Preserve the strict guard
+while evaluating alternatives. Confluence references do not replace storage for
+all sensitive records, and a cheaper VM does not remove operating responsibilities.

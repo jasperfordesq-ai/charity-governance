@@ -1,3 +1,12 @@
+## 19 October: current provider observations replace intended configuration
+
+The private continuation receipt now records fresh read-only Confluence
+administration, sandbox billing and test OAuth observations with explicit limits.
+Residency adoption/move, production entitlement and independent recovery custody
+are not inferred from historical intent. The
+[acceptance matrix](confluence-acceptance-matrix.md) also records the alternative
+document-store adapter requirement; no supplier was activated or guard relaxed.
+
 ## 19 October: successful synthetic permission browser coverage
 
 The positive Owner permission/withdrawal journey now composes real application
