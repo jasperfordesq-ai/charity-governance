@@ -5,6 +5,41 @@ import { IS_DEPLOYED_QA } from '../env';
 import { withDb } from '../helpers/db';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 
+test('calendar-year retention keeps units separate and records exact approved terms', async ({ owner, ownerPage, browserOriginFence }) => {
+  test.skip(IS_DEPLOYED_QA, 'Synthetic policy requires the runner-owned disposable database.');
+  await gotoWithDevServerRetry(ownerPage, '/documents');
+  const policies = ownerPage.getByRole('region', { name: 'Draft retention policies' });
+  await policies.getByLabel('Retention rule', { exact: true }).selectOption('AFTER_CALENDAR_YEARS');
+  await expect(policies.getByLabel('Minimum retention calendar years')).toHaveValue('');
+  await reliableFill(policies.getByLabel('Recovery days after removal'), '30');
+  await reliableFill(policies.getByLabel('Minimum retention calendar years'), '0');
+  await expect(policies.getByRole('button', { name: 'Review approval' })).toBeDisabled();
+  await reliableFill(policies.getByLabel('Minimum retention calendar years'), '6');
+  await policies.getByRole('button', { name: 'Review approval' }).click();
+  const dialog = ownerPage.getByRole('dialog', { name: 'Approve draft retention policy' });
+  await expect(dialog).toContainText('6 calendar years');
+  await expect(dialog.getByRole('button', { name: 'Approve and replace earlier approvals' })).toBeDisabled();
+  await reliableFill(dialog.getByLabel('Policy approval evidence reference'), 'SYNTHETIC-CALENDAR-001');
+  await dialog.getByRole('checkbox', { name: /I have authority to approve these exact terms/ }).check();
+  const saved = ownerPage.waitForResponse(response => response.url().endsWith('/documents/policy-revisions') && response.request().method() === 'POST');
+  await dialog.getByRole('button', { name: 'Approve and replace earlier approvals' }).click();
+  const response = await saved;
+  expect(response.status()).toBe(201);
+  const id = (await response.json()).data.id;
+  const state = await withDb(client => client.query(`SELECT "retentionMode","retentionDays","retentionYears","retentionAnchor",state,
+    "approvalEvidenceRef" FROM "DataRetentionPolicyRevision" WHERE id=$1 AND "organisationId"=$2`, [id, owner.organisationId]));
+  expect(state.rows).toEqual([{ retentionMode: 'AFTER_CALENDAR_YEARS', retentionDays: null, retentionYears: 6,
+    retentionAnchor: 'CREATED_AT', state: 'APPROVED', approvalEvidenceRef: 'SYNTHETIC-CALENDAR-001' }]);
+  await policies.getByRole('button', { name: 'Load policy history' }).click();
+  const row = policies.getByRole('listitem').filter({ hasText: 'SYNTHETIC-CALENDAR-001' });
+  await row.getByRole('button', { name: 'Copy terms into form' }).click();
+  await expect(policies.getByLabel('Minimum retention calendar years')).toHaveValue('6');
+  await policies.getByLabel('Retention rule', { exact: true }).selectOption('AFTER_ANCHOR');
+  await expect(policies.getByLabel('Minimum retention days')).toHaveValue('');
+  await expect(policies.getByRole('button', { name: 'Review approval' })).toBeDisabled();
+  await ownerPage.screenshot({ path: test.info().outputPath('calendar-units.png'), fullPage: false, animations: 'disabled' });
+});
+
 test('a draft enters Deleted Items and restores with identical bytes and retained audit', async ({ owner, ownerPage, browserOriginFence }) => {
   test.skip(IS_DEPLOYED_QA, 'Synthetic policy requires the runner-owned disposable database.');
   const name = `Recovery proof ${Date.now()}`;

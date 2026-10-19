@@ -1,3 +1,13 @@
+## 19 October: calendar terms for supported operational policies
+
+Source now accepts distinct calendar-year terms for Vault drafts, complaints and
+their two copy classes. A forward migration admits only their existing creation
+or complaint-resolution anchors. It creates no policy and leaves Owner approval,
+evidence, recovery binding and all disposal guards intact. The form labels UTC
+anniversary semantics and clears values on a unit change. Synthetic API, native
+SQL and browser verification plus exact deployment status belong in the private
+checklist; do not infer activation from this source entry or invent tenant terms.
+
 ## 19 October: integrated calendar-year document claim proof
 
 The disposable retention migration suite now exercises a removed draft under a

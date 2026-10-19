@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
-// Called only inside the disposable, fully migrated retention proof. The mode
-// fence is bypassed solely to seed future policy facts, never for a claim.
+// Called only inside the disposable, fully migrated retention proof. Policy
+// insertion, authorisation and claim all use the normal calendar-mode guards.
 export function proveDocumentCalendarClaim(sql, plan) {
   const fixture = createdAt => `BEGIN;
     INSERT INTO "Organisation" (id,name,"updatedAt") VALUES ('calendar-chain','Synthetic calendar claim',now());
@@ -21,10 +21,8 @@ export function proveDocumentCalendarClaim(sql, plan) {
     ALTER TABLE "Document" ENABLE TRIGGER "Document_recovery_state_guard";
     INSERT INTO "DataRetentionPolicyWithdrawal" (id,"organisationId","policyId","actorUserId",reason,"evidenceRef") VALUES
       ('calendar-chain-withdrawal','calendar-chain','calendar-chain-original','calendar-chain-owner','Replace synthetic review rule with calendar term','CALENDAR-REPLACE-001');
-    ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
     INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,state,"retentionMode","retentionAnchor","retentionDays","retentionYears","recoveryDays","createdById","approvedById","approvedAt","approvalEvidenceRef") VALUES
       ('calendar-chain-policy','calendar-chain','VAULT_DRAFT',2,'APPROVED','AFTER_CALENDAR_YEARS','CREATED_AT',NULL,6,30,'calendar-chain-owner','calendar-chain-owner',now(),'CALENDAR-POLICY-001');
-    ALTER TABLE "DataRetentionPolicyRevision" ENABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
     INSERT INTO "DocumentPurgeAuthorization" (id,"organisationId","documentId","documentRevision","policyId","actorUserId","evidenceRef",reason,"storagePath",provider,sha256,"fileSize","recoveryUntil","dispositionPlan")
       SELECT 'calendar-chain-auth',"organisationId",id,"updatedAt",'calendar-chain-policy','calendar-chain-owner','CALENDAR-AUTH-001',
         'Reviewed synthetic calendar claim with all normal guards',"fileUrl","storageProvider","recoverySha256","fileSize","recoveryUntil",'${JSON.stringify(plan)}'::jsonb

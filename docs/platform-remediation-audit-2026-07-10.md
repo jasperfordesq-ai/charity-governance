@@ -1,3 +1,14 @@
+## 19 October: scoped calendar-year policy creation
+
+The API and form now distinguish calendar years from elapsed days. The new
+forward database guard admits year terms only for the four implemented operational
+classes and their supported anchors. Unsupported classes/anchors remain refused;
+old day/review/permanent policies retain their meaning. No migration adopts a
+customer policy. Approval evidence, recovery bindings, holds and separate disposal
+remain mandatory. The previous creation-fence descriptions below are historical
+for source before this migration; live activation still requires its verified
+release. See the private continuation record for tests and release boundaries.
+
 ## 19 October: calendar-year document claims retain normal guards
 
 The retention migration proof now joins calendar cutoff enforcement to the

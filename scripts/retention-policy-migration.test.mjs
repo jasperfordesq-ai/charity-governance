@@ -341,6 +341,20 @@ test('retention policy and recovery-state upgrade preserve documents and enforce
       VALUES ('known-review-mode','retention-a','VAULT_DRAFT',200,'REVIEW_REQUIRED',30,'owner-a'); ROLLBACK;`);
     assert.equal(sql(`SELECT count(*) FROM "DataRetentionPolicyRevision" WHERE "retentionYears" IS NOT NULL;`), '0',
       'existing day-based policies must not acquire invented year terms');
+    const operationalCalendar = (recordClass, anchor) => `BEGIN;
+      INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode",
+        "retentionAnchor","retentionDays","retentionYears","recoveryDays","createdById")
+      VALUES ('operational-calendar','retention-a','${recordClass}',200,'AFTER_CALENDAR_YEARS',
+        '${anchor}',NULL,6,30,'owner-a');
+      SELECT "retentionYears" || ':' || "retentionAnchor" FROM "DataRetentionPolicyRevision" WHERE id='operational-calendar';
+      ROLLBACK;`;
+    for (const recordClass of ['VAULT_DRAFT', 'COMPLAINT', 'DOCUMENT_COPY', 'COMPLAINT_COPY']) {
+      const anchor = recordClass === 'COMPLAINT' ? 'RESOLVED_AT' : 'CREATED_AT';
+      assert.equal(sql(operationalCalendar(recordClass, anchor)), `6:${anchor}`);
+      sql(operationalCalendar(recordClass, anchor === 'CREATED_AT' ? 'RESOLVED_AT' : 'CREATED_AT'),
+        /Unsupported retention policy mode/);
+    }
+    sql(operationalCalendar('MINUTE_BOOK', 'CREATED_AT'), /Unsupported retention policy mode/);
     const calendarInsert = (years, days = 'NULL', anchor = "'CREATED_AT'") => `BEGIN;
       ALTER TABLE "DataRetentionPolicyRevision" DISABLE TRIGGER "DataRetentionPolicyRevision_01_mode_fence";
       INSERT INTO "DataRetentionPolicyRevision" (id,"organisationId","recordClass",revision,"retentionMode",

@@ -8,7 +8,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { statusPanelClassName } from '@/components/ui/status';
 import { ConfirmActionModal } from '@/components/ui/confirm-action-modal';
 
-type Terms = { retentionMode: 'REVIEW_REQUIRED' | 'PERMANENT' | 'AFTER_ANCHOR'; retentionDays: number | null; recoveryDays: number };
+type Terms = { retentionMode: 'REVIEW_REQUIRED' | 'PERMANENT' | 'AFTER_ANCHOR' | 'AFTER_CALENDAR_YEARS'; retentionDays: number | null; retentionYears: number | null; recoveryDays: number };
 type Revision = Omit<Terms, 'retentionMode'> & { retentionMode: string; retentionYears: number | null;
   id: string; revision: number; state: 'DRAFT' | 'APPROVED';
   approvedAt: string | null; approvalEvidenceRef: string | null; withdrawal: { reason: string; evidenceRef: string } | null };
@@ -50,9 +50,11 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const pending = useRef(false);
-  const terms: Terms = { retentionMode: mode, retentionDays: mode === 'AFTER_ANCHOR' ? Number(retention) : null, recoveryDays: Number(recovery) };
+  const terms: Terms = { retentionMode: mode, retentionDays: mode === 'AFTER_ANCHOR' ? Number(retention) : null,
+    retentionYears: mode === 'AFTER_CALENDAR_YEARS' ? Number(retention) : null, recoveryDays: Number(recovery) };
   const valid = Number.isInteger(terms.recoveryDays) && terms.recoveryDays >= 1 && terms.recoveryDays <= 3650
-    && (mode !== 'AFTER_ANCHOR' || (Number.isInteger(terms.retentionDays) && terms.retentionDays! >= 1 && terms.retentionDays! <= 36525));
+    && (mode !== 'AFTER_ANCHOR' || (Number.isInteger(terms.retentionDays) && terms.retentionDays! >= 1 && terms.retentionDays! <= 36525))
+    && (mode !== 'AFTER_CALENDAR_YEARS' || (Number.isInteger(terms.retentionYears) && terms.retentionYears! >= 1 && terms.retentionYears! <= 100));
   const validEvidence = /^[A-Z0-9][A-Z0-9-]{2,119}$/.test(evidence);
 
   const load = async (older = false) => {
@@ -101,12 +103,15 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
     </div> : null}
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Retention rule<select aria-label="Retention rule" className="mt-1 block w-full rounded border p-2" value={mode} disabled={busy}
-        onChange={event => setMode(event.target.value as Terms['retentionMode'])}>
+        onChange={event => { setMode(event.target.value as Terms['retentionMode']); setRetention(''); }}>
         <option value="REVIEW_REQUIRED">Individual removal review required</option>
         <option value="AFTER_ANCHOR">Minimum days from {anchor}</option>
+        <option value="AFTER_CALENDAR_YEARS">Minimum calendar years from {anchor}</option>
         <option value="PERMANENT">Permanent retention — no removal</option>
       </select></label>
       {mode === 'AFTER_ANCHOR' ? <Input type="number" label="Minimum retention days" value={retention} onValueChange={setRetention} min={1} max={36525} isDisabled={busy} /> : null}
+      {mode === 'AFTER_CALENDAR_YEARS' ? <Input type="number" label="Minimum retention calendar years" value={retention} onValueChange={setRetention} min={1} max={100} isDisabled={busy}
+        description="UTC anniversary; 29 February becomes 28 February in a non-leap year. No automatic removal or purge." /> : null}
       <Input type="number" label={copy ? 'Recorded recovery period (days)' : 'Recovery days after removal'} value={recovery} onValueChange={setRecovery} min={1} max={3650} isDisabled={busy}
         classNames={{ description: '!text-gray-700 dark:!text-gray-300' }}
         description={copy ? 'A policy term only. Verify actual recovery with the provider; this form cannot create it.' : 'A permanent-retention rule still prohibits removal regardless of this recovery value.'} />
@@ -122,11 +127,10 @@ export function RetentionPolicies({ recordClass }: { recordClass: 'VAULT_DRAFT' 
     {rows?.length ? <ol className="mt-4 space-y-3">{rows.map(row => <li key={row.id} className="rounded border p-3 text-sm">
       <h3 className="font-medium">Revision {row.revision}: {row.withdrawal ? 'Withdrawn' : row.state === 'APPROVED' ? 'Approved' : 'Proposal'}</h3>
       <p>{describe(row, anchor, copy)}</p>
-      {row.retentionMode === 'AFTER_CALENDAR_YEARS' ? <p>Calendar-year terms are shown for review; creating another policy with these terms remains unavailable pending approval and release.</p> : null}
       {row.approvalEvidenceRef ? <p>Approval evidence: {row.approvalEvidenceRef}</p> : null}
       {row.withdrawal ? <p>Withdrawal: {row.withdrawal.reason} Evidence: {row.withdrawal.evidenceRef}</p> : null}
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" variant="flat" isDisabled={busy || !['REVIEW_REQUIRED', 'PERMANENT', 'AFTER_ANCHOR'].includes(row.retentionMode)} onPress={() => { setMode(row.retentionMode as Terms['retentionMode']); setRetention(row.retentionDays?.toString() ?? ''); setRecovery(String(row.recoveryDays)); }}>Copy terms into form</Button>
+        <Button size="sm" variant="flat" isDisabled={busy || !['REVIEW_REQUIRED', 'PERMANENT', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(row.retentionMode)} onPress={() => { setMode(row.retentionMode as Terms['retentionMode']); setRetention((row.retentionMode === 'AFTER_CALENDAR_YEARS' ? row.retentionYears : row.retentionDays)?.toString() ?? ''); setRecovery(String(row.recoveryDays)); }}>Copy terms into form</Button>
         {isOwner && row.state === 'APPROVED' && !row.withdrawal ? <Button size="sm" variant="flat" isDisabled={busy}
           onPress={() => { setWithdraw(row); setEvidence(''); setReason(''); setError(''); }}>Review withdrawal</Button> : null}
       </div>

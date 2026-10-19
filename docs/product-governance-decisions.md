@@ -1,3 +1,19 @@
+## 19 October: explicit calendar-year policy terms
+
+Offer calendar-year terms for the four existing operational policy classes:
+Vault drafts, complaints, document copies and complaint copies. Keep years
+separate from elapsed days. Complaints use reviewed resolution evidence; drafts
+and copies use their existing creation anchors. UTC anniversary arithmetic
+clamps 29 February to 28 February in a non-leap year. Changing units clears the
+form value so a day count cannot silently become a year count.
+
+This is a configurable product capability, not adoption of a customer's schedule
+or a recommended statutory period. Active Owner approval, recorded evidence,
+class separation, recovery bindings, holds, scoped disposal authority and final
+claim checks remain. Other record classes and anchors remain unavailable for
+calendar policy creation. No policy is created automatically by the migration.
+Source, local verification and actual deployment must be reported separately.
+
 ## 19 October: storage choice and provider selection are separate
 
 For an organisation choosing Confluence, deliberately selected governance

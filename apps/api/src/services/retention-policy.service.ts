@@ -4,8 +4,9 @@ import { AppError } from '../utils/app-error.js';
 
 const evidence = z.string().regex(/^[A-Z0-9][A-Z0-9-]{2,119}$/);
 const terms = z.object({
-  retentionMode: z.enum(['REVIEW_REQUIRED', 'PERMANENT', 'AFTER_ANCHOR']),
+  retentionMode: z.enum(['REVIEW_REQUIRED', 'PERMANENT', 'AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS']),
   retentionDays: z.number().int().min(1).max(36525).nullable(),
+  retentionYears: z.number().int().min(1).max(100).nullable().optional(),
   recoveryDays: z.number().int().min(1).max(3650),
 });
 export const retentionPolicyInput = z.discriminatedUnion('state', [
@@ -15,6 +16,9 @@ export const retentionPolicyInput = z.discriminatedUnion('state', [
 ]).superRefine((value, context) => {
   if ((value.retentionMode === 'AFTER_ANCHOR') !== (value.retentionDays !== null)) {
     context.addIssue({ code: 'custom', path: ['retentionDays'], message: 'Only a timed retention rule has retention days.' });
+  }
+  if ((value.retentionMode === 'AFTER_CALENDAR_YEARS') !== (value.retentionYears != null)) {
+    context.addIssue({ code: 'custom', path: ['retentionYears'], message: 'Only a calendar-year rule has retention years.' });
   }
 });
 export const retentionWithdrawalInput = z.object({
@@ -65,9 +69,10 @@ export class RetentionPolicyService {
       }
       return tx.dataRetentionPolicyRevision.create({ data: {
         organisationId, recordClass: this.recordClass, revision, state: input.state,
-        retentionMode: input.retentionMode, retentionAnchor: input.retentionMode === 'AFTER_ANCHOR'
+        retentionMode: input.retentionMode, retentionAnchor: ['AFTER_ANCHOR', 'AFTER_CALENDAR_YEARS'].includes(input.retentionMode)
           ? this.recordClass === 'COMPLAINT' ? 'RESOLVED_AT' : 'CREATED_AT' : null,
-        retentionDays: input.retentionDays, recoveryDays: input.recoveryDays, createdById: actorUserId,
+        retentionDays: input.retentionDays, retentionYears: input.retentionYears ?? null,
+        recoveryDays: input.recoveryDays, createdById: actorUserId,
         ...(input.state === 'APPROVED' ? { approvedById: actorUserId, approvedAt: clock!.now,
           approvalEvidenceRef: input.approvalEvidenceRef } : {}),
       } });
