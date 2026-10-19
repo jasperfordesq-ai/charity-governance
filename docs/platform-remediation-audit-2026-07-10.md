@@ -1,3 +1,13 @@
+## 19 October: CI runner contract failure corrected
+
+Hosted CI/E2E exposed a stale source-contract count and missing narrow report-test
+exception after the deliberate post-commit response-loss tests were added. The
+contract now names only those fenced POST endpoints, forbids fabricated success
+and unrelated interception/removal, and retains the general no-interception
+rule for all other specs. Full CI contract command passes 123/123 locally; hosted
+verification of the new commit remains separate. No application/provider action
+or isolation boundary changed. Exact failed runs and corrected results are private.
+
 ## 19 October: real-provider-backed historical citation report readback
 
 The source-pinned synthetic runtime at `ef164249`/schema 199 saved an honest

@@ -3016,24 +3016,39 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
       name !== "document-control-refresh-concurrency.spec.ts" &&
       name !== "retained-copy-review.spec.ts" &&
       name !== "integrations-confluence.spec.ts" &&
+      name !== "erasure-observation.spec.ts" &&
       name !== "retained-copy-permission.spec.ts")
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
   // The replay regression deliberately drops real auth responses to simulate
   // network loss. Its only interception points are the three exact auth
   // requests below. Other deliberate interceptors are pinned separately.
-  // Citation fault injection drops one real committed response at the exact
-  // fenced origin. It cannot synthesize success or intercept other routes.
+  // Citation creation and review fault injection each drop one real committed
+  // response at the exact fenced origin. Neither can synthesize success.
   const citationFaultSpec = readFileSync(join(ROOT, "e2e", "tests", "integrations-confluence.spec.ts"), "utf8");
   assert.match(citationFaultSpec, /test\.skip\(IS_DEPLOYED_QA,/);
   assert.match(citationFaultSpec, /const citationPath = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/\$\{documentId\}`;/);
-  assert.equal((citationFaultSpec.match(/\.route\(/g) ?? []).length, 1);
-  assert.match(citationFaultSpec, /\.route\(citationPath,/);
+  assert.match(citationFaultSpec, /const citationReportUrl = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/by-id\/\$\{reference\.id\}\/reviews`;/);
+  assert.deepEqual([...citationFaultSpec.matchAll(/\.route\(([^,]+),/g)].map(match => match[1]), ['citationReportUrl', 'citationPath']);
   assert.match(citationFaultSpec, /if \(route\.request\(\)\.method\(\) !== 'POST'\) return route\.fallback\(\)/);
-  assert.equal((citationFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 1);
-  assert.equal((citationFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 1);
+  assert.match(citationFaultSpec, /expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/);
+  assert.equal((citationFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 2);
+  assert.equal((citationFaultSpec.match(/route\.fetch\(/g) ?? []).length, 2);
+  assert.equal((citationFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 2);
   assert.equal((citationFaultSpec.match(/\.unroute\(citationPath\)/g) ?? []).length, 1);
+  assert.deepEqual([...citationFaultSpec.matchAll(/\.unroute\(([^)]+)\)/g)].map(match => match[1]), ['citationPath']);
   assert.doesNotMatch(citationFaultSpec, /route\.(?:fulfill|continue)\(|routeWebSocket\(|unrouteAll\(/);
+  // The erasure report loses only the real POST acknowledgement. Its GET
+  // observation and original receipt reads must reach the application normally.
+  const erasureFaultSpec = readFileSync(join(ROOT, 'e2e', 'tests', 'erasure-observation.spec.ts'), 'utf8');
+  assert.match(erasureFaultSpec, /test\.skip\(IS_DEPLOYED_QA,/);
+  assert.match(erasureFaultSpec, /const reviewUrl = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/erasures\/\$\{jobId\}\/reviews`;/);
+  assert.deepEqual([...erasureFaultSpec.matchAll(/\.route\(([^,]+),/g)].map(match => match[1]), ['reviewUrl']);
+  assert.match(erasureFaultSpec, /expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/);
+  assert.equal((erasureFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 1);
+  assert.equal((erasureFaultSpec.match(/route\.fetch\(/g) ?? []).length, 1);
+  assert.equal((erasureFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 1);
+  assert.doesNotMatch(erasureFaultSpec, /\.(?:unroute|routeWebSocket|unrouteAll)\(|route\.(?:fulfill|continue)\(/);
   const replayFaultSpec = readFileSync(
     join(ROOT, "e2e", "tests", "dpo-session-replay-concurrency.spec.ts"),
     "utf8",

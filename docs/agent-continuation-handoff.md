@@ -1,3 +1,16 @@
+## 19 October: hosted CI contract correction for deliberate response loss
+
+The hosted CI/E2E runs stopped in the isolated-runner source contract before
+broader checks. Citation creation/report tests now have two deliberate exact
+POST acknowledgement losses; the contract still expected one. The existing
+erasure-report fixture also needs its own exact POST-only exception rather than
+the general no-interception group. The correction pins both citation paths and
+the erasure review path to the fenced API origin, real fetch without redirects,
+POST-only handling and aborted acknowledgements. Fabricated responses, broad
+route changes and deployed-environment execution remain forbidden. The same full
+contract command used by CI passes 123/123 locally. Application/runtime/provider
+state is unchanged; follow the new exact-SHA runs before claiming hosted green.
+
 ## 19 October: real sandbox historical report and original receipt verified
 
 Exact source `ef164249` and schema 199 completed the supported Owner observation,
