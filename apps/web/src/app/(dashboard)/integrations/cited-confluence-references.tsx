@@ -7,10 +7,11 @@ import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppSection } from '@/components/ui/app-page';
 import { ErrorState } from '@/components/ui/states';
+import { CitationObservation } from '../documents/citation-observation';
 
 type Citation = {
   id: string;
-  documentId: string;
+  documentId: string | null;
   recordedSiteId: string;
   recordedPageId: string;
   recordedTitle: string;
@@ -21,6 +22,44 @@ type Citation = {
   documentVisibility: string | null;
 };
 type Page = { references: Citation[]; nextCursor: string | null };
+
+function SourceControls({ reference, onRemoved }: { reference: Citation; onRemoved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const inFlight = useRef(false);
+  const check = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setError('');
+    try {
+      const response = await api.get<{ check: { status: string; currentVersion: number | null } }>(`/integrations/confluence/references/by-id/${reference.id}/check`);
+      const result = response.data.check;
+      setStatus(result.status === 'CURRENT' ? `Current at check: version ${result.currentVersion}.`
+        : result.status === 'SUPERSEDED' ? `Superseded: upstream version ${result.currentVersion}; cited version remains ${reference.citedVersion}.`
+          : 'Unknown: current upstream version could not be verified. This does not prove erasure.');
+    } catch (cause) { setError(apiErrorMessage(cause, 'Version check could not be completed.')); }
+    finally { inFlight.current = false; setBusy(false); }
+  };
+  const remove = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setError('');
+    try { await api.delete(`/integrations/confluence/references/by-id/${reference.id}`); onRemoved(); }
+    catch (cause) { setError(apiErrorMessage(cause, 'Local reference removal could not be confirmed. Refresh citations before trying again.')); }
+    finally { inFlight.current = false; setBusy(false); setConfirming(false); }
+  };
+  return <div className="mt-3 space-y-3">
+    <Button size="sm" variant="flat" onPress={() => void check()} isDisabled={busy}>Check external source version</Button>
+    {status ? <p role="status" className="text-sm">{status}</p> : null}
+    <CitationObservation referenceId={reference.id} pageId={reference.recordedPageId} disabled={busy} />
+    {confirming ? <div className="space-y-2 rounded border border-amber-400 p-3">
+      <p className="text-sm">Remove this local reference to page {reference.recordedPageId}? The Confluence page remains untouched. Governance audit and saved review reports remain available.</p>
+      <Button size="sm" color="danger" onPress={() => void remove()} isLoading={busy}>Confirm local reference removal</Button>
+      <Button size="sm" variant="flat" onPress={() => setConfirming(false)} isDisabled={busy}>Cancel removal</Button>
+    </div> : <Button size="sm" variant="flat" onPress={() => setConfirming(true)} isDisabled={busy}>Remove local source reference</Button>}
+    {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p> : null}
+  </div>;
+}
 
 export function CitedConfluenceReferences() {
   const [references, setReferences] = useState<Citation[]>([]);
@@ -58,10 +97,11 @@ export function CitedConfluenceReferences() {
     {!loading && references.length === 0 && !error ? <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">No current Confluence citations are listed.</p> : null}
     <ol className="mt-3 space-y-3">{references.map((reference) => <li key={reference.id} className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
       <strong>{reference.recordedTitle}</strong>
-      <p className="text-xs text-gray-600 dark:text-gray-300">Citation {reference.id} · document {reference.documentId}</p>
-      <p className="text-sm">Recorded Confluence target: site {reference.recordedSiteId} · page {reference.recordedPageId} · cited version {reference.citedVersion}</p>
+      <p className="break-words text-xs text-gray-600 dark:text-gray-300">Citation {reference.id} · {reference.documentId === null ? 'External document — no Vault upload' : `document ${reference.documentId}`}</p>
+      <p className="break-words text-sm">Recorded Confluence target: site {reference.recordedSiteId} · page {reference.recordedPageId} · cited version {reference.citedVersion}</p>
       <p className="text-sm">Cited {new Date(reference.citedAt).toLocaleString('en-IE')}; current provider version and audience have not been checked here.</p>
-      {reference.documentName ? <p className="text-sm"><Link className="text-teal-primary underline" href="/documents">Review {reference.documentName} in the Vault</Link> · lifecycle {reference.documentLifecycle || 'unknown'} · visibility {reference.documentVisibility || 'unknown'}</p>
+      {reference.documentId === null ? <><p className="text-sm">Restricted external-source register. Confluence controls access to the page content.</p>
+        <SourceControls reference={reference} onRemoved={() => void load()} /></> : reference.documentName ? <p className="text-sm"><Link className="text-teal-primary underline" href="/documents">Review {reference.documentName} in the Vault</Link> · lifecycle {reference.documentLifecycle || 'unknown'} · visibility {reference.documentVisibility || 'unknown'}</p>
         : <p className="text-sm text-amber-800 dark:text-amber-300">The linked Vault document was not found. Review this citation before relying on it.</p>}
       {reference.documentLifecycle !== 'CURRENT'
         ? <p className="text-sm text-amber-800 dark:text-amber-300">This citation is attached to a document that is not currently classified as CURRENT.</p> : null}

@@ -1,3 +1,16 @@
+## 19 October: reference-only compatibility work, activation still open
+
+Source now has an explicit non-file citation anchor, immutable source identity,
+existing tenant/recovery enforcement, compatible checks/review receipts and
+audited local removal. The new source metadata stays in the existing citation
+table, so complete database backup includes it without an extra table inventory.
+
+The first release deliberately exposes no source creation route/form. Deploy
+and prove that compatibility reader before a later activation release, preserving
+a rollback version that understands null file anchors and the new audit types.
+Native upgrade/guard/restore and prototype browser evidence do not prove final
+activation or independent physical-host recovery. Keep the requirement open.
+
 ## 19 October: selected Confluence documents still require a file anchor
 
 Requirement reconciliation found an additional integration gap: the supported

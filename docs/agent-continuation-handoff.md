@@ -1,3 +1,18 @@
+## 19 October: Confluence reference-only compatibility implementation
+
+The compatibility increment adds an explicit external-source anchor without
+inventing a Vault file, while retaining the existing composite tenant FK and
+recovery freeze. It adapts source checks, observations, saved review parsing,
+local removal and governance audit labels. Registration uses a stable request
+identity; retained audit prevents a retry from resurrecting an uncited source.
+
+Do not expose registration in the first release: its previous deployed reader
+requires non-null Document IDs. First deploy compatible readers with zero new
+source rows and no creation route/form. A subsequent registration release can
+then retain a compatible rollback colour. The complete staged feature and exact
+execution receipts are private; `confluence-reference-only-spec.md` defines the
+release sequence and remaining acceptance gates. This is not deployed completion.
+
 ## 19 October: reference-only Confluence registration remains missing
 
 The current citation model requires a live uploaded Vault Document. Its checks,

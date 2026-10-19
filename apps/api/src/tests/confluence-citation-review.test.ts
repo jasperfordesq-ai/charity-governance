@@ -18,7 +18,10 @@ function fixture() {
       return active ? { id: 'owner-1', name: 'Synthetic Owner' } : null;
     } },
     confluenceReference: { findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      assert.deepEqual(where, { id: 'ref-1', organisationId: 'org-1', document: { organisationId: 'org-1', deletedAt: null } }); return citation;
+      assert.deepEqual(where, { id: 'ref-1', organisationId: 'org-1', OR: [
+        { referenceKind: 'CONFLUENCE_SOURCE', documentId: null },
+        { document: { organisationId: 'org-1', deletedAt: null } },
+      ] }); return citation;
     } },
     securityAuditEvent: {
       findFirst: async ({ where }: { where: { id?: string; organisationId: string; type: string; context?: { equals: string } } }) => {
@@ -58,6 +61,19 @@ test('citation report preserves historical identity and action claim with explic
   assert.equal(review.observation.jobCreated, false); assert.equal(review.observation.attachmentsObserved, false);
   assert.equal(review.actionAuthorized, false); assert.equal(review.currentStateVerified, false);
   assert.equal(review.operatorReportOnly, true); assert.deepEqual(f.getCitation(), original);
+});
+
+test('reference-only source review retains its null file anchor and survives local unciting', async () => {
+  const f = fixture();
+  const source = { ...f.getCitation()!, documentId: null };
+  f.setCitation(source);
+  const review = await f.record({ expectedTargetDigest: confluenceCitationTargetDigest(source) });
+  assert.equal(review.citation.documentId, null);
+  assert.equal(review.instruction, null);
+  f.setCitation(null);
+  const saved = await readConfluenceCitationReview(f.prisma, 'org-1', 'owner-1', review.clientRequestId);
+  assert.equal(saved.citation.documentId, null);
+  assert.equal(saved.historicalReceipt, true);
 });
 test('lost acknowledgement and concurrent identical saves return one original receipt without another read', async () => {
   const f = fixture(); f.loseCommit(); await assert.rejects(f.record(), /Unknown commit/);

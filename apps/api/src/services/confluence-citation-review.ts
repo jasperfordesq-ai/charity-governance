@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { AppError } from '../utils/errors.js';
 import { lockOrganisationForUpdate } from './organisation-lock.js';
 import { confluenceErasureReviewInput } from './confluence-erasure-review.js';
-import { observeConfluenceCitation, confluenceCitationObservationSelect, confluenceCitationTargetDigest } from './confluence-citation-observation.js';
+import { observeConfluenceCitation, confluenceCitationObservationSelect, confluenceCitationTargetDigest, liveCitationAnchor } from './confluence-citation-observation.js';
 import type { ConfluenceErasureObservationDeps } from './confluence-erasure-observation.js';
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
-const citationSchema = z.object({ id, documentId: id, cloudId: z.string().min(1).max(160), pageId: id,
+const citationSchema = z.object({ id, documentId: id.nullable(), cloudId: z.string().min(1).max(160), pageId: id,
   pageVersion: z.number().int().positive(), citedAt: z.string().datetime(), updatedAt: z.string().datetime() }).strict();
 const contextSchema = z.object({
   format: z.literal(1), kind: z.literal('CONFLUENCE_CITATION_REVIEW_V1'), clientRequestId: z.string().uuid(),
@@ -79,7 +79,7 @@ export async function recordConfluenceCitationReview(prisma: PrismaClient,
     const saved = await find(tx, input.organisationId, body.clientRequestId);
     if (saved) return original(saved);
     const citation = await tx.confluenceReference.findFirst({ where: { id: referenceId, organisationId: input.organisationId,
-      document: { organisationId: input.organisationId, deletedAt: null } }, select: confluenceCitationObservationSelect });
+      ...liveCitationAnchor(input.organisationId) }, select: confluenceCitationObservationSelect });
     if (!citation || confluenceCitationTargetDigest(citation) !== observation.targetDigest) throw conflict();
     const context = contextSchema.parse({ format: 1, kind: 'CONFLUENCE_CITATION_REVIEW_V1', clientRequestId: body.clientRequestId,
       inputDigest, referenceId, input: body, citation: JSON.parse(JSON.stringify(citation)), instruction: null,

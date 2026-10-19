@@ -385,6 +385,8 @@ enum SecurityAuditEventType {
   CONFLUENCE_ERASURE_REQUESTED
   CONFLUENCE_ERASURE_REVIEW_RECORDED
   CONFLUENCE_CITATION_REVIEW_RECORDED
+  CONFLUENCE_SOURCE_REGISTERED
+  CONFLUENCE_SOURCE_REMOVED
 }
 
 enum AuthActionApprovalAuditKind {
@@ -1764,8 +1766,11 @@ model ConfluenceReference {
   id             String       @id @default(cuid())
   organisationId String
   organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  documentId     String
-  document       Document     @relation(fields: [documentId, organisationId], references: [id, organisationId], onDelete: Cascade, onUpdate: Cascade, map: "ConfluenceReference_documentId_organisationId_fkey")
+  // Exactly one anchor shape, enforced in SQL: uploaded-file evidence or an
+  // independent Confluence source. A source never invents a Vault file.
+  referenceKind  String       @default("VAULT_EVIDENCE")
+  documentId     String?
+  document       Document?    @relation(fields: [documentId, organisationId], references: [id, organisationId], onDelete: Cascade, onUpdate: Cascade, map: "ConfluenceReference_documentId_organisationId_fkey")
   // Recorded, never re-resolved: a page id means nothing without its site.
   cloudId        String
   pageId         String

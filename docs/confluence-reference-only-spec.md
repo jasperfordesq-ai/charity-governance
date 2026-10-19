@@ -1,16 +1,36 @@
 # Confluence documents without a Vault upload
 
-Status: demonstrated implementation gap, 19 October 2026. Specification only;
-the current product has not implemented this path.
+Status: compatibility implementation in progress, 19 October 2026. The complete
+registration path is not deployed. Do not report this requirement as complete.
 
-## Requirement and current evidence
+## Required release sequence
+
+The currently deployed reader expects every citation's Document ID to be
+non-null. Registration must therefore follow a compatibility release, rather
+than allowing new rows and leaving an incompatible previous colour for rollback.
+
+1. Deploy the additive audit types, nullable/exclusive citation anchor, source
+   identity and recovery guards, compatible readers/report parser and restricted
+   inventory display. The source registration service is tested internally but
+   has no HTTP creation route or registration form in this release. Verify that
+   all existing citation Document IDs remain non-null before/after cutover.
+2. After exact compatibility-release CI, browser and deployment proof, expose
+   the registration route and form in a subsequent release. Its previous colour
+   must be the compatible reader. Repeat the zero-upload browser journey on
+   the final source. Never substitute the earlier prototype's browser result.
+
+Do not bypass a migration or rollback gate to collapse these steps. No new
+provider or customer policy decision is needed for this engineering sequence.
+
+## Requirement and audited baseline evidence
 
 Selected documents may remain authoritative in Confluence. CharityPilot must
 be able to register and monitor their page/version references without requiring
 an uploaded file as the starting point. Existing citations attached to Vault
 files remain useful and must continue working.
 
-The current implementation does not provide that independent starting point:
+At the audited `449606fd` baseline, the implementation did not provide that
+independent starting point:
 
 - `Document` requires `fileUrl`, `fileSize` and `mimeType`; its supported create
   service attaches a reserved upload intent and records an upload audit.

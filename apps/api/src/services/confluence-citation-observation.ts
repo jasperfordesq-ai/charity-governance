@@ -8,6 +8,10 @@ const identifier = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 export const confluenceCitationObservationSelect = { id: true, documentId: true, cloudId: true, pageId: true,
   pageVersion: true, citedAt: true, updatedAt: true } as const;
 export const confluenceCitationTargetDigest = (reference: unknown) => createHash('sha256').update(JSON.stringify(reference)).digest('hex');
+export const liveCitationAnchor = (organisationId: string) => ({ OR: [
+  { referenceKind: 'CONFLUENCE_SOURCE', documentId: null },
+  { document: { organisationId, deletedAt: null } },
+] });
 
 /** A citation is evidence identity, never an instruction to dispose of content.
  * Observe only its page: citations do not record an attachment inventory. */
@@ -20,7 +24,7 @@ export async function observeConfluenceCitation(
     throw new AppError(400, 'CONFLUENCE_OBSERVATION_INPUT_INVALID', 'Plain citation and control-page identifiers are required.');
   }
   const where = { id: input.referenceId, organisationId: input.organisationId,
-    document: { organisationId: input.organisationId, deletedAt: null } };
+    ...liveCitationAnchor(input.organisationId) };
   const select = confluenceCitationObservationSelect;
   const reference = await prisma.confluenceReference.findFirst({ where, select });
   if (!reference) throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That live-document citation was not found.');

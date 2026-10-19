@@ -664,7 +664,10 @@ test('Owner cited-page observation uses scoped identity and GET transport withou
   } });
   Object.assign(app.prisma, { confluenceReference: { findFirst: async ({ where }: { where: { id: string; organisationId: string; document: unknown } }) => {
     assert.equal(where.organisationId, 'org-a');
-    assert.deepEqual(where.document, { organisationId: 'org-a', deletedAt: null });
+    assert.deepEqual((where as unknown as { OR: unknown }).OR, [
+      { referenceKind: 'CONFLUENCE_SOURCE', documentId: null },
+      { document: { organisationId: 'org-a', deletedAt: null } },
+    ]);
     return where.id === reference.id ? reference : null;
   } } });
   store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
@@ -2483,6 +2486,14 @@ test('charity-managed citation inventory pages only this tenant without exposing
   const member = await memberApp.inject({ method: 'GET', url: '/confluence/reference-inventory',
     headers: { authorization: bearer(ORG_A_MEMBER) } });
   assert.equal(member.statusCode, 403);
+});
+
+test('compatibility release does not expose standalone source creation', async () => {
+  const { app } = await buildApp();
+  const response = await app.inject({ method: 'POST', url: '/confluence/sources',
+    payload: { pageId: 'synthetic-page', expectedSiteId: 'charity-cloud', clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' },
+    headers: { authorization: bearer(ORG_A_ADMIN) } });
+  assert.equal(response.statusCode, 404);
 });
 
 test('an erasure is refused when the connection never granted the delete scopes', async () => {

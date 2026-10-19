@@ -10,7 +10,10 @@ function fixture() {
     pageId: 'page-1', pageVersion: 2, citedAt: new Date('2026-10-01'), updatedAt: new Date('2026-10-01') };
   const calls: string[] = [];
   const prisma = { confluenceReference: { findFirst: async (args: { where: unknown }) => {
-    assert.deepEqual(args.where, { id: 'ref-1', organisationId: 'org-1', document: { organisationId: 'org-1', deletedAt: null } });
+    assert.deepEqual(args.where, { id: 'ref-1', organisationId: 'org-1', OR: [
+      { referenceKind: 'CONFLUENCE_SOURCE', documentId: null },
+      { document: { organisationId: 'org-1', deletedAt: null } },
+    ] });
     calls.push('citation'); return reference;
   } } } as unknown as PrismaClient;
   const client = { request: () => { throw new Error('Unexpected HTTP'); } } as unknown as ConfluenceClient;

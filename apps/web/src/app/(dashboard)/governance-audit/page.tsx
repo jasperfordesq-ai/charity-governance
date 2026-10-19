@@ -153,6 +153,8 @@ function eventDescription(event: AuditEvent, feed: string): string {
       CONFLUENCE_ERASURE_REQUESTED: 'Erasure requested',
       CONFLUENCE_ERASURE_REVIEW_RECORDED: 'Erasure review report recorded',
       CONFLUENCE_CITATION_REVIEW_RECORDED: 'Cited-page review report recorded',
+      CONFLUENCE_SOURCE_REGISTERED: 'External Confluence source registered',
+      CONFLUENCE_SOURCE_REMOVED: 'External Confluence reference removed',
     }[String(event.type)] ?? 'Integration event';
     return `${label} · event ${String(event.id ?? 'unknown')}`;
   }

@@ -6,6 +6,7 @@ import {
   citationStaleness,
   checkConfluenceReference,
   citeConfluencePage,
+  registerConfluenceSource,
   listConfluenceReferences,
   removeConfluenceReference,
 } from '../services/confluence-reference.service.js';
@@ -46,6 +47,7 @@ function fakePrisma(options: { documentExists?: boolean; recoveryBound?: boolean
         return args.data;
       },
     },
+    securityAuditEvent: { findFirst: async () => null },
     document: {
       async findFirst(args: { where: Record<string, unknown> }) {
         if (options.documentExists === false) return null;
@@ -63,13 +65,14 @@ function fakePrisma(options: { documentExists?: boolean; recoveryBound?: boolean
       },
       async create(args: { data: Record<string, unknown> }) {
         created.push(args.data);
-        return { id: 'ref-1', ...args.data };
+        const row = { id: 'ref-1', ...args.data }; rows.push(row); return row;
       },
       async deleteMany(args: { where: Record<string, unknown> }) {
         deletes.push(args.where);
         const hits = rows.filter((row) =>
           Object.entries(args.where).every(([key, value]) => row[key] === value),
         );
+        for (const hit of hits) rows.splice(rows.indexOf(hit), 1);
         return { count: hits.length };
       },
     },
@@ -139,6 +142,107 @@ test('upstream check preserves uncertainty and never reads another site', async 
 test('a lower, invalid or absent current version cannot prove the cited version current', () => {
   for (const version of [6, 0, -1, NaN, Infinity, 7.5, null]) {
     assert.equal(citationStaleness({ pageVersion: 7 }, version), 'UNKNOWN');
+  }
+});
+
+test('registering a Confluence source needs no Document, upload, file bytes or provider write', async () => {
+  const fake = fakePrisma({ documentExists: false });
+  const events: unknown[] = [];
+  const prisma = fake.prisma as unknown as Record<string, unknown>;
+  prisma.user = { findFirst: async () => ({ id: 'user-1', name: 'Synthetic Admin' }) };
+  prisma.securityAuditEvent = { findFirst: async () => null, create: async (args: unknown) => { events.push(args); return {}; } };
+  const connection = { cloudId: 'site-1', generation: 'grant-1', client: CLIENT };
+  const result = await registerConfluenceSource(fake.prisma, {
+    organisationId: 'org-1', actorUserId: 'user-1', expectedSiteId: 'site-1', pageId: 'page-1',
+    clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db', now: NOW,
+  }, { getConnection: async () => connection, getPage: async () => page({ status: 'current' }) });
+  assert.equal(result.documentId, null);
+  assert.equal(result.pageVersion, 7);
+  assert.equal(fake.created[0].referenceKind, 'CONFLUENCE_SOURCE');
+  assert.equal(fake.created[0].documentId, null);
+  assert.equal(events.length, 1);
+  assert.equal(fake.audits.length, 0, 'no invented Document audit anchor');
+});
+
+test('reference-only registration refuses a changed grant before recording metadata', async () => {
+  const fake = fakePrisma({ documentExists: false });
+  (fake.prisma as unknown as Record<string, unknown>).user = { findFirst: async () => ({ id: 'user-1', name: 'Admin' }) };
+  let connections = 0;
+  await assert.rejects(registerConfluenceSource(fake.prisma, {
+    organisationId: 'org-1', actorUserId: 'user-1', expectedSiteId: 'site-1', pageId: 'page-1',
+    clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db',
+  }, { getConnection: async () => ({ cloudId: 'site-1', generation: `grant-${++connections}`, client: CLIENT }),
+    getPage: async () => page({ status: 'current' }) }),
+  (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFERENCE_CONNECTION_CHANGED');
+  assert.equal(fake.created.length, 0);
+});
+
+test('registration retries return the original version and cannot resurrect an uncited source', async () => {
+  const fake = fakePrisma({ documentExists: false });
+  const prisma = fake.prisma as unknown as Record<string, unknown>;
+  prisma.user = { findFirst: async () => ({ id: 'user-1', name: 'Synthetic Owner' }) };
+  const events: Array<{ data: Record<string, unknown> }> = [];
+  prisma.securityAuditEvent = { findFirst: async () => events.find(event => event.data.type === 'CONFLUENCE_SOURCE_REGISTERED') ?? null,
+    create: async (event: { data: Record<string, unknown> }) => { events.push(event); return {}; } };
+  let reads = 0;
+  const input = { organisationId: 'org-1', actorUserId: 'user-1', expectedSiteId: 'site-1', pageId: 'page-1',
+    clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db', now: NOW };
+  const deps = { getConnection: async () => ({ cloudId: 'site-1', generation: 'g1', client: CLIENT }),
+    getPage: async () => { reads++; return page({ status: 'current', version: 7 + reads }); } };
+  const first = await registerConfluenceSource(fake.prisma, input, deps);
+  assert.deepEqual(await registerConfluenceSource(fake.prisma, input, deps), first);
+  assert.equal(reads, 1); assert.equal(events.length, 1);
+  await assert.rejects(registerConfluenceSource(fake.prisma, { ...input, pageId: 'different-page' }, deps),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_SOURCE_REQUEST_CONFLICT');
+  assert.equal(await removeConfluenceReference(fake.prisma, { organisationId: 'org-1', referenceId: first.id, actorUserId: 'user-1' }), true);
+  assert.equal(events.length, 2);
+  await assert.rejects(registerConfluenceSource(fake.prisma, input, deps),
+    (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_SOURCE_ALREADY_REMOVED');
+  assert.equal(reads, 1); assert.equal(fake.created.length, 1);
+});
+
+test('standalone source version checks do not require or invent a Vault document', async () => {
+  const fake = fakePrisma({ documentExists: false, rows: [{ id: 'source-1', documentId: null,
+    organisationId: 'org-1', referenceKind: 'CONFLUENCE_SOURCE', cloudId: 'site-1', pageId: 'page-1', pageVersion: 7 }] });
+  const result = await checkConfluenceReference(fake.prisma, { organisationId: 'org-1', referenceId: 'source-1' }, {
+    getConnection: async () => ({ cloudId: 'site-1', generation: 'g1', client: CLIENT }),
+    getPage: async () => page({ version: 9, status: 'current' }),
+  });
+  assert.equal(result.status, 'SUPERSEDED'); assert.equal(result.currentVersion, 9);
+  assert.equal(fake.created.length, 0);
+});
+
+test('source registration checks actor and recovery authority before provider access', async () => {
+  for (const mode of ['member', 'bound'] as const) {
+    const fake = fakePrisma({ recoveryBound: mode === 'bound' });
+    (fake.prisma as unknown as Record<string, unknown>).user = { findFirst: async () => mode === 'member' ? null : { name: 'Owner' } };
+    let reads = 0;
+    await assert.rejects(registerConfluenceSource(fake.prisma, { organisationId: 'org-1', actorUserId: 'user-1',
+      expectedSiteId: 'site-1', pageId: 'page-1', clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' }, {
+      getConnection: async () => { reads++; return null; },
+    }), (error: unknown) => error instanceof AppError && error.code === (mode === 'member'
+      ? 'CONFLUENCE_SOURCE_ADMIN_REQUIRED' : 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED'));
+    assert.equal(reads, 0); assert.equal(fake.created.length, 0);
+  }
+});
+
+test('source registration refuses unreadable, wrong and unversioned pages and an actor demoted during reading', async () => {
+  for (const mode of ['missing', 'wrong-page', 'trashed', 'invalid-version', 'demoted'] as const) {
+    const fake = fakePrisma({ documentExists: false });
+    let allowed = true;
+    (fake.prisma as unknown as Record<string, unknown>).user = { findFirst: async () => allowed ? { name: 'Admin' } : null };
+    await assert.rejects(registerConfluenceSource(fake.prisma, { organisationId: 'org-1', actorUserId: 'user-1',
+      expectedSiteId: 'site-1', pageId: 'page-1', clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' }, {
+      getConnection: async () => ({ cloudId: 'site-1', generation: 'g1', client: CLIENT }),
+      getPage: async () => {
+        if (mode === 'missing') return null;
+        if (mode === 'demoted') allowed = false;
+        return page({ id: mode === 'wrong-page' ? 'other-page' : 'page-1',
+          status: mode === 'trashed' ? 'trashed' : 'current', version: mode === 'invalid-version' ? 0 : 7 });
+      },
+    }), (error: unknown) => error instanceof AppError && error.code === (mode === 'demoted'
+      ? 'CONFLUENCE_SOURCE_ADMIN_REQUIRED' : 'CONFLUENCE_PAGE_NOT_FOUND'));
+    assert.equal(fake.created.length, 0);
   }
 });
 

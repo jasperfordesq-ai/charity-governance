@@ -30,6 +30,7 @@
  * was for.
  */
 import type { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { AppError } from '../utils/app-error.js';
 import type { ConfluenceClient } from './confluence-client.js';
 import { getPage as getPageDefault, type ConfluencePage } from './confluence-pages.js';
@@ -37,7 +38,7 @@ import { lockOrganisationForUpdate } from './organisation-lock.js';
 
 export type ConfluenceReference = {
   id: string;
-  documentId: string;
+  documentId: string | null;
   cloudId: string;
   pageId: string;
   pageTitle: string;
@@ -73,7 +74,7 @@ const PAGE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 function toReference(row: Record<string, unknown>): ConfluenceReference {
   return {
     id: String(row.id),
-    documentId: String(row.documentId),
+    documentId: row.documentId === null ? null : String(row.documentId),
     cloudId: String(row.cloudId),
     pageId: String(row.pageId),
     pageTitle: String(row.pageTitle),
@@ -213,6 +214,93 @@ export type CitationCheck = {
 
 type CitationConnection = { cloudId: string; generation: string; client: ConfluenceClient };
 
+/** Register a selected external source without uploading or duplicating bytes.
+ * The caller's UUID is the operation identity: retrying reads its original
+ * citation, even if the source version has since changed. */
+export async function registerConfluenceSource(
+  prisma: PrismaClient,
+  input: { organisationId: string; actorUserId: string; expectedSiteId: string;
+    pageId: string; clientRequestId: string; now?: Date },
+  deps: ConfluenceReferenceDeps & { getConnection: () => Promise<CitationConnection | null> },
+): Promise<ConfluenceReference> {
+  z.object({ expectedSiteId: z.string().min(1).max(160), pageId: z.string().regex(PAGE_ID_PATTERN),
+    clientRequestId: z.string().uuid() }).parse(input);
+  const where = { id: input.clientRequestId, organisationId: input.organisationId };
+  const actorWhere = { id: input.actorUserId, organisationId: input.organisationId,
+    role: { in: ['OWNER', 'ADMIN'] as Array<'OWNER' | 'ADMIN'> }, lifecycleStatus: 'ACTIVE' as const,
+    organisation: { is: { lifecycleStatus: 'ACTIVE' as const } } };
+  const requireActor = async (client: Pick<PrismaClient, 'user'>) => {
+    const actor = await client.user.findFirst({ where: actorWhere, select: { id: true, name: true } });
+    if (!actor) throw new AppError(403, 'CONFLUENCE_SOURCE_ADMIN_REQUIRED', 'An active Owner or Admin must register this source.');
+    return actor;
+  };
+  const original = (row: { referenceKind: string; cloudId: string; pageId: string; citedById: string }) => {
+    if (row.referenceKind !== 'CONFLUENCE_SOURCE' || row.cloudId !== input.expectedSiteId
+      || row.pageId !== input.pageId || row.citedById !== input.actorUserId) {
+      throw new AppError(409, 'CONFLUENCE_SOURCE_REQUEST_CONFLICT', 'This request already identifies another citation.');
+    }
+    return toReference(row as unknown as Record<string, unknown>);
+  };
+  await requireActor(prisma);
+  const saved = await prisma.confluenceReference.findFirst({ where });
+  if (saved) return original(saved);
+  const refuseRemoved = async (client: Pick<PrismaClient, 'securityAuditEvent'>) => {
+    if (await client.securityAuditEvent.findFirst({ where: { organisationId: input.organisationId,
+      type: 'CONFLUENCE_SOURCE_REGISTERED', context: { path: ['referenceId'], equals: input.clientRequestId } }, select: { id: true } })) {
+      throw new AppError(409, 'CONFLUENCE_SOURCE_ALREADY_REMOVED', 'This source was registered and later uncited. Start a new reviewed request to cite it again.');
+    }
+  };
+  await refuseRemoved(prisma);
+  if (await prisma.documentRecoveryEnforcement.findUnique({ where: { organisationId: input.organisationId } })) {
+    throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED', 'Citation changes require independent recovery authority for this charity.');
+  }
+  const connection = await deps.getConnection();
+  if (!connection || connection.cloudId !== input.expectedSiteId) {
+    throw new AppError(409, 'CONFLUENCE_REFERENCE_CONNECTION_CHANGED', 'Review the connected site before registering this source.');
+  }
+  const reader: ConfluenceClient = { request: async spec => {
+    if (spec.method !== 'GET') throw new Error('Source registration only reads Confluence');
+    return connection.client.request(spec);
+  } };
+  const page = await (deps.getPage ?? getPageDefault)(reader, input.pageId);
+  if (!page || page.id !== input.pageId || page.status !== 'current'
+    || !Number.isSafeInteger(page.version) || page.version < 1) {
+    throw new AppError(404, 'CONFLUENCE_PAGE_NOT_FOUND', 'An accessible current page with a verified version is required.');
+  }
+  return prisma.$transaction(async tx => {
+    await lockOrganisationForUpdate(tx, input.organisationId);
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id=${input.actorUserId} AND "organisationId"=${input.organisationId} FOR UPDATE`;
+    const actor = await requireActor(tx);
+    const existing = await tx.confluenceReference.findFirst({ where });
+    if (existing) return original(existing);
+    await refuseRemoved(tx);
+    if (await tx.documentRecoveryEnforcement.findUnique({ where: { organisationId: input.organisationId } })) {
+      throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED', 'Citation changes require independent recovery authority for this charity.');
+    }
+    // Disconnect/reselection updates this row in its transaction. Hold it until
+    // commit so a completed disconnect cannot race the final generation check.
+    await tx.$queryRaw`SELECT id FROM "OrganisationIntegration" WHERE "organisationId"=${input.organisationId} AND provider='CONFLUENCE' FOR UPDATE`;
+    const after = await deps.getConnection();
+    if (!after || after.cloudId !== connection.cloudId || after.generation !== connection.generation) {
+      throw new AppError(409, 'CONFLUENCE_REFERENCE_CONNECTION_CHANGED', 'The connected site or authorisation changed. Review the source again.');
+    }
+    const row = await tx.confluenceReference.create({ data: {
+      id: input.clientRequestId, organisationId: input.organisationId, documentId: null,
+      referenceKind: 'CONFLUENCE_SOURCE', cloudId: connection.cloudId, pageId: page.id,
+      pageTitle: page.title.slice(0, 500) || page.id, pageVersion: page.version,
+      pageUrl: page.webUrl ? page.webUrl.slice(0, 2000) : null,
+      citedAt: input.now ?? new Date(), citedById: input.actorUserId,
+    } });
+    await tx.securityAuditEvent.create({ data: { organisationId: input.organisationId,
+      type: 'CONFLUENCE_SOURCE_REGISTERED', actorKind: 'USER', actorUserId: input.actorUserId,
+      actorLabel: actor.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 160) || 'Administrator',
+      subjectLabel: 'Selected Confluence source', reason: 'External page/version registered without copying content.',
+      context: { referenceId: row.id, cloudId: row.cloudId, pageId: row.pageId, pageVersion: row.pageVersion,
+        citation: { ...toReference(row) }, documentId: null, providerMutationIssued: false } } });
+    return toReference(row);
+  });
+}
+
 /** Explicit observation only: no scheduler, citation update, or provider write. */
 export async function checkConfluenceReference(
   prisma: PrismaClient,
@@ -222,10 +310,10 @@ export async function checkConfluenceReference(
   const where = { id: input.referenceId, organisationId: input.organisationId };
   const reference = await prisma.confluenceReference.findFirst({ where });
   if (!reference) throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That citation was not found.');
-  const document = await prisma.document.findFirst({
+  const document = reference.documentId === null ? null : await prisma.document.findFirst({
     where: { id: reference.documentId, organisationId: input.organisationId, deletedAt: null }, select: { id: true },
   });
-  if (!document) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+  if (reference.documentId !== null && !document) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
   const result = (status: CitationCheck['status'], currentVersion: number | null, reason: CitationCheck['reason']): CitationCheck => ({
     referenceId: reference.id, status, currentVersion, reason, checkedAt: (input.now ?? new Date()).toISOString(),
   });
@@ -251,7 +339,7 @@ export async function checkConfluenceReference(
 }
 
 /**
- * Charity-wide review of citations that still belong to live Vault records.
+ * Charity-wide review of file evidence and independent external-source citations.
  * These are references to charity-managed pages, never CharityPilot copies or
  * candidates for the publication-erasure route. A document with a current
  * citation cannot be deleted; separately unciting removes that current row,
@@ -276,13 +364,13 @@ export async function listConfluenceReferenceInventory(
   });
   const selected = rows.slice(0, 50);
   const documents = selected.length ? await prisma.document.findMany({
-    where: { organisationId, id: { in: selected.map((row) => row.documentId) } },
+    where: { organisationId, id: { in: selected.flatMap((row) => row.documentId === null ? [] : [row.documentId]) } },
     select: { id: true, name: true, lifecycleStatus: true, visibility: true },
   }) : [];
   const documentById = new Map(documents.map((row) => [row.id, row]));
   return {
     references: selected.map((row) => {
-      const document = documentById.get(row.documentId);
+      const document = row.documentId === null ? undefined : documentById.get(row.documentId);
       return { id: row.id, documentId: row.documentId, recordedSiteId: row.cloudId,
         recordedPageId: row.pageId, recordedTitle: row.pageTitle,
         citedVersion: row.pageVersion, citedAt: row.citedAt,
@@ -309,7 +397,7 @@ export async function removeConfluenceReference(
     await lockOrganisationForUpdate(tx, input.organisationId);
     const reference = await tx.confluenceReference.findFirst({
       where: { id: input.referenceId, organisationId: input.organisationId },
-      select: { id: true, documentId: true },
+      select: { id: true, documentId: true, cloudId: true, pageId: true, pageVersion: true },
     });
     if (!reference) return false;
     if (await tx.documentRecoveryEnforcement.findUnique({
@@ -318,11 +406,26 @@ export async function removeConfluenceReference(
       throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED',
         'Citation changes require independent recovery authority for this charity.');
     }
+    let sourceActor: { name: string } | null = null;
+    if (reference.documentId === null) {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id=${input.actorUserId} AND "organisationId"=${input.organisationId} FOR UPDATE`;
+      sourceActor = await tx.user.findFirst({ where: { id: input.actorUserId, organisationId: input.organisationId,
+        role: { in: ['OWNER', 'ADMIN'] }, lifecycleStatus: 'ACTIVE',
+        organisation: { is: { lifecycleStatus: 'ACTIVE' } } }, select: { name: true } });
+      if (!sourceActor) throw new AppError(403, 'CONFLUENCE_SOURCE_ADMIN_REQUIRED', 'An active Owner or Admin must remove this reference.');
+    }
     const result = await tx.confluenceReference.deleteMany({
       where: { id: reference.id, organisationId: input.organisationId, documentId: reference.documentId },
     });
     if (result.count === 0) return false;
-    await tx.documentControlAudit.create({ data: {
+    if (reference.documentId === null) {
+      await tx.securityAuditEvent.create({ data: { organisationId: input.organisationId,
+        type: 'CONFLUENCE_SOURCE_REMOVED', actorKind: 'USER', actorUserId: input.actorUserId,
+        actorLabel: sourceActor!.name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 160) || 'Administrator',
+        subjectLabel: 'Selected Confluence source', reason: 'Local reference removed; the Confluence page was not changed.',
+        context: { referenceId: reference.id, cloudId: reference.cloudId, pageId: reference.pageId,
+          pageVersion: reference.pageVersion, documentId: null, providerMutationIssued: false } } });
+    } else await tx.documentControlAudit.create({ data: {
       organisationId: input.organisationId,
       documentId: reference.documentId,
       actorUserId: input.actorUserId,
