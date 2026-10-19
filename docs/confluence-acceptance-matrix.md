@@ -19,6 +19,19 @@ not establish independent custody, current-release live provider acceptance,
 actual disposal or physical host-loss recovery. Old dated observations below
 retain their original source and evidence limits.
 
+The subsequent supervised real-sandbox run used exact source `ef164249` and schema
+199. Supported Owner controls observed the existing page/control and saved one
+historical citation report with `instruction: null`, `NOT_REPORTED` administrator
+action and a fresh VISIBLE observation. A fresh Integrations view retrieved the
+original report by audit ID. Independent SQL compared the complete citation,
+citation-audit and report rows: saving preserved the citation/audit rows, and
+receipt lookup changed none of them; zero deletion jobs remained. The exact
+source archive had no application overlays, with only a generated Next declaration.
+No new grant, provider content write, actual Trash/purge or VM deployment ran.
+This closes the scoped real-provider-backed local report/readback check, while
+current independent custody, host loss and actual disposal remain open. Exact
+receipts and any action-time authority are held privately.
+
 ### Cited-page lifecycle observation without deletion intent
 
 Owners can explicitly observe an existing citation's page using a separate

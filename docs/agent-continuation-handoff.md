@@ -1,3 +1,15 @@
+## 19 October: real sandbox historical report and original receipt verified
+
+Exact source `ef164249` and schema 199 completed the supported Owner observation,
+historical citation-report save and fresh-view receipt lookup against the
+previously approved real sandbox connection. The report claims no administrator
+action and records no deletion instruction; its page-only observation is VISIBLE.
+Independent complete-row SQL comparisons preserved citation/audit data and the
+original report, with zero jobs. No provider content write or new grant ran.
+The exact archive, protected pre-migration synthetic copy and retained data hashes
+are documented privately. This is supervised development evidence, not private-VM
+release, actual disposal, independent custody or host-loss acceptance.
+
 ## 19 October: durable cited-page reports without disposal instruction
 
 Owner citation observations now support a saved historical report with citation

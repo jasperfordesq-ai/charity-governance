@@ -1,4 +1,13 @@
-## 19 October: historical cited-page review receipts
+## 19 October: real-provider-backed historical citation report readback
+
+The source-pinned synthetic runtime at `ef164249`/schema 199 saved an honest
+NOT_REPORTED citation review after a real OAuth page/control read and retrieved
+its original receipt from a fresh dashboard view. Full citation/audit rows stayed
+unchanged; one report and zero jobs were independently read from PostgreSQL.
+The lookup preserved the full original report as well. No provider content write,
+new grant or VM release ran. Current independent history, actual disposal and
+physical host-loss recovery remain unresolved; see the acceptance matrix and
+private dated run receipt for exact bounds.
 
 The separate Owner-only report records a citation and fresh page-only observation
 without manufacturing a deletion instruction. Stable original-request identity,
