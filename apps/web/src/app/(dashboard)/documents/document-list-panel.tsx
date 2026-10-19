@@ -55,6 +55,7 @@ export function DocumentListPanel({
   openVisibilityModal,
   openDocumentControl,
   openProviderReview,
+  openCitations,
   mirrors,
   retryMirrorPublication,
   retryingMirror,
@@ -82,6 +83,7 @@ export function DocumentListPanel({
   openVisibilityModal: (docId: string) => void;
   openDocumentControl: (docId: string, kind: 'lifecycle' | 'publication' | 'deletion-hold' | 'owner') => void;
   openProviderReview: (docId: string) => void;
+  openCitations: (doc: DocumentResponse) => void;
   /** Absent for a document whose mirror could not be read; the chip renders nothing. */
   mirrors: Map<string, ConfluenceMirror>;
   retryMirrorPublication: (docId: string) => void | Promise<void>;
@@ -256,6 +258,9 @@ export function DocumentListPanel({
                       </Button> : null}
                       {canManage ? <Button size="sm" variant="flat" aria-label={`Change owner for ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'owner')}>
                         Owner
+                      </Button> : null}
+                      {canManage ? <Button size="sm" variant="flat" aria-label={`Review Confluence citations for ${doc.name}`} onPress={() => openCitations(doc)}>
+                        Confluence citations
                       </Button> : null}
                       {canManage && doc.lifecycleStatus !== 'HISTORICAL' ? <Button size="sm" variant="flat" aria-label={`Classify ${doc.name}`} onPress={() => openDocumentControl(doc.id, 'lifecycle')}>
                         Lifecycle

@@ -1,3 +1,20 @@
+## 19 October: Vault citation workflow and reviewed-site binding
+
+Owners/Admins now have per-record Confluence citation controls in the Vault.
+They verify an existing page, retain its observed version and explicitly remove
+only the local citation. The read target exposes site ID/URL only, with the
+existing web-session/Admin guards; creation requires that reviewed site ID and
+refuses a changed connection. A live-record recheck under the organisation lock
+prevents a citation arriving after concurrent removal into Deleted Items.
+
+The UI handles failed/unknown acknowledgements through a fresh current-list read,
+without replaying the mutation or claiming a receipt it did not receive. Existing
+permission and independent-recovery refusals remain. Focused regression and
+browser evidence, including the authorised one-page synthetic live journey, are
+retained privately. Current-list refresh is not upstream staleness monitoring;
+that read-only monitoring path and clean-release live acceptance remain separate
+work, alongside the provider/independent recovery gates. No new supplier, remote
+purge, tenant disclosure or private-VM deployment is implied.
 ## 19 October: current Confluence disclosure and reference guidance
 
 The rebuilt isolated browser exposed stale claims in the citation inventory and

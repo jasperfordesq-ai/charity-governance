@@ -86,6 +86,16 @@ const INPUT = {
   now: NOW,
 };
 
+test('a document removed while its Confluence page is being read cannot acquire a new citation', async () => {
+  const options = { documentExists: true };
+  const fake = fakePrisma(options);
+  await assert.rejects(citeConfluencePage(fake.prisma, CLIENT, INPUT, {
+    getPage: async () => { options.documentExists = false; return page(); },
+  }), (error: unknown) => error instanceof AppError && error.code === 'DOCUMENT_NOT_FOUND');
+  assert.equal(fake.created.length, 0);
+  assert.equal(fake.audits.length, 0);
+});
+
 test('citing a page records the version it was cited at', async () => {
   const fake = fakePrisma();
 

@@ -1,6 +1,8 @@
 'use client';
 
 import { CopyPreservationBrowser } from './copy-preservation-browser';
+import { useState } from 'react';
+import { DocumentConfluenceCitations } from './document-confluence-citations';
 import { Button } from '@heroui/react';
 import { Plus } from 'lucide-react';
 import { useDocumentTitle } from '@/lib/use-title';
@@ -26,6 +28,7 @@ import { useDocumentsWorkflow } from './use-documents-workflow';
 
 export default function DocumentsPage() {
   useDocumentTitle('Documents');
+  const [citationDocument, setCitationDocument] = useState<{ id: string; name: string } | null>(null);
   const {
     categoryOptions,
     canManage,
@@ -221,12 +224,15 @@ export default function DocumentsPage() {
         openVisibilityModal={openVisibilityModal}
         openDocumentControl={openDocumentControl}
         openProviderReview={openProviderReview}
+        openCitations={setCitationDocument}
         mirrors={mirrors}
         retryMirrorPublication={retryMirrorPublication}
         retryingMirror={retryingMirror}
       />
 
       {canManage ? <DocumentControlHistory /> : null}
+      {canManage && citationDocument ? <DocumentConfluenceCitations key={citationDocument.id}
+        document={citationDocument} onClose={() => setCitationDocument(null)} /> : null}
       {canManage ? <DocumentDeletedItems onRestored={() => fetchDocuments(true)} /> : null}
       {canManage ? <><DocumentRetentionPolicies /><RetentionPolicies recordClass="DOCUMENT_COPY" /><CopyPreservationBrowser kind="document" /></> : null}
       {canManage ? <DocumentStorageDeletionReview /> : null}

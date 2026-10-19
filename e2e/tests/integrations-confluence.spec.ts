@@ -152,6 +152,77 @@ test.describe('Confluence connector', () => {
     const documentId = ((await uploadResponse.json()) as { data?: { id?: string } }).data?.id;
     if (!documentId) throw new Error('The uploaded document has no server-issued ID');
     const row = ownerPage.getByRole('article').filter({ hasText: documentName });
+    // Cite an existing page through the real UI/API/database. The fake provider
+    // supplies the page; this is distinct from approving a published copy.
+    await row.getByRole('button', { name: `Review Confluence citations for ${documentName}` }).click();
+    const citations = ownerPage.getByRole('dialog', { name: `Confluence citations — ${documentName}`, exact: true });
+    await expect(citations.getByText(/Connected site:.*charity-e2e.atlassian.net/)).toBeVisible();
+    await reliableFill(citations.getByLabel('Confluence page ID'), 'synthetic-retained-copy');
+    const cited = ownerPage.waitForResponse(response =>
+      response.url().endsWith(`/confluence/references/${documentId}`) && response.request().method() === 'POST');
+    await citations.getByRole('button', { name: 'Verify and cite page', exact: true }).click();
+    const citeResponse = await cited;
+    expect(citeResponse.status(), await citeResponse.text()).toBe(200);
+    const reference = (await citeResponse.json()).data.reference;
+    expect(reference.pageId).toBe('synthetic-retained-copy');
+    expect(reference.pageVersion).toBe(1);
+    await expect(citations.getByRole('status')).toContainText('version 1');
+    await expect(citations.getByText('Page synthetic-retained-copy · cited version 1')).toBeVisible();
+    await citations.getByRole('button', { name: 'Remove citation for Synthetic retained copy', exact: true }).click();
+    await expect(citations.getByText(/The Confluence page and its attachments stay unchanged/)).toBeVisible();
+    const uncited = ownerPage.waitForResponse(response =>
+      response.url().endsWith(`/confluence/references/by-id/${reference.id}`) && response.request().method() === 'DELETE');
+    await citations.getByRole('button', { name: 'Confirm citation removal', exact: true }).click();
+    expect((await uncited).status()).toBe(204);
+    await expect(citations.getByText('No citations are recorded for this document.')).toBeVisible();
+    await withDb(async client => {
+      const refs = await client.query('SELECT id FROM "ConfluenceReference" WHERE "documentId"=$1', [documentId]);
+      expect(refs.rowCount).toBe(0);
+      const audits = await client.query('SELECT previous,next FROM "DocumentControlAudit" WHERE "documentId"=$1 AND kind=\'CONFLUENCE_REFERENCE\' ORDER BY "occurredAt",id', [documentId]);
+      expect(audits.rows).toEqual([
+        { previous: 'UNLINKED', next: `CITED:${reference.id}` },
+        { previous: `CITED:${reference.id}`, next: 'UNLINKED' },
+      ]);
+      const jobs = await client.query('SELECT id FROM "DocumentStorageDeletion" WHERE "organisationId"=$1', [owner.organisationId]);
+      expect(jobs.rowCount).toBe(0);
+    });
+    // A stored citation with a lost response must not trigger an automatic
+    // second POST or a success message. Reconcile through the real GET list.
+    for (const width of [320, 768, 1024, 1440]) {
+      await ownerPage.setViewportSize({ width, height: 800 });
+      const bounds = await citations.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.width).toBeLessThanOrEqual(width);
+    }
+    let createAttempts = 0;
+    const citationPath = `**/api/v1/integrations/confluence/references/${documentId}`;
+    await ownerPage.route(citationPath, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      createAttempts++;
+      const committed = await route.fetch({ maxRedirects: 0 });
+      expect(committed.status(), await committed.text()).toBe(200);
+      await route.abort('failed');
+    });
+    await reliableFill(citations.getByLabel('Confluence page ID'), 'synthetic-retained-copy');
+    await citations.getByRole('button', { name: 'Verify and cite page', exact: true }).click();
+    await expect(citations.getByRole('alert')).toContainText('could not be confirmed');
+    await expect(citations.getByRole('button', { name: 'Verify and cite page', exact: true })).toBeDisabled();
+    expect(createAttempts).toBe(1);
+    await citations.getByRole('button', { name: 'Refresh citations', exact: true }).click();
+    await expect(citations.getByText('Page synthetic-retained-copy · cited version 1')).toBeVisible();
+    await citations.getByRole('button', { name: 'Remove citation for Synthetic retained copy', exact: true }).click();
+    await citations.getByRole('button', { name: 'Confirm citation removal', exact: true }).click();
+    await expect(citations.getByText('No citations are recorded for this document.')).toBeVisible();
+    expect(createAttempts).toBe(1);
+    await ownerPage.unroute(citationPath);
+    await withDb(async client => {
+      expect((await client.query('SELECT id FROM "ConfluenceReference" WHERE "documentId"=$1', [documentId])).rowCount).toBe(0);
+      expect((await client.query('SELECT id FROM "DocumentControlAudit" WHERE "documentId"=$1 AND kind=\'CONFLUENCE_REFERENCE\'', [documentId])).rowCount).toBe(4);
+      expect((await client.query('SELECT id FROM "DocumentStorageDeletion" WHERE "organisationId"=$1', [owner.organisationId])).rowCount).toBe(0);
+    });
+    await ownerPage.setViewportSize({ width: 1280, height: 720 });
+    await citations.getByRole('button', { name: 'Close citations', exact: true }).click();
     await row.getByRole('button', { name: `Classify ${documentName}` }).click();
     await reliableFill(ownerPage.getByLabel('Reason for this decision'),
       'This synthetic file is current for the isolated approval journey.');

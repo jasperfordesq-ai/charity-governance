@@ -7,6 +7,31 @@ Private dated execution receipts belong in the ignored continuation handoff.
 
 ## Dated live-provider observation
 
+### Citation workflow
+
+Owners and administrators can open **Documents → Confluence citations** beside
+a named Vault record. The form shows the connected site, accepts a page ID,
+records the title/version read by the API and provides explicit local citation
+removal. This does not publish, approve or erase the Confluence page. Recorded
+versions are historical observations; refreshing the citation list does not
+check current upstream versions or replace the cited version.
+
+The web-only `GET /integrations/confluence/reference-target` returns only the
+connected site ID and URL (null when disconnected), under the existing Admin
+route guard. `POST /integrations/confluence/references/:documentId` now requires
+`expectedSiteId` with `pageId`; a changed site refuses before provider read.
+Deploy the matching API/web together. Citation creation also rechecks the live
+Vault record under the organisation lock after the provider read. This closes
+the race with removal into Deleted Items. Member and connector refusals remain.
+
+The browser journey checks normal create/remove, independently read audit rows,
+zero deletion jobs, a lost save response without duplicate POST, and modal bounds
+at 320/768/1024/1440 pixels against the disposable application/fake provider.
+Separate sandbox browser evidence observed a real page citation at version 2,
+its specifically approved local removal and unchanged upstream version history.
+The live runtime used documented source overlays; it is not a clean deployed
+release or the remaining staleness-monitoring, purge or host-loss acceptance.
+
 On 19 October, a signed-in read-only check of the existing synthetic sandbox
 page observed its current version and version history. Its attachment inventory
 showed one current attachment version; an authenticated browser download returned

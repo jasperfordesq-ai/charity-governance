@@ -152,6 +152,14 @@ export async function citeConfluencePage(
       throw new AppError(409, 'CONFLUENCE_REFERENCE_RECOVERY_REQUIRED',
         'Citation changes require independent recovery authority for this charity.');
     }
+    // The provider read can outlast a concurrent Vault removal. Removal uses
+    // the same organisation lock, so recheck the live document under that lock
+    // rather than attaching evidence to a draft already in Deleted Items.
+    const currentDocument = await tx.document.findFirst({
+      where: { deletedAt: null, id: input.documentId, organisationId: input.organisationId },
+      select: { id: true },
+    });
+    if (!currentDocument) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
     const reference = await tx.confluenceReference.create({
       data: {
         organisationId: input.organisationId,

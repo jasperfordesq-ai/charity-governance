@@ -511,7 +511,7 @@ test('Admin connector cannot read dashboard-only external copy inventories by di
   const { app } = await buildApp({ actor });
   try {
     for (const path of [
-      '/confluence/copy-inventory', '/confluence/reference-inventory',
+      '/confluence/copy-inventory', '/confluence/reference-inventory', '/confluence/reference-target',
       '/confluence/references/doc-1',
     ]) {
       const response = await app.inject({ method: 'GET', url: path,
@@ -578,6 +578,25 @@ function connectedRow(overrides: Partial<IntegrationRow> = {}): IntegrationRow {
     ...overrides,
   };
 }
+
+test('citation target names only the connected site and rejects an unreviewed or changed site', async () => {
+  const { app } = await buildApp({ actor: ORG_A_ADMIN, rows: [connectedRow()] });
+  try {
+    const headers = { authorization: bearer(ORG_A_ADMIN) };
+    const target = await app.inject({ method: 'GET', url: '/confluence/reference-target', headers });
+    assert.equal(target.statusCode, 200);
+    assert.deepEqual(target.json().data, { siteId: 'site-1', siteUrl: 'https://charity-a.atlassian.net' });
+    for (const [payload, status, code] of [
+      [{ pageId: 'page-1' }, 400, 'CONFLUENCE_REFERENCE_SITE_REQUIRED'],
+      [{ pageId: 'page-1', expectedSiteId: 'different-site' }, 409, 'CONFLUENCE_REFERENCE_SITE_CHANGED'],
+      [{ pageId: 'page-1', expectedSiteId: 'site-1' }, 404, 'DOCUMENT_NOT_FOUND'],
+    ] as const) {
+      const response = await app.inject({ method: 'POST', url: '/confluence/references/missing-document', headers, payload });
+      assert.equal(response.statusCode, status, response.body);
+      assert.equal(response.json().code, code);
+    }
+  } finally { await app.close(); }
+});
 
 async function authorizeState(app: Awaited<ReturnType<typeof buildApp>>['app'], actor: Actor): Promise<string> {
   const response = await app.inject({
@@ -836,6 +855,9 @@ test('a member may not reach any integration route', async () => {
     ['GET', '/confluence/authorize'],
     ['GET', '/confluence/status'],
     ['GET', '/confluence/spaces'],
+    ['GET', '/confluence/reference-target'],
+    ['POST', '/confluence/references/doc-1'],
+    ['DELETE', '/confluence/references/by-id/reference-1'],
     ['PUT', '/confluence/publish-space'],
     ['DELETE', '/confluence'],
   ] as const) {

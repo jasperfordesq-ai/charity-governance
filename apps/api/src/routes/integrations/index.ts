@@ -1248,12 +1248,30 @@ export async function integrationRoutes(
    * ADMIN, because a citation is a governance assertion — it is the answer a
    * charity gives when a regulator asks where the evidence is.
    */
+  // Narrow citation target: metadata only, no provider request or credentials.
+  // Keep the existing status response's secret-denying allow-list unchanged.
+  app.get('/confluence/reference-target', { preHandler: [requireWebSession] }, async (request, reply) => {
+    try {
+      const integration = await findOwnConfluenceIntegration(app.prisma, request.user.organisationId);
+      const connected = integration?.status === 'CONNECTED';
+      return sendSuccess(reply, {
+        siteId: connected ? cloudIdFromConfig(integration.config) : null,
+        siteUrl: connected ? siteFacts(integration.config).siteUrl : null,
+      });
+    } catch (error) { return handleError(reply, error); }
+  });
+
   app.post<{ Params: { documentId: string } }>(
     '/confluence/references/:documentId',
     { preHandler: [requireAdmin, requireWebSession] },
     async (request, reply) => {
       try {
         const { cloudId } = await liveConnection(request.user.organisationId, 'cite a page from');
+        const expectedSiteId = bodyParam(request.body, 'expectedSiteId');
+        if (!expectedSiteId) throw new AppError(400, 'CONFLUENCE_REFERENCE_SITE_REQUIRED',
+          'Review the connected Confluence site before citing a page.');
+        if (expectedSiteId !== cloudId) throw new AppError(409, 'CONFLUENCE_REFERENCE_SITE_CHANGED',
+          'The connected Confluence site changed. Refresh the citation review before continuing.');
         const pageId = bodyParam(request.body, 'pageId');
         if (pageId === undefined) {
           throw new AppError(
