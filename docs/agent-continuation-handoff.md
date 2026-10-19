@@ -1,3 +1,14 @@
+## 19 October: first candidate hard gate and scoped residency request
+
+Official provider documentation confirms that the current protected-catalogue
+recovery implementation is not supported by DigitalOcean's documented admin
+permissions. Read the [updated verdict](hosting-selection.md); do not start a
+paid trial or lower the proof requirement. A concrete sandbox-only EU residency
+request has been prepared but needs specific action-time confirmation before
+submission. Exact scope, raw maintenance-window display, audit-log/Marketplace
+exclusions, screenshot and pending authority are in the ignored dated handoff.
+Submission would establish scheduling only; terminal pinning remains separate.
+
 ## 19 October: whole-stack cost model and candidate investigation order
 
 The ignored cost/fit comparison now includes four app roles, database/files,

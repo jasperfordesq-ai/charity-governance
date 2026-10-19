@@ -1,3 +1,12 @@
+## 19 October: documented candidate incompatibility and prepared sandbox action
+
+The first candidate's documented catalogue restriction contradicts the current
+recovery implementation's requirements. Its cheaper planning model is not an
+activation recommendation; follow [the capability verdict](hosting-selection.md).
+Sandbox-only residency request scope and exclusions are now concretely reviewed,
+with action-time confirmation pending. No move was submitted at this checkpoint
+and no EU pinning or broader provider/recovery closure is claimed.
+
 ## 19 October: provider-neutral cost and feasibility review
 
 A full-category planning comparison is retained privately, with actual unit

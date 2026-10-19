@@ -20,6 +20,17 @@ Customer policy and actual supplier commitments remain separate decisions.
 
 ## Candidate order
 
+**Capability verdict, later on 19 October:** DigitalOcean's
+[documented administrator restriction](https://docs.digitalocean.com/support/how-do-i-fix-the-pg_dumpall-permission-denied-for-table-pg_authid-error/)
+confirms that `doadmin` cannot access `pg_authid`. The current recovery code reads
+password-null booleans and requires a privileged catalogue lock interval that
+includes that table. The present implementation is therefore not ready for a
+DigitalOcean paid trial. Its dump workaround does not solve these requirements.
+Investigate a supported equivalent authority/capture strategy or another feasible
+candidate before activation. Neither a password-reset endpoint nor a single
+failed old-password login establishes the full recovery fence. The existing
+fallback's hosted compatibility also remains unproved.
+
 Investigate DigitalOcean App Platform with Managed PostgreSQL and private Spaces
 as an alternative; keep the existing Render/Supabase prototype as a fallback.
 This prioritises a capability review, not a paid trial. DigitalOcean documents
