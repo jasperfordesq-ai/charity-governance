@@ -1,3 +1,13 @@
+## 19 October: reference-only activation release verified
+
+Exact activation source `dc7f3ef0` passed canonical CI and 258 first-attempt
+browser tests. Guarded private deployment, runtime/source/schema postflight and
+a separate fresh backup/restore drill passed. The restricted source register is
+available without a Vault upload, with the compatible previous release retained.
+Keep actual provider lifecycle/disconnect and independently current host-loss
+recovery open. Cited-source erasure instructions remain a distinct workflow gap;
+do not treat an operator report or publication-only deletion job as its closure.
+
 ## 19 October: activation MCP mutation-inventory classification
 
 The new registration route is deliberately web-session-only. Activation CI

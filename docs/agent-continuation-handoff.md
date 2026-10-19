@@ -1,3 +1,15 @@
+## 19 October: reference-only registration released and recovery checked
+
+Activation commit `dc7f3ef0` passed exact-source CI and 258 first-attempt browser
+tests, then the guarded private-VM release, postflight and a separate fresh
+backup/restore drill. The compatible previous reader remains available for
+rollback. Registration now has a supported route/form with no Vault upload.
+The synthetic zero-file journey covers version checks, reports, original-request
+retry and local unciting. This does not establish real-site adoption, provider
+purge or independent physical-host recovery. The next application gap is an
+original instruction and linked follow-up for an authoritative cited source;
+existing publication jobs and no-instruction citation reports do not supply it.
+
 ## 19 October: source registration remains limited to reviewed web sessions
 
 Activation CI's MCP route ledger caught the new source-registration mutation

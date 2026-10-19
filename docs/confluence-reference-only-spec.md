@@ -105,6 +105,17 @@ when no uploaded Vault file exists.
 5. Verify the complete synthetic journey and exact release. Existing sandbox
    page contents need no mutation for registration and observation tests.
 
+## Release verification, 19 October 2026
+
+Compatibility source `b90bda9d` was deployed before activation `dc7f3ef0` so the
+rollback reader understands both anchor shapes. Activation passed exact CI and
+258 first-attempt managed browser tests, guarded private deployment, postflight
+and a separate fresh backup/restore drill. The synthetic zero-Document journey
+also covers original-request retry after response loss, version observation,
+saved reports and local unciting without a publication or deletion job.
+This is release evidence for the register, not real-site activation, provider
+erasure, independent key custody or physical-host recovery.
+
 ## Acceptance evidence
 
 - Start with a synthetic tenant containing zero Document rows. Register an
