@@ -136,8 +136,9 @@ test('a tenant whose only rows have no page id still has no token taken for it',
   // The claim excludes null-`pageId` rows, but the reconciler must not depend
   // on that: if the claim ever loosened, this shape would otherwise start
   // minting a token to read nothing.
-  const result = await h.reconcile({ tenant: TENANT, publications: rows(null, null) });
+  const result = await h.reconcile({ tenant: TENANT, publications: rows(null, '') });
 
+  assert.equal(h.tokenCalls, 0, 'uncreated pages are not a reason to refresh access');
   assert.deepEqual(h.pageReads, [], 'there is nothing to read');
   assert.equal(result.outcome, 'OK');
   assert.deepEqual(result.readings, [], 'and nothing to record');
@@ -146,7 +147,7 @@ test('a tenant whose only rows have no page id still has no token taken for it',
 test('a tenant with real work DOES have a token taken, exactly once', async () => {
   const h = harness();
 
-  await h.reconcile({ tenant: TENANT, publications: rows('page-1', 'page-2', 'page-3') });
+  await h.reconcile({ tenant: TENANT, publications: rows(null, 'page-1', '', 'page-2', 'page-3') });
 
   // The by-product the ruling permits: one token, for a visit that did work.
   assert.equal(h.tokenCalls, 1, 'one token per visiting tenant, not one per page');

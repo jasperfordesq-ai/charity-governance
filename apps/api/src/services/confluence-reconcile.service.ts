@@ -219,9 +219,9 @@ export function createConfluenceReconciler(deps: ConfluenceReconcilerDeps): Conf
 
   return async ({ tenant, publications }): Promise<TenantReconcileResult> => {
     // THE DORMANCY GATE. Before anything else, and specifically before a token
-    // is minted. An empty claim means this tenant has nothing live to
-    // reconcile, and the ruling says such a tenant is not to be visited at all.
-    if (publications.length === 0) {
+    // is minted. Rows without a remote page are not reconciliation work,
+    // even if a caller includes an unfinished publication in its claim.
+    if (!publications.some((publication) => publication.pageId !== null && publication.pageId.length > 0)) {
       return { outcome: 'OK', readings: [], abortRun: false };
     }
 

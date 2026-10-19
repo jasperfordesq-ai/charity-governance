@@ -1,3 +1,12 @@
+## 19 October: unfinished publications do not justify token refresh
+
+A strengthened dormancy regression reproduced a token request for a batch whose
+remote page IDs were all null or empty. The reconciler now checks for actual
+addressable page work before connecting. Mixed batches still use one token and
+read only their real pages. The normal scheduler claim excludes null IDs already;
+this is a service-contract correction, not evidence of a live keepalive incident.
+Provider execution and deployment remain separately evidenced.
+
 ## 19 October: CI runner contract failure corrected
 
 Hosted CI/E2E exposed a stale source-contract count and missing narrow report-test

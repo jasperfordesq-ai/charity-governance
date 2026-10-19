@@ -1,5 +1,11 @@
 # Confluence acceptance and data-flow matrix
 
+The 19 October dormancy guard correction requires an addressable page before
+obtaining a reconciliation token, including for non-empty batches containing
+only null or empty page IDs. Its strengthened regression reproduced the old
+token request. Mixed batches still reconcile their real pages with one token.
+This is service-level evidence; it does not assert a live dormant refresh incident.
+
 Current continuation baseline: 19 October 2026. This maps the selected-document
 architecture to implementation and the evidence still required. A source path or
 a passing fake-provider test does not establish live provider acceptance.

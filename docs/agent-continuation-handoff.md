@@ -1,3 +1,14 @@
+## 19 October: no token refresh for publications without remote pages
+
+The reconciler now requires at least one non-null, non-empty remote page ID
+before obtaining a token. Previously a non-empty batch containing only unfinished
+publications could refresh access despite reading no pages. The existing test
+described this case but omitted its token-call assertion; that assertion reproduced
+the failure. Null/empty-only and mixed batches now distinguish unused access from
+real reconciliation work. The scheduler's normal claim already excludes null IDs;
+this fixes the service boundary and does not establish a live token-refresh incident.
+Exact test and release evidence is held in the private continuation record.
+
 ## 19 October: hosted CI contract correction for deliberate response loss
 
 The hosted CI/E2E runs stopped in the isolated-runner source contract before
