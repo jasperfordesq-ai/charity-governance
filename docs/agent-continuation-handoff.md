@@ -1,3 +1,19 @@
+## 19 October: reuse completed lifecycle evidence; supplier choice stays open
+
+The acceptance matrix now separates completed positive synthetic Owner
+permission/withdrawal browser evidence, historical live disconnect/revocation
+observations and current source semantics from outstanding current-release and
+independent-custody proof. Do not rebuild these controls as if absent or infer
+the state of a later reconnected grant from the historical disconnect.
+
+The software owner questioned the connection between a proposed database supplier
+and the DPO requirements. Candidate onboarding is unstarted and must not drive
+continuation or become a universal login blocker. Supplier selection remains open;
+explain necessity, alternatives and whole-backend costs before any commitment.
+Private dated approvals and their subsequent clarification are retained in the
+ignored roadmap. No provider resource, production transfer, deployment or external
+email was performed by this documentation reconciliation.
+
 ## 19 October: bounded catalogue ACL diagnostic for provider trials
 
 The operator command jobs:preflight-managed-capture-window now exposes the existing

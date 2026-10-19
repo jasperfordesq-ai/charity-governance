@@ -79,7 +79,24 @@ an exhaustive provider inventory, a new Trash/purge execution or host-loss proof
 Exact targets, hash, downloaded bytes and screenshot remain in the private receipt
 `confluence-live-readback-2026-10-19.md`.
 
-## Ownership and data flows
+## Evidence reconciliation: 19 October
+
+The following completed observations should be reused. They do not turn a
+historical or synthetic result into current hosted acceptance.
+
+| Requirement | Evidence already collected | Remaining proof |
+| --- | --- | --- |
+| Owner retained-copy permission and withdrawal | The isolated browser run for `e25d6c99` passed all eight composed cases, including successful issuance/withdrawal and lost-response reconciliation through the real application API and disposable PostgreSQL. Provider observations were explicitly synthetic. | Actual disposal authority, provider execution and independently recoverable outcomes remain separate. The missing positive browser journey is no longer an implementation task. |
+| Local disconnect versus upstream revocation | The 11 October sandbox run on `db776db8` observed two sealed credentials before disconnect and zero afterward. Atlassian still listed the app after an accepted revoke call; subsequent administrator removal was observed. This drove the audit-field correction. | This is historical live evidence. It does not prove the state of the later reconnected grant or a fresh disconnect on the current release. Keep the approved active test connection until a scoped lifecycle run needs its removal. |
+| Current disconnect semantics | Current integration route records `atlassianRevokeEndpointAccepted`, always warns that upstream withdrawal is unconfirmed, and the service deletes credential rows transactionally with DISCONNECTED state. | Source inspection supports the intended distinction; it is not a new provider execution, current grant readback or independently held recovery receipt. |
+| Reference/version monitoring and source preservation | The clean `9611bd9f` supervised sandbox run described above observed CURRENT then SUPERSEDED; unciting retained upstream history and produced no deletion job. | Historical body/attachment-version byte verification, disposal and host-loss evidence are not supplied by citation monitoring. |
+
+Private original receipts: `permission-browser-evidence-2026-10-19.md` and
+`c01-runtime/evidence/c01-connect-disconnect-revocation-2026-10-11.md`.
+No new disconnect, upstream access removal or disposal is authorised by this
+reconciliation. Provider account setup is not a prerequisite for this matrix.
+
+## Ownership and data-flow requirements
 
 | Data / operation | Authority and implementation | Acceptance evidence required |
 | --- | --- | --- |
