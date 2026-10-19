@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Input } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
+import { ErasureReview } from './erasure-review';
 
 type Observation = {
   deletionId: string; controlPageId: string; targetDigest: string; checkedAt: string;
@@ -72,6 +73,7 @@ export function ErasureObservation({ deletionId }: { deletionId: string }) {
       <p>Checked {new Date(observation.checkedAt).toLocaleString('en-IE')}. Control page {observation.controlPageReadable ? 'readable' : 'not confirmed readable'}.</p>
       <p className="break-all">Recorded target digest: {observation.targetDigest}</p>
       <p>Missing content may be hidden by permissions. This does not verify permanent erasure, every copy, historical versions or backups. The job is unchanged.</p>
+      <ErasureReview key={`${deletionId}:${observation.checkedAt}`} deletionId={deletionId} targetDigest={observation.targetDigest} controlPageId={observation.controlPageId} />
     </div> : null}</div>
   </section>;
 }

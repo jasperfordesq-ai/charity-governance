@@ -27,6 +27,7 @@ import { z, ZodError } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { observeConfluenceErasure } from '../../services/confluence-erasure-observation.js';
+import { readConfluenceErasureReview, recordConfluenceErasureReview } from '../../services/confluence-erasure-review.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
 import {
@@ -598,6 +599,25 @@ export async function integrationRoutes(
       },
       options.confluenceClientDeps ?? {},
     );
+  }
+
+  async function erasureObservationConnection(organisationId: string) {
+    const integration = await findOwnConfluenceIntegration(app.prisma, organisationId);
+    const cloudId = integration && cloudIdFromConfig(integration.config);
+    if (!integration || integration.status !== 'CONNECTED' || !cloudId || !integration.connectedAt) return null;
+    const generation = `${integration.id}:${integration.connectedAt.toISOString()}`;
+    const isCurrent = async () => {
+      const current = await findOwnConfluenceIntegration(app.prisma, organisationId);
+      return current?.status === 'CONNECTED' && cloudIdFromConfig(current.config) === cloudId
+        && `${current.id}:${current.connectedAt?.toISOString()}` === generation;
+    };
+    const client = createConfluenceClient({ cloudId, getAccessToken: async () => {
+      if (!await isCurrent()) throw new Error('Connection changed');
+      const token = await currentAccessTokenForOrganisation(prisma, { organisationId }, deps);
+      if (!await isCurrent()) throw new Error('Connection changed');
+      return token;
+    } }, options.confluenceClientDeps ?? {});
+    return { cloudId, generation, client };
   }
 
   // Hooks rather than per-route `preHandler`, for the same reason the lookup
@@ -1313,27 +1333,42 @@ export async function integrationRoutes(
         const organisationId = request.user.organisationId;
         const observation = await observeConfluenceErasure(app.prisma, {
           organisationId, deletionId: request.params.deletionId, controlPageId,
-        }, { getConnection: async () => {
-          const integration = await findOwnConfluenceIntegration(app.prisma, organisationId);
-          const cloudId = integration && cloudIdFromConfig(integration.config);
-          if (!integration || integration.status !== 'CONNECTED' || !cloudId || !integration.connectedAt) return null;
-          const generation = `${integration.id}:${integration.connectedAt.toISOString()}`;
-          const isCurrent = async () => {
-            const current = await findOwnConfluenceIntegration(app.prisma, organisationId);
-            return current?.status === 'CONNECTED' && cloudIdFromConfig(current.config) === cloudId
-              && `${current.id}:${current.connectedAt?.toISOString()}` === generation;
-          };
-          const client = createConfluenceClient({ cloudId, getAccessToken: async () => {
-            if (!await isCurrent()) throw new Error('Connection changed');
-            const token = await currentAccessTokenForOrganisation(prisma, { organisationId }, deps);
-            if (!await isCurrent()) throw new Error('Connection changed');
-            return token;
-          } }, options.confluenceClientDeps ?? {});
-          return { cloudId, generation, client };
-        } });
+        }, { getConnection: () => erasureObservationConnection(organisationId) });
         return sendSuccess(reply, { observation });
       } catch (error) {
         if (error instanceof ZodError) return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { deletionId: string } }>(
+    '/confluence/erasures/:deletionId/reviews',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const organisationId = request.user.organisationId;
+        const review = await recordConfluenceErasureReview(app.prisma, { organisationId,
+          actorUserId: request.user.userId, deletionId: request.params.deletionId, body: request.body },
+        { getConnection: () => erasureObservationConnection(organisationId) });
+        return sendSuccess(reply, { review });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Review every report field and evidence reference.' });
+        return handleError(reply, error);
+      }
+    },
+  );
+  app.get<{ Params: { clientRequestId: string } }>(
+    '/confluence/erasures/reviews/:clientRequestId',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        return sendSuccess(reply, { review: await readConfluenceErasureReview(app.prisma,
+          request.user.organisationId, request.user.userId, request.params.clientRequestId) });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'A valid original request or audit event identifier is required.' });
         return handleError(reply, error);
       }
     },

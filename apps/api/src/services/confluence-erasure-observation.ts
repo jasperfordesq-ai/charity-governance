@@ -16,6 +16,9 @@ export type ConfluenceErasureObservationDeps = {
   listTrashedAttachmentIds?: typeof listTrashedAttachmentIds;
 };
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export function confluenceErasureTargetDigest(raw: unknown) {
+  return createHash('sha256').update(JSON.stringify(parseConfluenceErasureTarget(raw))).digest('hex');
+}
 
 /** Recorded targets only. Missing content can be hidden by permissions, so no
  * observation here asserts purge, completeness or authority to close a job. */
@@ -37,7 +40,7 @@ export async function observeConfluenceErasure(
     || target.pageId === input.controlPageId) {
     throw new AppError(409, 'CONFLUENCE_OBSERVATION_TARGET_UNSUPPORTED', 'Review the recorded target and choose a separate accessible control page.');
   }
-  const targetDigest = createHash('sha256').update(JSON.stringify(target)).digest('hex');
+  const targetDigest = confluenceErasureTargetDigest(target);
   const result = (status: 'VISIBLE' | 'TRASHED' | 'NOT_OBSERVED' | 'UNKNOWN', reason: string | null,
     controlPageReadable = false) => ({ deletionId: row.id, targetDigest, checkedAt: new Date().toISOString(),
     status, reason, controlPageId: input.controlPageId, controlPageReadable,

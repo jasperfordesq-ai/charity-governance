@@ -27,6 +27,10 @@ export interface ExcludedMutation {
 
 export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
   {
+    route: 'POST /api/v1/integrations/confluence/erasures/:deletionId/reviews',
+    reason: 'Owner web-only append-only review reports are human evidence, not connector disposal authority.',
+  },
+  {
     route: 'POST /api/v1/documents/:id/restore',
     reason: 'Restoration requires a human browser review of the current item, recovery deadline, reason and exact bytes.',
   },

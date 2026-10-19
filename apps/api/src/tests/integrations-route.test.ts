@@ -589,6 +589,10 @@ test('erasure observations refuse Members, Admins, connectors and low-level Owne
     try {
       const response = await app.inject({ method: 'GET', url: '/confluence/erasures/job-1/observation?controlPageId=control-1', headers: { authorization: bearer(actor) } });
       assert.equal(response.statusCode, 403, response.body);
+      const write = await app.inject({ method: 'POST', url: '/confluence/erasures/job-1/reviews', headers: { authorization: bearer(actor) }, payload: {} });
+      assert.equal(write.statusCode, 403, write.body);
+      const receipt = await app.inject({ method: 'GET', url: '/confluence/erasures/reviews/original-event', headers: { authorization: bearer(actor) } });
+      assert.equal(receipt.statusCode, 403, receipt.body);
     } finally { await app.close(); }
   }
 });

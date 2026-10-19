@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/states';
 import { useAuth } from '@/lib/auth-context';
 import { RetainedCopyReview } from './retained-copy-review';
 import { ErasureObservation } from './erasure-observation';
+import { ErasureReviewLookup } from './erasure-review';
 
 type RetiredCopy = {
   id: string;
@@ -93,6 +94,7 @@ export function RetiredConfluenceCopies() {
   };
 
   return <AppSection title="Retired Confluence copies" description="Review this charity’s retired publication records, including copies whose local Vault record is retained. A recorded reference does not prove that a page still exists or identify every external copy.">
+    {user?.role === 'OWNER' ? <ErasureReviewLookup key={`${user.id}:${user.organisationId}`} /> : null}
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="flat" onPress={() => void load()} isLoading={loading}>Refresh copies</Button>
       <Link className="self-center text-sm text-teal-primary underline" href="/governance-audit">Review deletion history</Link>

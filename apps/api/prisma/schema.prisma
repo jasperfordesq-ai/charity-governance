@@ -383,6 +383,7 @@ enum SecurityAuditEventType {
   // Requested, not performed: a purge that then fails must not remove the
   // record that it was asked for.
   CONFLUENCE_ERASURE_REQUESTED
+  CONFLUENCE_ERASURE_REVIEW_RECORDED
 }
 
 enum AuthActionApprovalAuditKind {

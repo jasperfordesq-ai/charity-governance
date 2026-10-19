@@ -1,3 +1,16 @@
+## 19 October: durable local erasure review reports
+
+The Owner report workflow preserves original instruction metadata, separately
+reported administrator action/evidence and a fresh recorded-target observation in
+the existing append-only audit log. Original request identity and input binding
+support lost-acknowledgement/concurrent-save reconciliation without another
+provider observation. A fresh Owner session can retrieve by request or audit event
+ID. Reports remain historical, non-authorising and unable to close/requeue jobs.
+See docs/confluence-erasure-review.md. Two forward migrations add the enum then
+subject admission/request uniqueness; no old migration is changed. Local audit
+durability is not independent-current history, real provider erasure or host-loss
+acceptance. Exact source/test results and remaining gates are private.
+
 ## 19 October: dashboard recorded-target observation
 
 Owners now have an explicit recorded-target observation action beside a retired

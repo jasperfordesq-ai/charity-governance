@@ -1,3 +1,14 @@
+## 19 October: erasure instruction/action report receipts
+
+Owner-only historical review reports now bind an existing target/instruction,
+separately reported administrator action and a fresh uncertain provider
+observation. The existing append-only audit log and original-request unique index
+retain the receipt; an unknown acknowledgement is reconciled by read-only lookup,
+not a repeated mutation. The redacted integration audit feed identifies the event
+without exposing context. This records local evidence, not policy approval,
+permanent/all-copy verification, independently current authority or host-loss
+readiness. See docs/confluence-erasure-review.md; the full goal remains open.
+
 ## 19 October: Owner observation action in Integrations
 
 The recorded erasure-target observation API is now reachable through an explicit

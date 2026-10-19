@@ -5,7 +5,7 @@ import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '..
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 import { IS_DEPLOYED_QA } from '../env';
 
-test('Owner observes a recorded deletion target without claiming erasure or changing the job', async ({ newFencedContext }) => {
+test('Owner observes a recorded deletion target without claiming erasure or changing the job', async ({ newFencedContext, browserOriginFence }) => {
   test.skip(IS_DEPLOYED_QA, 'Preexisting synthetic deletion fixture requires the runner-owned disposable database.');
   test.setTimeout(180_000);
   const owner = await createVerifiedOwner({ email: uniqueEmail('erasure-observation'), password: TEST_PASSWORD,
@@ -56,10 +56,13 @@ test('Owner observes a recorded deletion target without claiming erasure or chan
     await read.click();
     const response = await observed;
     expect(response.status(), await response.text()).toBe(200);
-    expect((await response.json()).data.observation).toMatchObject({ status: 'NOT_OBSERVED', controlPageReadable: true,
+    const originalObservation = (await response.json()).data.observation;
+    expect(originalObservation).toMatchObject({ status: 'NOT_OBSERVED', controlPageReadable: true,
       permanentErasureVerified: false, allCopiesVerified: false, jobUpdated: false, providerMutationIssued: false });
     await expect(panel.getByText('Not observed — absence or restricted access', { exact: true })).toBeVisible();
     await expect(panel.getByText(/The job is unchanged/)).toBeVisible();
+    await panel.getByRole('button', { name: 'Prepare review report', exact: true }).click();
+    const reportPanel = panel.getByRole('region', { name: 'Confluence erasure review report' });
     for (const width of [320, 768, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       expect(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
@@ -82,6 +85,46 @@ test('Owner observes a recorded deletion target without claiming erasure or chan
       expect(scan.violations).toEqual([]);
       await panel.screenshot({ path: test.info().outputPath(`recorded-target-${theme}.png`) });
     }
+    await reliableFill(reportPanel.getByLabel('Review evidence reference', { exact: true }), `SYNTHETIC-REVIEW-${stamp}`);
+    await reliableFill(reportPanel.getByLabel('Review report reason', { exact: true }), 'Synthetic review of observed IDs; no administrator disposal action is asserted.');
+    await reportPanel.getByRole('checkbox', { name: /I reviewed these references/ }).check();
+    const reviewUrl = `${browserOriginFence.apiOrigin}/api/v1/integrations/confluence/erasures/${jobId}/reviews`;
+    let saves = 0;
+    await page.route(reviewUrl, async route => {
+      expect(route.request().method()).toBe('POST'); saves++;
+      const committed = await route.fetch({ maxRedirects: 0 });
+      expect(committed.status(), await committed.text()).toBe(200);
+      expect((await committed.json()).data.review.actionAuthorized).toBe(false);
+      await route.abort('failed'); // Lose only the reply after the real commit.
+    });
+    await reportPanel.getByRole('button', { name: 'Save review report', exact: true }).click();
+    await expect(reportPanel.getByText('Report outcome needs reconciliation.', { exact: true })).toBeVisible();
+    await expect(reportPanel.getByRole('button', { name: 'Save review report', exact: true })).toBeDisabled();
+    await reportPanel.getByRole('button', { name: 'Look up original report receipt', exact: true }).click();
+    await expect(reportPanel.getByText(/Historical report recorded:/)).toBeVisible();
+    expect(saves).toBe(1);
+    const audit = await withDb(async client => {
+      const rows = await client.query(`SELECT id,context FROM "SecurityAuditEvent" WHERE "organisationId"=$1 AND type='CONFLUENCE_ERASURE_REVIEW_RECORDED'`, [owner.organisationId]);
+      expect(rows.rows).toHaveLength(1);
+      const row = rows.rows[0];
+      expect(row.context.observation.targetDigest).toBe(originalObservation.targetDigest);
+      expect(row.context.input.actionReport).toBe('NOT_REPORTED');
+      expect(row.context.observation.permanentErasureVerified).toBe(false);
+      expect(row.context.actionAuthorized).toBe(false);
+      return row;
+    });
+    // Existing append-only trigger plus the new original-request unique index.
+    await expect(withDb(async client => { await client.query(`UPDATE "SecurityAuditEvent" SET reason='Changed synthetic report' WHERE id=$1`, [audit.id]); })).rejects.toThrow(/55000/);
+    await expect(withDb(async client => { await client.query(`INSERT INTO "SecurityAuditEvent" (id,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason,context)
+      SELECT $2,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason,context FROM "SecurityAuditEvent" WHERE id=$1`, [audit.id, `review-duplicate-${stamp}`]); })).rejects.toThrow(/23505/);
+    await expect(withDb(async client => { await client.query(`INSERT INTO "SecurityAuditEvent" (id,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason)
+      SELECT $2,"organisationId",'MEMBER_ROLE_CHANGED',"actorKind","actorUserId","actorLabel","subjectLabel",reason FROM "SecurityAuditEvent" WHERE id=$1`, [audit.id, `review-invalid-subject-${stamp}`]); })).rejects.toThrow(/23514/);
+    await page.reload();
+    const historical = page.getByRole('region', { name: 'Historical Confluence review lookup' });
+    await reliableFill(historical.getByLabel('Original request or audit event reference', { exact: true }), audit.id);
+    await historical.getByRole('button', { name: 'Read historical review report', exact: true }).click();
+    await expect(historical.getByText(`Historical report recorded: ${audit.id}`, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Observe recorded Confluence target', exact: true }).click();
     await reliableFill(input, 'missing-control');
     await expect(panel.getByText('Not observed — absence or restricted access', { exact: true })).toHaveCount(0);
     await read.click();

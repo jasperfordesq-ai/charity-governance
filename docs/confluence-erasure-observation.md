@@ -70,7 +70,9 @@ correcting helper/panel colours and waiting for rendered theme transitions.
 Earlier fixture-order/stamp refusals and contrast failures are preserved privately;
 no SQL guard or accessibility rule was disabled. API checks passed 116/116.
 
-Next integrate retained instruction/action/evidence records separately from the
-transient provider result. Complete the scoped authorised sandbox
+The [historical review report](confluence-erasure-review.md) separately records
+the original instruction, operator-reported action evidence and a fresh provider
+observation. It does not convert them into disposal authority or verified erasure.
+Complete the scoped authorised sandbox
 administrator action and subsequent readback. Never change completion semantics
 or infer missing authority merely to produce a passing lifecycle result.
