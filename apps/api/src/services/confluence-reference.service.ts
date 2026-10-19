@@ -14,8 +14,8 @@
  *
  * **There is no update path and no erasure path in this module, and there must
  * not be one.** A cited page is the charity's own content, written by their
- * people, in their site. CharityPilot's entire relationship to it is: read it
- * once to confirm it exists and capture what was cited, then point at it.
+ * people, in their site. CharityPilot reads it to capture what was cited and
+ * can explicitly re-read its current version without altering that citation.
  * Unciting removes CharityPilot's record and touches nothing in Confluence —
  * the owner's 2026-09-19 ruling, applied to a page we never owned at all.
  *
@@ -203,6 +203,53 @@ export async function listConfluenceReferences(
   return rows.map(toReference);
 }
 
+export type CitationCheck = {
+  referenceId: string;
+  status: 'CURRENT' | 'SUPERSEDED' | 'UNKNOWN';
+  currentVersion: number | null;
+  checkedAt: string;
+  reason: 'NOT_CONNECTED' | 'CONNECTION_CHANGED' | 'PAGE_UNAVAILABLE' | 'READ_FAILED' | 'VERSION_UNVERIFIED' | null;
+};
+
+type CitationConnection = { cloudId: string; generation: string; client: ConfluenceClient };
+
+/** Explicit observation only: no scheduler, citation update, or provider write. */
+export async function checkConfluenceReference(
+  prisma: PrismaClient,
+  input: { organisationId: string; referenceId: string; now?: Date },
+  deps: ConfluenceReferenceDeps & { getConnection: () => Promise<CitationConnection | null> },
+): Promise<CitationCheck> {
+  const where = { id: input.referenceId, organisationId: input.organisationId };
+  const reference = await prisma.confluenceReference.findFirst({ where });
+  if (!reference) throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That citation was not found.');
+  const document = await prisma.document.findFirst({
+    where: { id: reference.documentId, organisationId: input.organisationId, deletedAt: null }, select: { id: true },
+  });
+  if (!document) throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+  const result = (status: CitationCheck['status'], currentVersion: number | null, reason: CitationCheck['reason']): CitationCheck => ({
+    referenceId: reference.id, status, currentVersion, reason, checkedAt: (input.now ?? new Date()).toISOString(),
+  });
+  const connection = await deps.getConnection();
+  if (!connection) return result('UNKNOWN', null, 'NOT_CONNECTED');
+  if (connection.cloudId !== reference.cloudId) return result('UNKNOWN', null, 'CONNECTION_CHANGED');
+  let page: ConfluencePage | null;
+  try { page = await (deps.getPage ?? getPageDefault)(connection.client, reference.pageId); }
+  catch { return result('UNKNOWN', null, 'READ_FAILED'); }
+  const after = await deps.getConnection();
+  if (!after || after.cloudId !== connection.cloudId || after.generation !== connection.generation) {
+    return result('UNKNOWN', null, 'CONNECTION_CHANGED');
+  }
+  // An uncited row must not be resurrected by a response completing later.
+  if (!await prisma.confluenceReference.findFirst({ where })) {
+    throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That citation was not found.');
+  }
+  if (!page || page.id !== reference.pageId || page.status !== 'current') {
+    return result('UNKNOWN', null, 'PAGE_UNAVAILABLE');
+  }
+  const status = citationStaleness(reference, page.version);
+  return result(status, status === 'UNKNOWN' ? null : page.version, status === 'UNKNOWN' ? 'VERSION_UNVERIFIED' : null);
+}
+
 /**
  * Charity-wide review of citations that still belong to live Vault records.
  * These are references to charity-managed pages, never CharityPilot copies or
@@ -300,6 +347,8 @@ export function citationStaleness(
   reference: Pick<ConfluenceReference, 'pageVersion'>,
   currentVersion: number | null,
 ): 'CURRENT' | 'SUPERSEDED' | 'UNKNOWN' {
-  if (currentVersion === null) return 'UNKNOWN';
+  if (currentVersion === null || !Number.isSafeInteger(currentVersion) || currentVersion < 1
+    || !Number.isSafeInteger(reference.pageVersion) || reference.pageVersion < 1
+    || currentVersion < reference.pageVersion) return 'UNKNOWN';
   return currentVersion > reference.pageVersion ? 'SUPERSEDED' : 'CURRENT';
 }

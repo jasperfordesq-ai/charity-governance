@@ -318,7 +318,7 @@ function makeStore(rows: IntegrationRow[], publications: PublicationRow[] = [], 
     confluenceReference: {
       findFirst: async (args: { where: { id: string; organisationId: string } }) => {
         const row = referenceRows.get(args.where.id);
-        return row?.organisationId === args.where.organisationId ? { id: row.id } : null;
+        return row?.organisationId === args.where.organisationId ? { ...row } : null;
       },
       findMany: async (args: { where: { organisationId: string; id?: { lt: string } };
         orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) => {
@@ -513,6 +513,7 @@ test('Admin connector cannot read dashboard-only external copy inventories by di
     for (const path of [
       '/confluence/copy-inventory', '/confluence/reference-inventory', '/confluence/reference-target',
       '/confluence/references/doc-1',
+      '/confluence/references/by-id/reference-1/check',
     ]) {
       const response = await app.inject({ method: 'GET', url: path,
         headers: { authorization: bearer(actor) } });
@@ -549,6 +550,7 @@ test('Admin connector cannot call browser-only Confluence mutations directly', a
       ['POST', '/confluence/publications/publication-1/erase'],
       ['POST', '/confluence/references/doc-1'],
       ['DELETE', '/confluence/references/by-id/reference-1'],
+      ['GET', '/confluence/references/by-id/reference-1/check'],
       ['PUT', '/confluence/declared-environment'],
       ['DELETE', '/confluence'],
     ] as const) {
@@ -596,6 +598,45 @@ test('citation target names only the connected site and rejects an unreviewed or
       assert.equal(response.json().code, code);
     }
   } finally { await app.close(); }
+});
+
+test('citation monitoring reads the recorded page through the client and preserves its cited version', async () => {
+  for (const mode of ['current', 'superseded', 'missing', 'grant-changed', 'other-site'] as const) {
+    let reads = 0;
+    const transport: Array<{ url: string; method: string | undefined }> = [];
+    const references: ReferenceRow[] = [{ id: 'ref-1', organisationId: 'org-a', documentId: 'doc-1',
+      cloudId: 'site-1', pageId: 'page-1', pageTitle: 'Original title', pageVersion: 7, citedAt: new Date() }];
+    const { app, store } = await buildApp({ rows: [connectedRow(mode === 'other-site'
+      ? { config: { siteId: 'other-site' } } : {})], references,
+      confluenceFetch: async (url: string | URL, init: RequestInit) => {
+        reads++;
+        transport.push({ url: String(url), method: init.method });
+        if (mode === 'grant-changed') store.integrations.get('integration-a')!.connectedAt = new Date('2026-10-19');
+        return new Response(JSON.stringify(mode === 'missing' ? {} : {
+          id: 'page-1', title: 'New title', spaceId: 'space-1', status: 'current',
+          version: { number: mode === 'superseded' ? 9 : 7 }, _links: {},
+        }), { status: mode === 'missing' ? 404 : 200, headers: { 'content-type': 'application/json' } });
+      } });
+    store.liveDocuments.add('org-a:doc-1');
+    store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+    try {
+      const headers = { authorization: bearer(ORG_A_ADMIN) };
+      const foreign = await app.inject({ method: 'GET', url: '/confluence/references/by-id/foreign/check', headers });
+      assert.equal(foreign.statusCode, 404);
+      assert.equal(reads, 0);
+      const response = await app.inject({ method: 'GET', url: '/confluence/references/by-id/ref-1/check', headers });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.equal(response.headers['cache-control'], 'no-store');
+      assert.equal(response.json().data.check.status, mode === 'current' ? 'CURRENT' : mode === 'superseded' ? 'SUPERSEDED' : 'UNKNOWN', `${mode}: ${response.body}; ${JSON.stringify(transport)}`);
+      assert.equal(reads, mode === 'other-site' ? 0 : 1, mode);
+      for (const request of transport) {
+        assert.match(request.url, /\/ex\/confluence\/site-1\/wiki\/api\/v2\/pages\/page-1$/);
+        assert.equal(request.method, 'GET');
+      }
+      assert.equal(store.references.get('ref-1')?.pageVersion, 7);
+      assert.equal(store.deletions.length, 0);
+    } finally { await app.close(); }
+  }
 });
 
 async function authorizeState(app: Awaited<ReturnType<typeof buildApp>>['app'], actor: Actor): Promise<string> {
@@ -858,6 +899,7 @@ test('a member may not reach any integration route', async () => {
     ['GET', '/confluence/reference-target'],
     ['POST', '/confluence/references/doc-1'],
     ['DELETE', '/confluence/references/by-id/reference-1'],
+    ['GET', '/confluence/references/by-id/reference-1/check'],
     ['PUT', '/confluence/publish-space'],
     ['DELETE', '/confluence'],
   ] as const) {

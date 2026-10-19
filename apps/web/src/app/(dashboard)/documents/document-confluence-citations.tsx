@@ -30,7 +30,7 @@ export function DocumentConfluenceCitations({ document, onClose }: {
         <div className="space-y-3">
           <Input label="Confluence page ID" description="Use the identifier after /pages/ in the page address, not the whole URL."
             value={state.pageId} onValueChange={state.setPageId} maxLength={64} isDisabled={disabled || !connected} />
-          <Button color="primary" onPress={state.add} isLoading={state.busy && !removing}
+          <Button color="primary" onPress={state.add} isLoading={state.busy && !removing && !state.checkingId}
             isDisabled={disabled || Boolean(removing) || !state.pageId.trim() || !connected}>Verify and cite page</Button>
         </div>
         <div className="flex items-center justify-between gap-3">
@@ -38,13 +38,26 @@ export function DocumentConfluenceCitations({ document, onClose }: {
           <Button size="sm" variant="flat" onPress={state.load} isLoading={state.loading} isDisabled={state.busy}>Refresh citations</Button>
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-300">Versions below are those recorded at citation time.
-          Refreshing this list does not check the current page version or replace the cited version.</p>
+          Refreshing this list does not check the current page version or replace the cited version.
+          Use Check upstream version for a current observation. This never updates the citation or changes Confluence.</p>
         {!state.loading && !state.citations.length ? <p className="text-sm">No citations are recorded for this document.</p> : null}
         <ul className="space-y-3" aria-busy={state.loading}>{state.citations.map(citation => <li key={citation.id}
           className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
           <h4 className="break-words text-sm font-semibold">{citation.pageTitle}</h4>
           <p className="break-words text-sm">Page {citation.pageId} · cited version {citation.pageVersion}</p>
           <p className="break-words text-xs text-gray-600 dark:text-gray-300">Recorded site ID: {citation.cloudId} · cited {new Date(citation.citedAt).toLocaleString('en-IE')}</p>
+          <div className="mt-2 space-y-2">
+            <Button size="sm" variant="flat" aria-label={`Check upstream version for ${citation.pageTitle}`}
+              onPress={() => state.check(citation.id)} isLoading={state.checkingId === citation.id}
+              isDisabled={disabled || Boolean(removing)}>Check upstream version</Button>
+            {state.checks[citation.id] ? <p role="status" className="text-sm">
+              {state.checks[citation.id].status === 'CURRENT' ? `Current at check: version ${state.checks[citation.id].currentVersion}.`
+                : state.checks[citation.id].status === 'SUPERSEDED' ? `Superseded: upstream is version ${state.checks[citation.id].currentVersion}; this citation remains version ${citation.pageVersion}.`
+                  : 'Unknown: current upstream version could not be verified. Check the connection and your Confluence access.'}
+              {' '}Checked {new Date(state.checks[citation.id].checkedAt).toLocaleString('en-IE')}.
+              {' '}This observation does not approve the page or verify its historical contents.
+            </p> : <p className="text-xs text-gray-600 dark:text-gray-300">Current upstream version has not been checked in this review.</p>}
+          </div>
           {removing?.id === citation.id ? <div className="mt-2 space-y-2">
             <p className="text-sm">Remove only this citation from CharityPilot? The Confluence page and its attachments stay unchanged. The decision remains in document history.</p>
             <div className="flex flex-wrap gap-2">

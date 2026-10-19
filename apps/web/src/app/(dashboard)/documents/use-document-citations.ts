@@ -11,6 +11,8 @@ export type DocumentCitation = {
   pageTitle: string; pageVersion: number; citedAt: string;
 };
 type CitationTarget = { siteId: string | null; siteUrl: string | null };
+type CitationCheck = { referenceId: string; status: 'CURRENT' | 'SUPERSEDED' | 'UNKNOWN';
+  currentVersion: number | null; checkedAt: string; reason: string | null };
 
 export function useDocumentCitations(documentId: string) {
   const { user, refreshUser } = useAuth();
@@ -23,6 +25,8 @@ export function useDocumentCitations(documentId: string) {
   const [notice, setNotice] = useState('');
   const [needsRefresh, setNeedsRefresh] = useState(false);
   const [accessRevoked, setAccessRevoked] = useState(false);
+  const [checks, setChecks] = useState<Record<string, CitationCheck>>({});
+  const [checkingId, setCheckingId] = useState<string | null>(null);
   const inFlight = useRef(false);
   const generation = useRef(0);
   const canManage = canManageGovernance(user?.role) && !accessRevoked;
@@ -38,6 +42,7 @@ export function useDocumentCitations(documentId: string) {
       ]);
       if (current !== generation.current) return;
       setCitations(references.data.references); setConnection(status.data);
+      setChecks({});
       setNeedsRefresh(false);
     } catch (cause) {
       if (current === generation.current) {
@@ -95,6 +100,24 @@ export function useDocumentCitations(documentId: string) {
     finally { inFlight.current = false; setBusy(false); }
   };
 
+  const check = async (referenceId: string) => {
+    if (!canManage || loading || inFlight.current) return;
+    inFlight.current = true; setBusy(true); setCheckingId(referenceId); setError(''); setNotice('');
+    // A failed new observation must not leave an older green result on screen.
+    setChecks(rows => { const next = { ...rows }; delete next[referenceId]; return next; });
+    try {
+      const response = await api.get<{ check: CitationCheck }>(
+        `/integrations/confluence/references/by-id/${encodeURIComponent(referenceId)}/check`,
+        { timeout: 30000, skipAuthRefresh: true });
+      setChecks(rows => ({ ...rows, [referenceId]: response.data.check }));
+    } catch (cause) {
+      setError(apiErrorMessage(cause, 'The upstream version could not be checked. Its current status is unknown.'));
+      if (isApiForbiddenError(cause)) {
+        setAccessRevoked(true); await refreshUser().catch(() => undefined);
+      }
+    } finally { inFlight.current = false; setBusy(false); setCheckingId(null); }
+  };
+
   return { citations, connection, pageId, setPageId, loading, busy, error, notice,
-    needsRefresh, canManage, load, add, remove };
+    needsRefresh, canManage, load, add, remove, checks, checkingId, check };
 }

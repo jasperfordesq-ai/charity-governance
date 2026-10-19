@@ -60,6 +60,7 @@ import {
 } from '../../services/integration-declared-environment.service.js';
 import {
   citeConfluencePage,
+  checkConfluenceReference,
   listConfluenceReferenceInventory,
   listConfluenceReferences,
   removeConfluenceReference,
@@ -1242,8 +1243,8 @@ export async function integrationRoutes(
    *
    * THE OPPOSITE DIRECTION FROM PUBLISHING, and the model the DPO signed off on
    * 2026-09-18. Nothing on this path writes to Confluence: the page is read
-   * once, to confirm it exists and to capture what was cited, and thereafter
-   * CharityPilot only points at it.
+   * to capture what was cited and on explicit version checks; neither path
+   * changes the source or silently updates the citation.
    *
    * ADMIN, because a citation is a governance assertion — it is the answer a
    * charity gives when a regulator asks where the evidence is.
@@ -1300,7 +1301,41 @@ export async function integrationRoutes(
     },
   );
 
-  /** The pages cited for one document. Ungated, like the publications listing. */
+  app.get<{ Params: { referenceId: string } }>(
+    '/confluence/references/by-id/:referenceId/check',
+    { preHandler: [requireWebSession] },
+    async (request, reply) => {
+      try {
+        const organisationId = request.user.organisationId;
+        const check = await checkConfluenceReference(app.prisma, {
+          organisationId, referenceId: request.params.referenceId,
+        }, { getConnection: async () => {
+          const integration = await findOwnConfluenceIntegration(app.prisma, organisationId);
+          const cloudId = integration && cloudIdFromConfig(integration.config);
+          if (!integration || integration.status !== 'CONNECTED' || !cloudId || !integration.connectedAt) return null;
+          const generation = `${integration.id}:${integration.connectedAt.toISOString()}`;
+          // Verify the same grant before and after token resolution, including
+          // each retry. A new site's credentials cannot serve an old citation.
+          const isCurrent = async () => {
+            const current = await findOwnConfluenceIntegration(app.prisma, organisationId);
+            return current?.status === 'CONNECTED' && cloudIdFromConfig(current.config) === cloudId
+              && `${current.id}:${current.connectedAt?.toISOString()}` === generation;
+          };
+          const client = createConfluenceClient({ cloudId, getAccessToken: async () => {
+            if (!await isCurrent()) throw new AppError(409, 'CONFLUENCE_REFERENCE_CONNECTION_CHANGED', 'The connection changed.');
+            const token = await currentAccessTokenForOrganisation(prisma, { organisationId }, deps);
+            if (!await isCurrent()) throw new AppError(409, 'CONFLUENCE_REFERENCE_CONNECTION_CHANGED', 'The connection changed.');
+            return token;
+          } }, options.confluenceClientDeps ?? {});
+          return { cloudId, generation, client };
+        } });
+        reply.header('Cache-Control', 'no-store');
+        return sendSuccess(reply, { check });
+      } catch (error) { return handleError(reply, error); }
+    },
+  );
+
+  /** The pages cited for one document, under the plugin's Admin guard. */
   app.get<{ Params: { documentId: string } }>(
     '/confluence/references/:documentId',
     { preHandler: [requireWebSession] },

@@ -16,6 +16,18 @@ removal. This does not publish, approve or erase the Confluence page. Recorded
 versions are historical observations; refreshing the citation list does not
 check current upstream versions or replace the cited version.
 
+Each saved citation also has an explicit **Check upstream version** action.
+`GET /integrations/confluence/references/by-id/:referenceId/check` reads only
+that scoped citation's page through the current recorded-site connection. It
+returns a timestamped CURRENT, SUPERSEDED or UNKNOWN observation without changing
+the cited version. The live authorisation generation is checked around token
+resolution and the provider read. Changed/disconnected sites, unavailable pages,
+provider errors and lower/invalid versions cannot prove CURRENT. No scheduler or
+list refresh keeps unused grants alive. Results are not retained as approvals or
+historical-content verification. The disposable browser proves CURRENT through
+the application/client; a clean-release live edit and SUPERSEDED observation are
+still required before closing that acceptance row.
+
 The web-only `GET /integrations/confluence/reference-target` returns only the
 connected site ID and URL (null when disconnected), under the existing Admin
 route guard. `POST /integrations/confluence/references/:documentId` now requires
@@ -30,7 +42,7 @@ at 320/768/1024/1440 pixels against the disposable application/fake provider.
 Separate sandbox browser evidence observed a real page citation at version 2,
 its specifically approved local removal and unchanged upstream version history.
 The live runtime used documented source overlays; it is not a clean deployed
-release or the remaining staleness-monitoring, purge or host-loss acceptance.
+release or the remaining live staleness-monitoring, purge or host-loss acceptance.
 
 On 19 October, a signed-in read-only check of the existing synthetic sandbox
 page observed its current version and version history. Its attachment inventory

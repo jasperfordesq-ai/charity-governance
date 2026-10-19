@@ -1,3 +1,20 @@
+## 19 October: explicit upstream citation-version checks
+
+Owners/Admins can now check an individual Vault citation's upstream version.
+The read-only API scopes the citation/document to the organisation before any
+provider access, binds reads and token resolution to the recorded site and live
+authorisation generation, and discards results if that generation changes.
+Current and superseded observations include a check time; missing/trashed pages,
+changed connections, failed reads and regressed/invalid versions remain unknown.
+Neither citations, their original versions, audit history nor provider content
+are rewritten. Opening or refreshing the list does not trigger provider reads;
+there is no background grant keepalive. Results are transient review observations.
+
+Focused service/route tests and the disposable browser journey cover this path.
+The browser currently proves a current version through the real application and
+synthetic provider; real sandbox upstream edit/superseded observation against a
+clean release remains required. This does not prove historical page contents,
+attachment versions, policy approval, private-VM deployment or host-loss recovery.
 ## 19 October: Vault citation workflow and reviewed-site binding
 
 Owners/Admins now have per-record Confluence citation controls in the Vault.

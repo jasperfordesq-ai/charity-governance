@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   citationStaleness,
+  checkConfluenceReference,
   citeConfluencePage,
   listConfluenceReferences,
   removeConfluenceReference,
@@ -85,6 +86,61 @@ const INPUT = {
   citedById: 'user-1',
   now: NOW,
 };
+
+test('upstream citation check observes the real page version without rewriting evidence', async () => {
+  const rows = [{ id: 'ref-1', organisationId: 'org-1', documentId: 'doc-1', cloudId: 'site-1',
+    pageId: 'page-1', pageVersion: 7, pageTitle: 'Original title', citedAt: NOW }];
+  const fake = fakePrisma({ rows });
+  const before = JSON.stringify(rows);
+  const result = await checkConfluenceReference(fake.prisma, { organisationId: 'org-1', referenceId: 'ref-1', now: NOW }, {
+    getConnection: async () => ({ cloudId: 'site-1', generation: 'grant-1', client: CLIENT }),
+    getPage: async (_client, pageId) => { assert.equal(pageId, 'page-1'); return page({ version: 9, status: 'current' }); },
+  });
+  assert.deepEqual(result, { referenceId: 'ref-1', status: 'SUPERSEDED', currentVersion: 9,
+    checkedAt: NOW.toISOString(), reason: null });
+  assert.equal(JSON.stringify(rows), before);
+  assert.deepEqual([fake.created, fake.deletes, fake.audits], [[], [], []]);
+});
+
+test('upstream check scopes the citation before any provider access', async () => {
+  const fake = fakePrisma({ rows: [{ id: 'foreign', organisationId: 'org-2' }] });
+  let reads = 0;
+  await assert.rejects(checkConfluenceReference(fake.prisma, { organisationId: 'org-1', referenceId: 'foreign' }, {
+    getConnection: async () => { reads++; return null; },
+  }), (error: unknown) => error instanceof AppError && error.code === 'CONFLUENCE_REFERENCE_NOT_FOUND');
+  assert.equal(reads, 0);
+});
+
+test('upstream check preserves uncertainty and never reads another site', async () => {
+  for (const mode of ['disconnected', 'site-changed', 'grant-changed', 'missing', 'trashed', 'regressed', 'error', 'wrong-page'] as const) {
+    const fake = fakePrisma({ rows: [{ id: 'ref-1', organisationId: 'org-1', documentId: 'doc-1',
+      cloudId: 'site-1', pageId: 'page-1', pageVersion: 7 }] });
+    let reads = 0; let connections = 0;
+    const result = await checkConfluenceReference(fake.prisma, { organisationId: 'org-1', referenceId: 'ref-1' }, {
+      getConnection: async () => { connections++;
+        return mode === 'disconnected' ? null : { cloudId: mode === 'site-changed' ? 'other' : 'site-1',
+          generation: mode === 'grant-changed' && connections > 1 ? 'grant-2' : 'grant-1', client: CLIENT };
+      },
+      getPage: async () => { reads++;
+        if (mode === 'error') throw new Error('private provider details must not escape');
+        if (mode === 'missing') return null;
+        return page({ version: mode === 'regressed' ? 6 : 7,
+          status: mode === 'trashed' ? 'trashed' : 'current', id: mode === 'wrong-page' ? 'different' : 'page-1' });
+      },
+    });
+    assert.equal(result.status, 'UNKNOWN', mode);
+    assert.equal(result.currentVersion, null, mode);
+    assert.equal(reads, ['disconnected', 'site-changed'].includes(mode) ? 0 : 1, mode);
+    assert.doesNotMatch(JSON.stringify(result), /private provider/);
+    assert.deepEqual([fake.created, fake.deletes, fake.audits], [[], [], []]);
+  }
+});
+
+test('a lower, invalid or absent current version cannot prove the cited version current', () => {
+  for (const version of [6, 0, -1, NaN, Infinity, 7.5, null]) {
+    assert.equal(citationStaleness({ pageVersion: 7 }, version), 'UNKNOWN');
+  }
+});
 
 test('a document removed while its Confluence page is being read cannot acquire a new citation', async () => {
   const options = { documentExists: true };
@@ -257,9 +313,9 @@ test('a page edited since it was cited reads as superseded, not as wrong', () =>
 
 test('a page that has somehow gone backwards is not reported as superseded', () => {
   // Confluence versions do not decrease, so this is a reading we do not
-  // understand rather than evidence that has moved on. CURRENT is the
-  // conservative answer: it makes no claim the data does not support.
-  assert.equal(citationStaleness({ pageVersion: 7 }, 3), 'CURRENT');
+  // understand rather than evidence that has moved on. An unexplained
+  // observed regression cannot establish that the cited version is current.
+  assert.equal(citationStaleness({ pageVersion: 7 }, 3), 'UNKNOWN');
 });
 
 // ---------------------------------------------------------------------------
@@ -274,7 +330,7 @@ test('nothing in this module can write to, or delete, a cited page', () => {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
   // A cited page is the charity's own content, in their own site, written by
-  // their people. CharityPilot's entire relationship to it is one read. A
+  // their people. CharityPilot's relationship is read-only. A
   // future edit that imported any write operation here would be reaching into
   // somebody else's document, and this is the guard that would stop it.
   for (const forbidden of [

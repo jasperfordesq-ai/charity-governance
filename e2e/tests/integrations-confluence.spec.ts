@@ -170,6 +170,13 @@ test.describe('Confluence connector', () => {
     expect(reference.pageVersion).toBe(1);
     await expect(citations.getByRole('status')).toContainText('version 1');
     await expect(citations.getByText('Page synthetic-retained-copy · cited version 1')).toBeVisible();
+    await citations.getByRole('button', { name: 'Check upstream version for Synthetic retained copy', exact: true }).click();
+    await expect(citations.getByText('Current at check: version 1.', { exact: false })).toBeVisible();
+    await withDb(async client => {
+      const saved = await client.query('SELECT "pageVersion" FROM "ConfluenceReference" WHERE id=$1', [reference.id]);
+      expect(saved.rows).toEqual([{ pageVersion: 1 }]);
+      expect((await client.query('SELECT id FROM "DocumentControlAudit" WHERE "documentId"=$1 AND kind=\'CONFLUENCE_REFERENCE\'', [documentId])).rowCount).toBe(1);
+    });
     await citations.getByRole('button', { name: 'Remove citation for Synthetic retained copy', exact: true }).click();
     await expect(citations.getByText(/The Confluence page and its attachments stay unchanged/)).toBeVisible();
     const uncited = ownerPage.waitForResponse(response =>
