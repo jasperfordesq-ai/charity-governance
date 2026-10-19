@@ -24,7 +24,7 @@ loopback synthetic runtime, retaining its approved real sandbox OAuth connection
 The supported Vault form cited an existing synthetic page at version 3. The new
 observer read that page with a separate existing accessible sandbox page as the
 control and returned VISIBLE. Independent SQL readback showed the complete saved
-citation and citation-audit rows unchanged and zero deletion jobs. Reconstructed
+citation and selected citation-audit metadata unchanged and zero deletion jobs. Reconstructed
 selected-row SHA-256, with the database's UTC timestamp interpretation, matched
 the displayed target digest. No migration, seed, new grant or provider content
 write ran. Application source had no overlays; Next regenerated its declaration.

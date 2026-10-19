@@ -3,7 +3,7 @@
 The source-pinned supervised synthetic runtime completed the new cited-page
 observer against the approved real Confluence sandbox OAuth grant. A supported
 local citation recorded version 3; the separate existing control and target read
-returned VISIBLE. Independent SQL comparison found the full citation/audits
+returned VISIBLE. Independent SQL comparison found the full citation and selected audit metadata
 unchanged, zero deletion jobs and the displayed digest matched the selected row.
 No migration, new grant or provider content write ran. See the acceptance matrix
 and ignored dated live receipt. This is page-read evidence, not Trash/purge,

@@ -2,7 +2,7 @@
 
 The supported citation/observation flow on exact source `6f7090a8` read the
 approved real synthetic sandbox, with a separate existing page as access control.
-The target was VISIBLE. Full citation/audit SQL comparisons stayed unchanged;
+The target was VISIBLE. Full citation and selected audit metadata stayed unchanged;
 zero deletion jobs and an independently reconstructed matching digest were
 recorded privately. This closes that scoped live read check, not real disposal,
 attachment inventory, production deployment, durable jobless reports or independent
