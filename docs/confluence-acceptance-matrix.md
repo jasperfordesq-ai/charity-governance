@@ -7,6 +7,18 @@ Private dated execution receipts belong in the ignored continuation handoff.
 
 ## Dated live-provider observation
 
+### Cited-page lifecycle observation without deletion intent
+
+Owners can explicitly observe an existing citation's page using a separate
+accessible control, without queuing disposal. The result distinguishes visible,
+Trash, permission-ambiguous non-observation and unknown states. It is page-only;
+no attachment inventory is recorded in a citation. The final read rechecks the
+citation and live linked document, and the current site/grant is checked around
+provider access. This is separate from version comparison and the deletion-job
+observer. See [the scoped contract](confluence-citation-observation.md). Exact
+test/live results remain private; no real provider acceptance, durable jobless
+review report, permanent erasure or host-loss completion follows from the source.
+
 ### Citation workflow
 
 Owners and administrators can open **Documents → Confluence citations** beside

@@ -27,6 +27,7 @@ import { z, ZodError } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { observeConfluenceErasure } from '../../services/confluence-erasure-observation.js';
+import { observeConfluenceCitation } from '../../services/confluence-citation-observation.js';
 import { readConfluenceErasureReview, recordConfluenceErasureReview } from '../../services/confluence-erasure-review.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
@@ -1369,6 +1370,25 @@ export async function integrationRoutes(
           request.user.organisationId, request.user.userId, request.params.clientRequestId) });
       } catch (error) {
         if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'A valid original request or audit event identifier is required.' });
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  app.get<{ Params: { referenceId: string } }>(
+    '/confluence/references/by-id/:referenceId/observation',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const { controlPageId } = z.object({ controlPageId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/) }).strict().parse(request.query);
+        const organisationId = request.user.organisationId;
+        const observation = await observeConfluenceCitation(app.prisma, {
+          organisationId, referenceId: request.params.referenceId, controlPageId,
+        }, { getConnection: () => erasureObservationConnection(organisationId) });
+        return sendSuccess(reply, { observation });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
         return handleError(reply, error);
       }
     },

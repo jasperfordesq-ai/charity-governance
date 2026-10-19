@@ -40,6 +40,7 @@ const site = createFakeAtlassian({ cloudId, siteUrl, siteName: 'Charity E2E',
   grantedScope: 'read:confluence-content.all write:confluence-content offline_access read:page:confluence read:attachment:confluence' });
 // An existing remote page, distinct from pages the publishing tests create.
 site.seedPage({ id: 'synthetic-retained-copy', spaceId: 'space-gov', title: 'Synthetic retained copy' });
+site.seedPage({ id: 'synthetic-observation-control', spaceId: 'space-gov', title: 'Synthetic observation control' });
 
 // Seeded so the space picker has something to offer. A test that needs more
 // can add them through the control endpoint below.

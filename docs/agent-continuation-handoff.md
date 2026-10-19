@@ -1,3 +1,14 @@
+## 19 October: observe cited content without deletion intent
+
+The Owner citation panel now has a page-only lifecycle observation, bound to an
+existing same-charity citation and live linked document. It uses a separate
+control, current site/grant checks and final citation reread, without creating a
+deletion job or changing the citation/provider content. Missing content remains
+permission-ambiguous; attachments and historical versions are outside its scope.
+See docs/confluence-citation-observation.md. Historical reports without a deletion
+instruction, exact live-provider acceptance and independent recovery remain open.
+Private dated receipts distinguish executed tests from source and deployed state.
+
 ## 19 October: durable local erasure review reports
 
 The Owner report workflow preserves original instruction metadata, separately

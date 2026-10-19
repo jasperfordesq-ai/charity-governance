@@ -204,6 +204,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Owner web-only recorded-target observation supports manual erasure review; it neither grants disposal nor completes a deletion job and is unavailable to connectors.',
   },
   {
+    path: '/api/v1/integrations/confluence/references/by-id/:referenceId/observation',
+    reason: 'Owner web-only cited-page lifecycle observation does not create a deletion job or grant disposal authority and is unavailable to connectors.',
+  },
+  {
     path: '/api/v1/integrations/confluence/erasures/reviews/:clientRequestId',
     reason: 'Owner web-only original review receipt lookup reconciles unknown saves without another provider action.',
   },

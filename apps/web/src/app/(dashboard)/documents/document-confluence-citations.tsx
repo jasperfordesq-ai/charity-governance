@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '@heroui/react';
 import { useDocumentCitations, type DocumentCitation } from './use-document-citations';
+import { CitationObservation } from './citation-observation';
 
 export function DocumentConfluenceCitations({ document, onClose }: {
   document: { id: string; name: string }; onClose: () => void;
@@ -58,6 +59,8 @@ export function DocumentConfluenceCitations({ document, onClose }: {
               {' '}This observation does not approve the page or verify its historical contents.
             </p> : <p className="text-xs text-gray-600 dark:text-gray-300">Current upstream version has not been checked in this review.</p>}
           </div>
+          {!state.loading ? <CitationObservation key={`${citation.id}:${citation.cloudId}:${citation.pageId}:${citation.pageVersion}:${citation.citedAt}`}
+            referenceId={citation.id} pageId={citation.pageId} disabled={disabled || Boolean(removing)} /> : null}
           {removing?.id === citation.id ? <div className="mt-2 space-y-2">
             <p className="text-sm">Remove only this citation from CharityPilot? The Confluence page and its attachments stay unchanged. The decision remains in document history.</p>
             <div className="flex flex-wrap gap-2">

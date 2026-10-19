@@ -1,3 +1,13 @@
+## 19 October: citation lifecycle observation without a deletion job
+
+An Owner-only web observation can inspect the lifecycle of a saved cited page
+while its linked document remains live. Existing citation/site/grant identity,
+separate accessible control, GET-only bounded transport and final scope reread
+prevent this path from being used as a disposal instruction. It makes no
+attachment, permanent/all-copy erasure or approval claim. See
+docs/confluence-citation-observation.md; actual provider/host-loss and durable
+jobless review reporting remain separate outstanding evidence/work.
+
 ## 19 October: erasure instruction/action report receipts
 
 Owner-only historical review reports now bind an existing target/instruction,

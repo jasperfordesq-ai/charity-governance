@@ -591,6 +591,8 @@ test('erasure observations refuse Members, Admins, connectors and low-level Owne
       assert.equal(response.statusCode, 403, response.body);
       const write = await app.inject({ method: 'POST', url: '/confluence/erasures/job-1/reviews', headers: { authorization: bearer(actor) }, payload: {} });
       assert.equal(write.statusCode, 403, write.body);
+      const citation = await app.inject({ method: 'GET', url: '/confluence/references/by-id/ref-1/observation?controlPageId=control-1', headers: { authorization: bearer(actor) } });
+      assert.equal(citation.statusCode, 403, citation.body);
       const receipt = await app.inject({ method: 'GET', url: '/confluence/erasures/reviews/original-event', headers: { authorization: bearer(actor) } });
       assert.equal(receipt.statusCode, 403, receipt.body);
     } finally { await app.close(); }
@@ -604,6 +606,9 @@ test('erasure observation validates Owner input before any target or provider ac
     const response = await app.inject({ method: 'GET', url: '/confluence/erasures/job-1/observation?controlPageId=../invalid', headers: { authorization: bearer(actor) } });
     assert.equal(response.statusCode, 400, response.body);
     assert.equal(response.headers['cache-control'], 'no-store');
+    const citation = await app.inject({ method: 'GET', url: '/confluence/references/by-id/ref-1/observation?controlPageId=../invalid', headers: { authorization: bearer(actor) } });
+    assert.equal(citation.statusCode, 400, citation.body);
+    assert.equal(citation.headers['cache-control'], 'no-store');
   } finally { await app.close(); }
 });
 
@@ -638,6 +643,39 @@ test('Owner erasure observations bind recorded tenant targets and actual GET tra
       assert.equal(response.headers['cache-control'], 'no-store'); assert.equal(JSON.stringify(row), original);
     } finally { await app.close(); }
   }
+});
+
+test('Owner cited-page observation uses scoped identity and GET transport without an erasure job', async () => {
+  const actor = { ...ORG_A_ADMIN, role: 'OWNER' as const };
+  const transport: string[] = [];
+  const reference = { id: 'ref-1', documentId: 'doc-1', cloudId: 'site-1', pageId: 'page-1',
+    pageVersion: 2, citedAt: new Date('2026-10-01'), updatedAt: new Date('2026-10-01') };
+  const original = JSON.stringify(reference);
+  const { app, store } = await buildApp({ actor, rows: [connectedRow()], confluenceFetch: async (url: string | URL, init: RequestInit) => {
+    assert.equal(init.method, 'GET'); transport.push(String(url));
+    const control = String(url).includes('/pages/control-1');
+    return new Response(JSON.stringify(control ? { id: 'control-1', title: 'Control', spaceId: 'space-1',
+      status: 'current', version: { number: 1 }, _links: {} } : {}),
+    { status: control ? 200 : 404, headers: { 'content-type': 'application/json' } });
+  } });
+  Object.assign(app.prisma, { confluenceReference: { findFirst: async ({ where }: { where: { id: string; organisationId: string; document: unknown } }) => {
+    assert.equal(where.organisationId, 'org-a');
+    assert.deepEqual(where.document, { organisationId: 'org-a', deletedAt: null });
+    return where.id === reference.id ? reference : null;
+  } } });
+  store.credentials.push(sealedAccessTokenRow('integration-a', 'org-a'));
+  try {
+    const headers = { authorization: bearer(actor) };
+    const foreign = await app.inject({ method: 'GET', url: '/confluence/references/by-id/foreign/observation?controlPageId=control-1', headers });
+    assert.equal(foreign.statusCode, 404); assert.equal(transport.length, 0);
+    const response = await app.inject({ method: 'GET', url: '/confluence/references/by-id/ref-1/observation?controlPageId=control-1', headers });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.json().data.observation.status, 'NOT_OBSERVED');
+    assert.equal(response.json().data.observation.scope, 'CITED_PAGE_ONLY');
+    assert.equal(response.json().data.observation.jobCreated, false);
+    assert.equal(JSON.stringify(reference), original); assert.ok(transport.length > 0);
+  } finally { await app.close(); }
 });
 
 test('citation target names only the connected site and rejects an unreviewed or changed site', async () => {

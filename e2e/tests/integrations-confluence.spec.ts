@@ -1,4 +1,5 @@
 import path from 'node:path';
+import AxeBuilder from '@axe-core/playwright';
 import { IS_DEPLOYED_QA } from '../env';
 import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
@@ -172,6 +173,48 @@ test.describe('Confluence connector', () => {
     await expect(citations.getByText('Page synthetic-retained-copy · cited version 1')).toBeVisible();
     await citations.getByRole('button', { name: 'Check upstream version for Synthetic retained copy', exact: true }).click();
     await expect(citations.getByText('Current at check: version 1.', { exact: false })).toBeVisible();
+    const citationBefore = await withDb(async client => (await client.query('SELECT row_to_json(r) AS row FROM "ConfluenceReference" r WHERE id=$1', [reference.id])).rows[0].row);
+    const observationPanel = citations.getByRole('region', { name: 'Cited page lifecycle observation' });
+    const controlPage = observationPanel.getByLabel('Separate accessible control page ID', { exact: true });
+    await reliableFill(controlPage, 'synthetic-observation-control');
+    const observationResponse = ownerPage.waitForResponse(response => response.url().includes(`/references/by-id/${reference.id}/observation?`) && response.request().method() === 'GET');
+    await observationPanel.getByRole('button', { name: 'Observe cited page', exact: true }).click();
+    const observed = await observationResponse;
+    expect(observed.status(), await observed.text()).toBe(200);
+    expect((await observed.json()).data.observation).toMatchObject({ referenceId: reference.id,
+      status: 'VISIBLE', scope: 'CITED_PAGE_ONLY', attachmentsObserved: false, jobCreated: false,
+      citationUpdated: false, permanentErasureVerified: false, actionAuthorized: false });
+    await expect(observationPanel.getByText('Page visible at check.', { exact: true })).toBeVisible();
+    for (const width of [320, 768, 1440]) {
+      await ownerPage.setViewportSize({ width, height: 1000 });
+      expect(await observationPanel.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    }
+    await ownerPage.emulateMedia({ reducedMotion: 'reduce' });
+    for (const theme of ['light', 'dark']) {
+      await ownerPage.evaluate(value => {
+        localStorage.setItem('theme', value); document.documentElement.classList.toggle('dark', value === 'dark');
+        window.dispatchEvent(new Event('themechange'));
+      }, theme);
+      await observationPanel.evaluate(async node => {
+        getComputedStyle(node).color;
+        await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {})));
+      });
+      const scan = await new AxeBuilder({ page: ownerPage }).include('[aria-label="Cited page lifecycle observation"]')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      expect(scan.violations).toEqual([]);
+      await observationPanel.screenshot({ path: test.info().outputPath(`citation-observation-${theme}.png`) });
+    }
+    await reliableFill(controlPage, 'missing-control');
+    await expect(observationPanel.getByText('Page visible at check.', { exact: true })).toHaveCount(0);
+    await observationPanel.getByRole('button', { name: 'Observe cited page', exact: true }).click();
+    await expect(observationPanel.getByText(/Unknown: review the connection/)).toBeVisible();
+    await citations.getByRole('button', { name: 'Refresh citations', exact: true }).click();
+    await expect(observationPanel.getByText(/Unknown: review the connection/)).toHaveCount(0);
+    await expect(controlPage).toHaveValue('');
+    await withDb(async client => {
+      expect((await client.query('SELECT row_to_json(r) AS row FROM "ConfluenceReference" r WHERE id=$1', [reference.id])).rows[0].row).toEqual(citationBefore);
+      expect((await client.query('SELECT id FROM "DocumentStorageDeletion" WHERE "organisationId"=$1', [owner.organisationId])).rowCount).toBe(0);
+    });
     await withDb(async client => {
       const saved = await client.query('SELECT "pageVersion" FROM "ConfluenceReference" WHERE id=$1', [reference.id]);
       expect(saved.rows).toEqual([{ pageVersion: 1 }]);
