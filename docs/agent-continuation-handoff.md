@@ -1,3 +1,17 @@
+## 20 October: source-instruction activation under verification
+
+The compatible foundation is released. Pending source adds the Owner instruction,
+withdrawal and linked follow-up routes/forms, bounded history and original receipt
+lookup after response loss. History pagination, post-lock event time, full
+API/native tests and the complete synthetic zero-file browser journey pass
+locally, including 320/1440-pixel layout and light/dark accessibility checks.
+Canonical CI and activation deployment verification remain pending.
+This workflow records assessments and observations, never provider deletion or
+legal disposal authority. See `confluence-source-instructions.md` and the ignored
+current handoff for exact source/release evidence. No supplier signup or further
+DPO review is a prerequisite; independent recovery and actual provider lifecycle
+requirements remain open.
+
 ## 19 October: source-instruction compatibility foundation in progress
 
 The next increment adds internal instruction/withdrawal services and typed audit

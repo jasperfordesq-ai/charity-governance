@@ -3023,22 +3023,24 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
   // The replay regression deliberately drops real auth responses to simulate
   // network loss. Its only interception points are the three exact auth
   // requests below. Other deliberate interceptors are pinned separately.
-  // File citation, standalone source and review fault injection each drop one
+  // File citation, standalone source, source instruction and review each drop one
   // real committed response at the exact fenced origin; none synthesize success.
   const citationFaultSpec = readFileSync(join(ROOT, "e2e", "tests", "integrations-confluence.spec.ts"), "utf8");
   assert.match(citationFaultSpec, /test\.skip\(IS_DEPLOYED_QA,/);
   assert.match(citationFaultSpec, /const citationPath = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/\$\{documentId\}`;/);
   assert.match(citationFaultSpec, /const citationReportUrl = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/by-id\/\$\{reference\.id\}\/reviews`;/);
   assert.match(citationFaultSpec, /const sourcePath = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/sources`;/);
+  assert.match(citationFaultSpec, /const instructionUrl = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/by-id\/\$\{source\.id\}\/instructions`;/);
+  assert.match(citationFaultSpec, /await page\.route\(instructionUrl, async route => \{\s*if \(route\.request\(\)\.method\(\) !== 'POST'\) return route\.fallback\(\);/);
   assert.match(citationFaultSpec, /await page\.route\(sourcePath, async route => \{\s*if \(route\.request\(\)\.method\(\) !== 'POST'\) return route\.fallback\(\);/);
-  assert.deepEqual([...citationFaultSpec.matchAll(/\.route\(([^,]+),/g)].map(match => match[1]), ['sourcePath', 'citationReportUrl', 'citationPath']);
+  assert.deepEqual([...citationFaultSpec.matchAll(/\.route\(([^,]+),/g)].map(match => match[1]), ['sourcePath', 'instructionUrl', 'citationReportUrl', 'citationPath']);
   assert.match(citationFaultSpec, /if \(route\.request\(\)\.method\(\) !== 'POST'\) return route\.fallback\(\)/);
   assert.match(citationFaultSpec, /expect\(route\.request\(\)\.method\(\)\)\.toBe\('POST'\)/);
-  assert.equal((citationFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 3);
-  assert.equal((citationFaultSpec.match(/route\.fetch\(/g) ?? []).length, 3);
-  assert.equal((citationFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 3);
+  assert.equal((citationFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 4);
+  assert.equal((citationFaultSpec.match(/route\.fetch\(/g) ?? []).length, 4);
+  assert.equal((citationFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 4);
   assert.equal((citationFaultSpec.match(/\.unroute\(citationPath\)/g) ?? []).length, 1);
-  assert.deepEqual([...citationFaultSpec.matchAll(/\.unroute\(([^)]+)\)/g)].map(match => match[1]), ['sourcePath', 'citationPath']);
+  assert.deepEqual([...citationFaultSpec.matchAll(/\.unroute\(([^)]+)\)/g)].map(match => match[1]), ['sourcePath', 'instructionUrl', 'citationPath']);
   assert.doesNotMatch(citationFaultSpec, /route\.(?:fulfill|continue)\(|routeWebSocket\(|unrouteAll\(/);
   // The erasure report loses only the real POST acknowledgement. Its GET
   // observation and original receipt reads must reach the application normally.

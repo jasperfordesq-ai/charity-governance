@@ -616,6 +616,41 @@ test('erasure observations refuse Members, Admins, connectors and low-level Owne
   }
 });
 
+test('source instruction routes refuse Members, Admins, connectors and low-level Owner sessions', async () => {
+  const routes = [
+    ['POST', '/confluence/references/by-id/ref-1/instructions'],
+    ['GET', '/confluence/source-instructions'], ['GET', '/confluence/source-instructions/event-1'],
+    ['POST', '/confluence/source-instructions/event-1/withdraw'],
+    ['POST', '/confluence/source-instructions/event-1/followups'],
+    ['GET', '/confluence/source-instructions/event-1/followups'], ['GET', '/confluence/source-followups/event-2'],
+  ] as const;
+  for (const actor of [ORG_A_MEMBER, ORG_A_ADMIN,
+    { ...ORG_A_ADMIN, role: 'OWNER' as const, clientKind: 'MCP_CONNECTOR' as const },
+    { ...ORG_A_ADMIN, role: 'OWNER' as const, accessLevel: 'READ' as const }]) {
+    const { app, store } = await buildApp({ actor });
+    try {
+      for (const [method, url] of routes) {
+        const response = await app.inject({ method, url, headers: { authorization: bearer(actor) }, ...(method === 'POST' ? { payload: {} } : {}) });
+        assert.equal(response.statusCode, 403, `${method} ${url}: ${response.body}`);
+      }
+      assert.equal(store.calls.integrationFindUnique.length, 0);
+    } finally { await app.close(); }
+  }
+});
+
+test('source instruction mutations validate every Owner body before provider access', async () => {
+  const actor = { ...ORG_A_ADMIN, role: 'OWNER' as const };
+  const { app, store } = await buildApp({ actor });
+  try {
+    for (const url of ['/confluence/references/by-id/ref-1/instructions',
+      '/confluence/source-instructions/event-1/withdraw', '/confluence/source-instructions/event-1/followups']) {
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: bearer(actor) }, payload: {} });
+      assert.equal(response.statusCode, 400, response.body); assert.equal(response.headers['cache-control'], 'no-store');
+    }
+    assert.equal(store.calls.integrationFindUnique.length, 0);
+  } finally { await app.close(); }
+});
+
 test('erasure observation validates Owner input before any target or provider access', async () => {
   const actor = { ...ORG_A_ADMIN, role: 'OWNER' as const };
   const { app } = await buildApp({ actor });

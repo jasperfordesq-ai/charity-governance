@@ -110,6 +110,74 @@ test.describe('Confluence connector', () => {
     const saved = await withDb(async client => (await client.query(`SELECT id,context FROM "SecurityAuditEvent"
       WHERE "organisationId"=$1 AND type='CONFLUENCE_CITATION_REVIEW_RECORDED'`, [owner.organisationId])).rows[0]);
     expect(saved.context.citation.documentId).toBeNull(); expect(saved.context.instruction).toBeNull();
+    await observation.getByRole('button', { name: 'Prepare source instruction', exact: true }).click();
+    const instructionForm = observation.getByRole('region', { name: 'Confluence source instruction', exact: true });
+    await reliableFill(instructionForm.getByLabel('Authority evidence reference', { exact: true }), 'SYNTHETIC-SOURCE-AUTHORITY');
+    await reliableFill(instructionForm.getByLabel('Retention and hold assessment reference', { exact: true }), 'SYNTHETIC-SOURCE-RETENTION');
+    await reliableFill(instructionForm.getByLabel('Administrator archive reference', { exact: true }), 'SYNTHETIC-SOURCE-ADMIN');
+    await instructionForm.getByLabel('Instruction follow-up target', { exact: true }).fill('2030-01-01T12:00');
+    await reliableFill(instructionForm.getByLabel('Decision or report evidence reference', { exact: true }), 'SYNTHETIC-SOURCE-INSTRUCTION');
+    await reliableFill(instructionForm.getByLabel('Decision or report reason', { exact: true }), 'Synthetic reviewed administrator instruction; no provider action is performed.');
+    await instructionForm.getByRole('checkbox', { name: /I reviewed the exact target/ }).check();
+    const instructionUrl = `${browserOriginFence.apiOrigin}/api/v1/integrations/confluence/references/by-id/${source.id}/instructions`;
+    let originalInstructionId: string | null = null, instructionWrites = 0;
+    page.on('request', request => { if (request.url() === instructionUrl && request.method() === 'POST') instructionWrites++; });
+    await page.route(instructionUrl, async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const committed = await route.fetch({ maxRedirects: 0 });
+      expect(committed.status(), await committed.text()).toBe(200);
+      originalInstructionId = (await committed.json()).data.state.instruction.id;
+      await route.abort('failed');
+    });
+    await instructionForm.getByRole('button', { name: 'Save source instruction', exact: true }).click();
+    await expect(instructionForm.getByText('Outcome needs reconciliation. Fields remain frozen.', { exact: true })).toBeVisible();
+    await expect(instructionForm.getByLabel('Authority evidence reference', { exact: true })).toBeDisabled();
+    expect(instructionWrites).toBe(1);
+    await page.unroute(instructionUrl);
+    await instructionForm.getByRole('button', { name: 'Look up original source instruction receipt', exact: true }).click();
+    await expect(instructionForm.getByText('Instruction recorded.', { exact: true })).toBeVisible();
+    expect(instructionWrites).toBe(1); expect(originalInstructionId).toBeTruthy();
+    const instructionHistory = page.getByRole('region', { name: 'Source instructions and follow-up', exact: true });
+    await instructionHistory.getByRole('button', { name: 'Refresh source instructions', exact: true }).click();
+    const instructionRow = instructionHistory.getByRole('listitem').filter({ hasText: `Instruction ${originalInstructionId} ·` });
+    await instructionRow.getByRole('button', { name: 'Review instruction', exact: true }).click();
+    await instructionRow.getByRole('button', { name: 'Prepare instruction withdrawal', exact: true }).click();
+    const withdrawalForm = instructionRow.getByRole('region', { name: 'Confluence instruction withdrawal', exact: true });
+    await reliableFill(withdrawalForm.getByLabel('Decision or report evidence reference', { exact: true }), 'SYNTHETIC-SOURCE-WITHDRAWAL');
+    await reliableFill(withdrawalForm.getByLabel('Decision or report reason', { exact: true }), 'Synthetic withdrawal preserves the original instruction without provider action.');
+    await withdrawalForm.getByRole('checkbox', { name: /I reviewed the exact target/ }).check();
+    await withdrawalForm.getByRole('button', { name: 'Save instruction withdrawal', exact: true }).click();
+    await expect(instructionRow.getByText(/Withdrawal .*SYNTHETIC-SOURCE-WITHDRAWAL/).first()).toBeVisible();
+    await instructionRow.getByRole('button', { name: 'Prepare instruction follow-up', exact: true }).click();
+    const followupForm = instructionRow.getByRole('region', { name: 'Confluence instruction follow-up', exact: true });
+    await reliableFill(followupForm.getByLabel('Follow-up control page ID', { exact: true }), 'synthetic-observation-control');
+    await reliableFill(followupForm.getByLabel('Decision or report evidence reference', { exact: true }), 'SYNTHETIC-SOURCE-FOLLOWUP');
+    await reliableFill(followupForm.getByLabel('Decision or report reason', { exact: true }), 'Synthetic no-action follow-up records withdrawal and a separate live page observation.');
+    await followupForm.getByRole('checkbox', { name: /I reviewed the exact target/ }).check();
+    const followingUp = page.waitForResponse(r => r.url().endsWith(`/source-instructions/${originalInstructionId}/followups`) && r.request().method() === 'POST');
+    await followupForm.getByRole('button', { name: 'Save instruction follow-up', exact: true }).click();
+    const followupResponse = await followingUp;
+    expect(followupResponse.status(), await followupResponse.text()).toBe(200);
+    const originalFollowup = (await followupResponse.json()).data.report;
+    await expect(followupForm.getByText(`Historical follow-up ${originalFollowup.id} · instruction ${originalInstructionId}.`, { exact: true })).toBeVisible();
+    expect(originalFollowup.instructionStateAtReport).toBe('WITHDRAWN');
+    expect(originalFollowup.observation.status).toBe('VISIBLE'); expect(originalFollowup.actionAuthorized).toBe(false);
+    expect(originalFollowup.instruction.citation.documentId).toBeNull();
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const section of [instructionForm, instructionHistory]) {
+        const bounds = await section.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth,
+          overflowing: Array.from(element.querySelectorAll('*')).filter(child => child.scrollWidth > child.clientWidth + 1)
+            .map(child => ({ tag: child.tagName, label: child.getAttribute('aria-label'), class: child.className,
+              client: child.clientWidth, scroll: child.scrollWidth })).slice(0, 10) }));
+        expect(bounds.scroll, JSON.stringify({ width, ...bounds })).toBeLessThanOrEqual(bounds.client + 1);
+      }
+    }
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(value => { localStorage.setItem('charitypilot-theme', value); document.documentElement.classList.toggle('dark', value === 'dark'); }, theme);
+      await instructionHistory.screenshot({ path: test.info().outputPath(`source-instructions-${theme}.png`), animations: 'disabled' });
+      expect((await new AxeBuilder({ page }).include('section[aria-label="Confluence source instruction"]').include('section[aria-label="Source instructions and follow-up"]').analyze()).violations).toEqual([]);
+    }
     await row.getByRole('button', { name: 'Remove local source reference', exact: true }).click();
     await row.getByRole('button', { name: 'Confirm local reference removal', exact: true }).click();
     await expect(row).toHaveCount(0);
@@ -128,6 +196,17 @@ test.describe('Confluence connector', () => {
     await reliableFill(lookup.getByLabel('Original request or audit event reference', { exact: true }), saved.id);
     await lookup.getByRole('button', { name: 'Read historical citation review report', exact: true }).click();
     await expect(lookup.getByText(`Historical report recorded: ${saved.id}`, { exact: true })).toBeVisible();
+    const sourceLookup = instructionHistory.getByRole('region', { name: 'Historical source receipt lookup', exact: true });
+    await sourceLookup.getByLabel('Source receipt type', { exact: true }).selectOption('followup');
+    await reliableFill(sourceLookup.getByLabel('Source instruction or follow-up reference', { exact: true }), originalFollowup.id);
+    await sourceLookup.getByRole('button', { name: 'Read source receipt', exact: true }).click();
+    await expect(sourceLookup.getByText(`Historical follow-up ${originalFollowup.id} · instruction ${originalInstructionId}.`, { exact: true })).toBeVisible();
+    const instructionEvents = await withDb(async client => (await client.query(`SELECT type,context FROM "SecurityAuditEvent"
+      WHERE "organisationId"=$1 AND type IN ('CONFLUENCE_SOURCE_INSTRUCTION_RECORDED','CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN','CONFLUENCE_SOURCE_FOLLOWUP_RECORDED')`, [owner.organisationId])).rows);
+    expect(instructionEvents).toHaveLength(3);
+    const historicalFollowup = instructionEvents.find(event => event.type === 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED')!.context;
+    expect(historicalFollowup.instructionId).toBe(originalInstructionId); expect(historicalFollowup.withdrawal.instructionId).toBe(originalInstructionId);
+    expect(historicalFollowup.jobCreated).toBe(false); expect(historicalFollowup.providerMutationIssued).toBe(false);
     await context.close();
   });
   test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ newFencedContext, browserOriginFence }) => {

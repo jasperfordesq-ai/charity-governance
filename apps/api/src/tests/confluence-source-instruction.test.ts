@@ -1,60 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { PrismaClient } from '@prisma/client';
-import { confluenceCitationTargetDigest } from '../services/confluence-citation-observation.js';
-import { issueConfluenceSourceInstruction, readConfluenceSourceInstruction, withdrawConfluenceSourceInstruction } from '../services/confluence-source-instruction.js';
+import { listConfluenceSourceInstructions, readConfluenceSourceInstruction } from '../services/confluence-source-instruction.js';
+import { fixture } from './fixtures/confluence-source-instruction-fixture.js';
 
-const requestId = '00000000-0000-4000-8000-000000000321';
-function fixture(documentId: string | null = null) {
-  let citation: Record<string, unknown> | null = { id: 'ref-1', documentId, cloudId: 'site-1', pageId: 'page-1',
-    pageVersion: 3, citedAt: new Date('2026-10-01'), updatedAt: new Date('2026-10-01') };
-  let active = true, enforced = false, unknownCommit = false, beforeCommit: (() => void) | undefined;
-  type Row = { id: string; organisationId: string; type: string; actorUserId: string; occurredAt: Date; context: Record<string, unknown> };
-  const rows: Row[] = [];
-  const client = {
-    user: { findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      assert.deepEqual(where, { id: 'owner-1', organisationId: 'org-1', role: 'OWNER', lifecycleStatus: 'ACTIVE',
-        organisation: { is: { lifecycleStatus: 'ACTIVE' } } });
-      return active ? { id: 'owner-1', name: 'Synthetic Owner' } : null;
-    } },
-    documentRecoveryEnforcement: { findUnique: async () => enforced ? { id: 'freeze' } : null },
-    confluenceReference: { findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-      assert.equal(where.id, 'ref-1'); assert.equal(where.organisationId, 'org-1'); return citation;
-    } },
-    securityAuditEvent: {
-      findFirst: async ({ where }: { where: { organisationId: string; type: string; id?: string; context?: { path: string[]; equals: string } } }) => {
-        assert.equal(where.organisationId, 'org-1');
-        return rows.find(r => r.type === where.type && (where.id ? r.id === where.id :
-          r.context[where.context!.path[0]!] === where.context!.equals)) ?? null;
-      },
-      create: async ({ data }: { data: Omit<Row, 'id' | 'occurredAt'> }) => {
-        const row = { ...data, id: `event-${rows.length + 1}`, occurredAt: new Date(), context: structuredClone(data.context) };
-        rows.push(row); return row;
-      },
-    },
-    $queryRaw: async () => [],
-  };
-  let queue = Promise.resolve();
-  const prisma = { ...client, $transaction: async (callback: (tx: typeof client) => Promise<unknown>) => {
-    const previous = queue; let release!: () => void; queue = new Promise<void>(r => { release = r; }); await previous;
-    try { beforeCommit?.(); const result = await callback(client);
-      if (unknownCommit) { unknownCommit = false; throw new Error('Unknown commit'); } return result;
-    } finally { release(); }
-  } } as unknown as PrismaClient;
-  const body = { clientRequestId: requestId, expectedTargetDigest: confluenceCitationTargetDigest(citation), action: 'TRASH',
-    authorityEvidenceRef: 'SYNTHETIC-AUTHORITY', retentionEvidenceRef: 'SYNTHETIC-RETENTION', administratorRef: 'SYNTHETIC-ADMIN',
-    followUpAt: '2998-01-01T00:00:00Z', evidenceRef: 'SYNTHETIC-DECISION', reason: 'Synthetic reviewed instruction for administrator follow-up', assessmentConfirmed: true };
-  const issue = (change: Record<string, unknown> = {}) => issueConfluenceSourceInstruction(prisma,
-    { organisationId: 'org-1', actorUserId: 'owner-1', referenceId: 'ref-1', body: { ...body, ...change } });
-  const withdraw = (id: string, digest: string, change: Record<string, unknown> = {}) => withdrawConfluenceSourceInstruction(prisma,
-    { organisationId: 'org-1', actorUserId: 'owner-1', instructionId: id,
-      body: { clientRequestId: '00000000-0000-4000-8000-000000000322', expectedInstructionDigest: digest,
-        evidenceRef: 'SYNTHETIC-WITHDRAWAL', reason: 'Synthetic authority withdrawn before administrator action', ...change } });
-  return { prisma, rows, issue, withdraw, body, citation: () => citation, remove: () => { citation = null; },
-    revoke: () => { active = false; }, enforce: () => { enforced = true; },
-    unknown: () => { unknownCommit = true; }, beforeCommit: (fn: () => void) => { beforeCommit = fn; } };
-}
-
+test('instruction history pages tied timestamps without duplicates and rejects foreign or mismatched cursors', async () => {
+  const f = fixture(); f.statementClock(new Date('2026-10-01T09:00:00Z'));
+  for (let i = 1; i <= 28; i++) await f.issue({ clientRequestId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}` });
+  const original = f.rows[0]!;
+  f.rows.push({ ...original, id: 'foreign-event', organisationId: 'org-other' });
+  f.rows.push({ ...original, id: 'other-reference', context: { ...original.context, referenceId: 'other-ref' } });
+  f.remove();
+  const first = await listConfluenceSourceInstructions(f.prisma, 'org-1', 'owner-1', { referenceId: 'ref-1' });
+  assert.equal(first.items.length, 25); assert.ok(first.nextCursor);
+  const last = await listConfluenceSourceInstructions(f.prisma, 'org-1', 'owner-1', { referenceId: 'ref-1', before: first.nextCursor });
+  assert.equal(last.items.length, 3); assert.equal(last.nextCursor, null);
+  assert.equal(new Set([...first.items, ...last.items].map(item => item.instruction.id)).size, 28);
+  for (const before of ['foreign-event', 'other-reference', 'missing']) await assert.rejects(
+    listConfluenceSourceInstructions(f.prisma, 'org-1', 'owner-1', { referenceId: 'ref-1', before }),
+    { code: 'CONFLUENCE_SOURCE_INSTRUCTION_CONFLICT' });
+  f.revoke(); await assert.rejects(listConfluenceSourceInstructions(f.prisma, 'org-1', 'owner-1'), { statusCode: 403 });
+});
 test('instruction binds both citation shapes and records an assessment, without provider execution authority', async () => {
   for (const documentId of [null, 'doc-1']) {
     const f = fixture(documentId), state = await f.issue();
@@ -69,6 +34,7 @@ test('lost acknowledgement and concurrent original retries preserve one instruct
   const f = fixture(); f.unknown(); await assert.rejects(f.issue(), /Unknown commit/);
   const saved = await f.issue(); assert.equal(f.rows.length, 1);
   assert.deepEqual(await f.issue(), saved);
+  assert.deepEqual(await readConfluenceSourceInstruction(f.prisma, 'org-1', 'owner-1', f.body.clientRequestId), saved);
   const g = fixture(), states = await Promise.all([g.issue(), g.issue()]);
   assert.deepEqual(states[0], states[1]); assert.equal(g.rows.length, 1);
   await assert.rejects(f.issue({ action: 'PURGE' }), { code: 'CONFLUENCE_SOURCE_INSTRUCTION_CONFLICT' });

@@ -50,6 +50,7 @@ import { ExternalLink } from 'lucide-react';
 import { RetiredConfluenceCopies } from './retired-confluence-copies';
 import { OtherConfluenceCopies } from './other-confluence-copies';
 import { CitedConfluenceReferences } from './cited-confluence-references';
+import { ConfluenceSourceInstructions } from './source-instruction-history';
 
 const EMPTY_STATUS: ConfluenceStatusResponse = {
   provider: 'CONFLUENCE',
@@ -332,6 +333,7 @@ export default function IntegrationsPage() {
       <RetiredConfluenceCopies />
       <OtherConfluenceCopies />
       <CitedConfluenceReferences />
+      <ConfluenceSourceInstructions />
 
       {connectView ? (
         <AppSection title="Before you connect">

@@ -26,6 +26,8 @@ const issueSchema = z.object({ format: z.literal(1), kind: z.literal('CONFLUENCE
 const withdrawalSchema = z.object({ format: z.literal(1), kind: z.literal('CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWAL_V1'),
   clientRequestId: z.string().uuid(), inputDigest: digest, instructionId: id, instructionDigest: digest,
   input: confluenceSourceInstructionWithdrawalInput, ...nonExecution }).strict();
+export const sourceInstructionReceiptSchema = issueSchema.extend({ id, actorUserId: id, recordedAt: z.string().datetime() }).strict();
+export const sourceInstructionWithdrawalReceiptSchema = withdrawalSchema.extend({ id, actorUserId: id, recordedAt: z.string().datetime() }).strict();
 const issuedType = 'CONFLUENCE_SOURCE_INSTRUCTION_RECORDED' as const;
 const withdrawnType = 'CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN' as const;
 const select = { id: true, actorUserId: true, occurredAt: true, context: true } as const;
@@ -39,7 +41,8 @@ async function owner(client: Pick<Reader, 'user'>, organisationId: string, actor
   if (!actor) throw new AppError(403, 'CONFLUENCE_SOURCE_INSTRUCTION_OWNER_REQUIRED', 'The active charity Owner must record or review this instruction.');
   return actor;
 }
-async function lockedOwner(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string) {
+export { owner as requireConfluenceInstructionOwner };
+export async function lockedOwner(tx: Prisma.TransactionClient, organisationId: string, actorUserId: string) {
   await lockOrganisationForUpdate(tx, organisationId);
   await tx.$queryRaw`SELECT id FROM "User" WHERE id=${actorUserId} AND "organisationId"=${organisationId} FOR UPDATE`;
   const actor = await owner(tx, organisationId, actorUserId);
@@ -47,6 +50,13 @@ async function lockedOwner(tx: Prisma.TransactionClient, organisationId: string,
     throw new AppError(409, 'CONFLUENCE_SOURCE_INSTRUCTION_RECOVERY_REQUIRED', 'New instruction decisions require independently recorded recovery evidence.');
   }
   return actor;
+}
+/** Read after acquiring the decision locks: PostgreSQL now() is transaction
+ * start, which can precede a decision committed while this transaction waited. */
+export async function sourceInstructionEventTime(tx: Prisma.TransactionClient) {
+  const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT timezone('UTC', statement_timestamp())::timestamp(3) AS now`;
+  if (!(clock?.now instanceof Date) || !Number.isFinite(clock.now.getTime())) throw conflict();
+  return clock.now;
 }
 function issueReceipt(row: Row) {
   const context = issueSchema.parse(row.context);
@@ -94,17 +104,34 @@ export async function issueConfluenceSourceInstruction(prisma: PrismaClient,
     const context = issueSchema.parse({ format: 1, kind: 'CONFLUENCE_SOURCE_INSTRUCTION_V1', clientRequestId: body.clientRequestId,
       inputDigest, referenceId, input: body, citation: JSON.parse(JSON.stringify(citation)), authorityAssessment: 'OWNER_RECORDED',
       providerMutationIssued: false, jobCreated: false, actionAuthorized: false });
-    const row = await tx.securityAuditEvent.create({ data: { organisationId: input.organisationId, type: issuedType,
+    const occurredAt = await sourceInstructionEventTime(tx);
+    if (Date.parse(body.followUpAt) <= occurredAt.getTime()) throw conflict();
+    const row = await tx.securityAuditEvent.create({ data: { organisationId: input.organisationId, type: issuedType, occurredAt,
       actorKind: 'USER', actorUserId: input.actorUserId, actorLabel: actorLabel(actor.name),
       subjectLabel: 'Confluence source administrator instruction', reason: body.reason, context: context as Prisma.InputJsonValue }, select });
     return state(tx, input.organisationId, row);
   });
 }
-export async function readConfluenceSourceInstruction(prisma: PrismaClient, organisationId: string, actorUserId: string, instructionId: string) {
+export async function readConfluenceSourceInstruction(prisma: Reader, organisationId: string, actorUserId: string, instructionId: string) {
   await owner(prisma, organisationId, actorUserId); id.parse(instructionId);
-  const row = await prisma.securityAuditEvent.findFirst({ where: { id: instructionId, organisationId, type: issuedType }, select });
+  const row = z.string().uuid().safeParse(instructionId).success ? await findRequest(prisma, organisationId, issuedType, instructionId)
+    : await prisma.securityAuditEvent.findFirst({ where: { id: instructionId, organisationId, type: issuedType }, select });
   if (!row) throw new AppError(404, 'CONFLUENCE_SOURCE_INSTRUCTION_NOT_FOUND', 'No original source instruction was found.');
   return state(prisma, organisationId, row);
+}
+export async function listConfluenceSourceInstructions(prisma: Reader, organisationId: string, actorUserId: string,
+  query: { before?: string; referenceId?: string } = {}) {
+  await owner(prisma, organisationId, actorUserId);
+  const filter = { organisationId, type: issuedType, ...(query.referenceId
+    ? { context: { path: ['referenceId'], equals: id.parse(query.referenceId) } } : {}) };
+  const cursor = query.before ? await prisma.securityAuditEvent.findFirst({ where: { ...filter, id: id.parse(query.before) },
+    select: { id: true, occurredAt: true } }) : null;
+  if (query.before && !cursor) throw conflict();
+  const rows = await prisma.securityAuditEvent.findMany({ where: { ...filter, ...(cursor ? { OR: [
+    { occurredAt: { lt: cursor.occurredAt } }, { occurredAt: cursor.occurredAt, id: { lt: cursor.id } },
+  ] } : {}) }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 26, select });
+  return { items: await Promise.all(rows.slice(0, 25).map(row => state(prisma, organisationId, row))),
+    nextCursor: rows.length > 25 ? rows[24]!.id : null };
 }
 export async function withdrawConfluenceSourceInstruction(prisma: PrismaClient,
   input: { organisationId: string; actorUserId: string; instructionId: string; body: unknown }) {
@@ -128,6 +155,7 @@ export async function withdrawConfluenceSourceInstruction(prisma: PrismaClient,
       inputDigest, instructionId, instructionDigest: current.instruction.inputDigest, input: body,
       providerMutationIssued: false, jobCreated: false, actionAuthorized: false });
     await tx.securityAuditEvent.create({ data: { organisationId: input.organisationId, type: withdrawnType,
+      occurredAt: await sourceInstructionEventTime(tx),
       actorKind: 'USER', actorUserId: input.actorUserId, actorLabel: actorLabel(actor.name),
       subjectLabel: 'Confluence source instruction withdrawal', reason: body.reason, context: context as Prisma.InputJsonValue }, select });
     return state(tx, input.organisationId, row);

@@ -29,6 +29,9 @@ import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { observeConfluenceErasure } from '../../services/confluence-erasure-observation.js';
 import { observeConfluenceCitation } from '../../services/confluence-citation-observation.js';
 import { readConfluenceCitationReview, recordConfluenceCitationReview } from '../../services/confluence-citation-review.js';
+import { issueConfluenceSourceInstruction, readConfluenceSourceInstruction, withdrawConfluenceSourceInstruction,
+  listConfluenceSourceInstructions } from '../../services/confluence-source-instruction.js';
+import { recordConfluenceSourceFollowup, readConfluenceSourceFollowup, listConfluenceSourceFollowups } from '../../services/confluence-source-followup.js';
 import { readConfluenceErasureReview, recordConfluenceErasureReview } from '../../services/confluence-erasure-review.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
@@ -1391,6 +1394,70 @@ export async function integrationRoutes(
       }
     },
   );
+
+  const instructionGuards = [requireWebSession, requireSessionLevel('ADMIN'), requireOwner];
+  const instructionId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/);
+  const instructionPage = z.object({ before: instructionId.optional() }).strict();
+  const instructionError = (reply: FastifyReply, error: unknown) => error instanceof ZodError
+    ? reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Review the exact target, instruction and controlled evidence fields.' })
+    : handleError(reply, error);
+
+  app.post<{ Params: { referenceId: string } }>('/confluence/references/by-id/:referenceId/instructions',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try { return sendSuccess(reply, { state: await issueConfluenceSourceInstruction(app.prisma, {
+        organisationId: request.user.organisationId, actorUserId: request.user.userId,
+        referenceId: instructionId.parse(request.params.referenceId), body: request.body,
+      }) }); } catch (error) { return instructionError(reply, error); }
+    });
+  app.get('/confluence/source-instructions', { preHandler: instructionGuards }, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const query = instructionPage.extend({ referenceId: instructionId.optional() }).strict().parse(request.query);
+      return sendSuccess(reply, await listConfluenceSourceInstructions(app.prisma, request.user.organisationId, request.user.userId, query));
+    } catch (error) { return instructionError(reply, error); }
+  });
+  app.get<{ Params: { instructionId: string } }>('/confluence/source-instructions/:instructionId',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try { return sendSuccess(reply, { state: await readConfluenceSourceInstruction(app.prisma,
+        request.user.organisationId, request.user.userId, instructionId.parse(request.params.instructionId)) });
+      } catch (error) { return instructionError(reply, error); }
+    });
+  app.post<{ Params: { instructionId: string } }>('/confluence/source-instructions/:instructionId/withdraw',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try { return sendSuccess(reply, { state: await withdrawConfluenceSourceInstruction(app.prisma, {
+        organisationId: request.user.organisationId, actorUserId: request.user.userId,
+        instructionId: instructionId.parse(request.params.instructionId), body: request.body,
+      }) }); } catch (error) { return instructionError(reply, error); }
+    });
+  app.post<{ Params: { instructionId: string } }>('/confluence/source-instructions/:instructionId/followups',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const organisationId = request.user.organisationId;
+        return sendSuccess(reply, { report: await recordConfluenceSourceFollowup(app.prisma, {
+          organisationId, actorUserId: request.user.userId, instructionId: instructionId.parse(request.params.instructionId), body: request.body,
+        }, { getConnection: () => erasureObservationConnection(organisationId) }) });
+      } catch (error) { return instructionError(reply, error); }
+    });
+  app.get<{ Params: { instructionId: string } }>('/confluence/source-instructions/:instructionId/followups',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const { before } = instructionPage.parse(request.query);
+        return sendSuccess(reply, await listConfluenceSourceFollowups(app.prisma, request.user.organisationId,
+          request.user.userId, instructionId.parse(request.params.instructionId), before));
+      } catch (error) { return instructionError(reply, error); }
+    });
+  app.get<{ Params: { requestId: string } }>('/confluence/source-followups/:requestId',
+    { preHandler: instructionGuards }, async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try { return sendSuccess(reply, { report: await readConfluenceSourceFollowup(app.prisma,
+        request.user.organisationId, request.user.userId, instructionId.parse(request.params.requestId)) });
+      } catch (error) { return instructionError(reply, error); }
+    });
 
   app.post<{ Params: { referenceId: string } }>(
     '/confluence/references/by-id/:referenceId/reviews',

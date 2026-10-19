@@ -27,6 +27,18 @@ export interface ExcludedMutation {
 
 export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
   {
+    route: 'POST /api/v1/integrations/confluence/references/by-id/:referenceId/instructions',
+    reason: 'Owner web review records an exact source instruction and controlled authority/retention assessment; a connector cannot make that human decision.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/source-instructions/:instructionId/withdraw',
+    reason: 'Withdrawal is an attributable Owner browser decision, retained separately from the original instruction.',
+  },
+  {
+    route: 'POST /api/v1/integrations/confluence/source-instructions/:instructionId/followups',
+    reason: 'An Owner web review separates a human action report from provider observations and does not grant erasure authority.',
+  },
+  {
     route: 'POST /api/v1/integrations/confluence/references/by-id/:referenceId/reviews',
     reason: 'Owner web-only evidence review records a historical cited-page report without a disposal instruction.',
   },

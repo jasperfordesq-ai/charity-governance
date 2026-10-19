@@ -1,3 +1,15 @@
+## 20 October: source-instruction activation verification pending
+
+The compatible audit readers/guards are released. Current source implements
+Owner-only instruction, withdrawal and linked follow-up forms/routes and bounded
+history. Local history tests cover tied timestamps and foreign/unrelated cursor
+refusal. Full API/native tests and the complete synthetic browser journey pass
+locally, including original receipt recovery, withdrawal, linked follow-up,
+unciting, responsive bounds and light/dark accessibility. Canonical CI and
+activation release gates remain pending.
+No provider deletion or independent host-loss recovery is established by this
+increment. Preserve the full issue ledger and exact proof limits.
+
 ## 19 October: original source-instruction foundation under verification
 
 Internal Owner decision/withdrawal records reuse append-only audit history,

@@ -27,6 +27,7 @@
     "src/lib/dashboard-session-gate.ts",
     "src/lib/dashboard-session-gate.test.ts",
     "src/lib/integration-status.ts",
+    "src/lib/confluence-source-instructions.test.ts",
     "src/lib/document-mirrors.ts",
     "src/lib/document-mirrors.test.ts",
     "src/components/governance/confluence-mirror-chip.tsx",

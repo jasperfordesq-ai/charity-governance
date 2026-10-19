@@ -20,6 +20,14 @@ export interface ExcludedRoute {
 }
 
 export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
+  { path: '/api/v1/integrations/confluence/source-instructions',
+    reason: 'Owner web-only controlled instruction and withdrawal history is reviewed in the dashboard.' },
+  { path: '/api/v1/integrations/confluence/source-instructions/:instructionId',
+    reason: 'Original source decision evidence belongs to the Owner browser review, not connector access.' },
+  { path: '/api/v1/integrations/confluence/source-instructions/:instructionId/followups',
+    reason: 'Instruction-linked operator reports and observations require Owner dashboard review.' },
+  { path: '/api/v1/integrations/confluence/source-followups/:requestId',
+    reason: 'Historical source follow-up receipts contain controlled evidence and remain Owner web-only.' },
   {
     path: '/api/v1/documents/deleted',
     reason: 'Deleted-item review is restricted to human Owner/Admin browser sessions; trashed records must not reappear through connector reads.',

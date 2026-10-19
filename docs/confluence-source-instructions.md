@@ -2,9 +2,10 @@
 
 ## Current increment
 
-This is an internal compatibility foundation, not an available dashboard
-workflow. No HTTP creation/withdrawal route or instruction form is enabled.
-Follow-up reports and the complete synthetic browser journey remain to be built.
+The compatibility foundation was released before enabling instruction writes.
+The current source increment adds Owner web-session routes, reviewed forms,
+withdrawal, linked follow-up reports and bounded history. Verification and release
+of this activation are pending; source availability is not deployment evidence.
 
 The instruction service records a current charity Owner's assessment for one
 exact citation, with controlled authority, retention, administrator and evidence
@@ -22,7 +23,7 @@ are read, including after JSON object-key reordering in PostgreSQL.
 ## Persistence and recovery
 
 The existing append-only SecurityAuditEvent history carries typed instruction,
-withdrawal and future follow-up events. Enum additions commit separately before
+withdrawal and follow-up events. Enum additions commit separately before
 their first SQL use. New indexes enforce request identity and one withdrawal per
 instruction. The insert guard checks active same-charity ownership, the live
 citation target, original withdrawal identity and the recovery-enforcement
@@ -30,21 +31,26 @@ freeze. Existing user-subject constraints remain in force.
 
 No durable table or alternate decision store is introduced. Existing recovery
 capture includes the audit table; native tests also restore instruction and
-withdrawal events and recheck immutability/recovery refusal. This is component
+withdrawal/follow-up events and recheck immutability/recovery refusal. This is component
 restore evidence, not independently current history or physical-host recovery.
 
 ## Delivery order and remaining work
 
-Deploy and verify the compatible Prisma enum, audit-feed and UI readers before
-exposing any creation route that can write these values. The currently serving
-older Prisma client cannot be assumed to decode a new audit enum value.
+Compatible Prisma enum, audit-feed and UI readers must be deployed and verified
+before exposing creation routes. The compatibility release satisfies this order;
+retain it as the previous reader during activation and rollback.
 Keep historical citation V1 reports with instruction:null unchanged.
 
-Then add the separately versioned instruction-linked follow-up report, Owner
-web-session routes, bounded history/discovery and reviewed UI. Test lost-response
-retry, withdrawal, role/site/target changes, observation uncertainty and the
-synthetic zero-file journey. An operator's action report must remain distinct
-from a fresh GET-only provider observation. A page not observed does not prove
+The separately versioned instruction-linked follow-up records the original
+instruction and the withdrawal known at commit. Owner-only forms retain the
+request identity after uncertain responses and offer explicit receipt lookup,
+without automatically resubmitting. Paged history remains readable after unciting;
+recording a fresh follow-up still requires the current citation. Event timestamps
+come from a database statement after decision locks, rather than transaction-start
+time. Verify lost-response lookup, withdrawal, role/site/target changes,
+observation uncertainty and the complete synthetic zero-file journey before
+activation. An operator's action report remains distinct from a fresh GET-only
+provider observation. A page not observed does not prove
 permanent erasure of attachments, versions or backups.
 
 Actual provider deletion, current sandbox disconnect and independent current

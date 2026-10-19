@@ -80,18 +80,35 @@ test('source instructions preserve target identity, original withdrawals, recove
     sql(insert('withdrawn', 'CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN', withdrawn));
     sql(insert('second-withdrawal', 'CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN', { ...withdrawn,
       clientRequestId: request.replace('111', '333'), input: { ...withdrawn.input, clientRequestId: request.replace('111', '333') } }), /withdrawal_key/);
+    const followupRequest = request.replace('111', '444');
+    const followup = { format: 1, kind: 'CONFLUENCE_SOURCE_FOLLOWUP_V1', clientRequestId: followupRequest,
+      inputDigest: 'd'.repeat(64), instructionId: 'issued', instructionDigest: hash,
+      input: { clientRequestId: followupRequest, expectedInstructionDigest: hash, reason: 'Synthetic linked follow-up' },
+      observation: { targetDigest: hash }, providerMutationIssued: false, jobCreated: false, actionAuthorized: false };
+    // This SQL test covers database envelope/identity fences. Full receipt shape,
+    // digests, withdrawal snapshots and provider observations are service tests.
+    sql(insert('wrong-followup-original', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', { ...followup, instructionDigest: 'e'.repeat(64) }), /original identity/);
+    sql(insert('foreign-followup', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', followup, 'instruction-b', 'owner-b'), /original identity/);
+    sql(insert('wrong-followup-target', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', { ...followup, observation: { targetDigest: 'e'.repeat(64) } }), /follow.up target/);
+    sql(insert('forged-followup-authority', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', { ...followup, actionAuthorized: true }), /envelope/);
+    sql(insert('followup', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', followup));
+    sql(insert('duplicate-followup', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', followup), /request_key/);
+    sql(`UPDATE "SecurityAuditEvent" SET reason='Rewritten follow-up' WHERE id='followup';`, /append.only/i);
     sql(`INSERT INTO "SecurityAuditEvent"(id,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason)
       VALUES ('bad-user','instruction-a','MEMBER_ROLE_CHANGED','USER','owner-a','Synthetic Owner','Missing subject','Synthetic subject refusal');`, /subject_check/);
     sql(`INSERT INTO "DocumentRecoveryEnforcement"(id,"organisationId","installationId","writerId","writerEpoch")
       VALUES ('instruction-freeze','instruction-a','synthetic-installation','synthetic-writer',1);`);
     sql(insert('frozen', 'CONFLUENCE_SOURCE_INSTRUCTION_RECORDED', issued), /independent recovery authority/);
     sql(insert('frozen-withdrawal', 'CONFLUENCE_SOURCE_INSTRUCTION_WITHDRAWN', withdrawn), /independent recovery authority/);
+    sql(insert('frozen-followup', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', followup), /independent recovery authority/);
     const dump = docker(['exec', container, 'pg_dump', '-U', 'postgres', '--no-owner', '--no-privileges', 'postgres']);
     assert.equal(dump.status, 0, dump.stderr);
     sql('CREATE DATABASE restored_instructions;'); sql(dump.stdout, undefined, 'restored_instructions');
-    assert.equal(sql(`SELECT count(*) FROM "SecurityAuditEvent" WHERE id IN ('issued','withdrawn');`, undefined, 'restored_instructions'), '2');
+    assert.equal(sql(`SELECT count(*) FROM "SecurityAuditEvent" WHERE id IN ('issued','withdrawn','followup');`, undefined, 'restored_instructions'), '3');
     sql(insert('restored-frozen', 'CONFLUENCE_SOURCE_INSTRUCTION_RECORDED', issued), /independent recovery authority/, 'restored_instructions');
+    sql(insert('restored-frozen-followup', 'CONFLUENCE_SOURCE_FOLLOWUP_RECORDED', followup), /independent recovery authority/, 'restored_instructions');
     sql(`DELETE FROM "SecurityAuditEvent" WHERE id='withdrawn';`, /append.only/i, 'restored_instructions');
+    sql(`DELETE FROM "SecurityAuditEvent" WHERE id='followup';`, /append.only/i, 'restored_instructions');
     for (const table of ['Document','DocumentPublication','DocumentStorageDeletion','DocumentUploadIntent']) {
       assert.equal(sql(`SELECT count(*) FROM "${table}";`), '0');
     }
