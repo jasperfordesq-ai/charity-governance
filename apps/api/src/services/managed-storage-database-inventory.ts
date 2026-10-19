@@ -11,6 +11,7 @@ const configuration=z.object({database:name,databaseOid:oid,observer:principal,c
   ||new Set(c.relations.map(r=>`${r.schema}.${r.name}`)).size!==c.relations.length)
   ctx.addIssue({code:'custom',message:'Duplicate relation boundary'});
 });
+export {configuration as managedStorageDatabaseInventoryConfigurationSchema};
 const role=z.object({oid,name:z.string().min(1).max(63),login:z.boolean(),superuser:z.boolean(),
  createRole:z.boolean(),createDb:z.boolean(),replication:z.boolean(),bypassRls:z.boolean(),inherit:z.boolean()}).strict();
 const table=z.object({oid,schema:z.string(),name:z.string(),ownerOid:oid,kind:z.string(),

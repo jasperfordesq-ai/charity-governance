@@ -1,3 +1,20 @@
+## 19 October: bounded catalogue ACL diagnostic for provider trials
+
+The operator command jobs:preflight-managed-capture-window now exposes the existing
+PostgreSQL 16 catalogue-ACL observation through strict bounded stdin, reviewed
+registry digest and verified TLS. It uses an explicit database/observer identity,
+returns only diagnostic facts, and keeps lock acquisition, active capture window,
+provider compatibility, whole-backend quiescence and action/execution authority
+false. Malformed/unsafe input refuses before connection; provider/cleanup errors
+produce a fixed refusal. This is a prerequisite check, not a permission grant.
+
+Focused tests cover the wrapper and existing service. The native disposable
+PostgreSQL/TLS fixture also invokes the actual command for privileged and limited
+principals before checking the original writers remain usable. Exact results and
+provider-trial proposal are private. No supplier commitment, account, spend,
+provider mutation, deployment, new grant or hosted recovery proof is implied.
+See docs/managed-capture-preflight.md; actual independent-provider/host-loss and
+all-writer custody gates remain separate.
 ## 19 October: OAuth custody inventory and connector contract correction
 
 Read-only inspection of the existing synthetic OAuth app now identifies its

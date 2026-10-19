@@ -1,5 +1,10 @@
 # Managed Storage database authority inventory
 
+The bounded [capture preflight command](managed-capture-preflight.md) exposes
+catalogue ACL compatibility observations without authorising capture or acquiring
+locks. The broader inventory and actual lock-window contracts below remain
+separate; a successful diagnostic does not replace them.
+
 17 October 2026. Internal read-only discovery component, not an activated provider
 adapter, operator command, permission fence or common database/file snapshot.
 

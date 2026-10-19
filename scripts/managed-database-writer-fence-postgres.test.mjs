@@ -9,6 +9,7 @@ import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {PrismaClient} from '@prisma/client';
 import {ManagedDatabaseWriterFence} from '../apps/api/dist/services/managed-database-writer-fence.js';
+import {ManagedStorageDatabaseInventory} from '../apps/api/dist/services/managed-storage-database-inventory.js';
 import {proveManagedBackendMaintenance,proveManagedPasswordInvalidation} from './managed-backend-maintenance-postgres-proof.mjs';
 import {validateLocalDockerEndpoint} from './personal-server-docker-boundary.mjs';
 import {proveManagedEpochLifecycle} from './managed-epoch-native.fixture.mjs';
@@ -27,7 +28,9 @@ if(process.env.CHARITYPILOT_TEST_PARENT_CAPTURE_FORMAT!==undefined&&
 const image='postgres@sha256:5660c2cbfea50c7a9127d17dc4e48543eedd3d7a41a595a2dfa572471e37e64c';
 function run(command,args,input){const r=spawnSync(command,args,{input,encoding:'utf8',timeout:60000,maxBuffer:1024*1024});
  assert.equal(r.status,0,(r.stderr||r.error?.message||'synthetic command failed').slice(-1200));return r.stdout.trim();}
-test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:containedSource?480000:240000},async()=>{
+// Windows child-process and TLS/container startup overhead spans the expanded
+// native scenarios. Keep every assertion; bound that platform like containment.
+test('managed database fence closes real stale credentials and sessions while refusing aliases, prepared and cross-database writers',{timeout:containedSource||process.platform==='win32'?480000:240000},async()=>{
  if(containedSource){assert.equal(process.platform,'linux');assert.notEqual(process.getuid(),0);}
  console.log('SOURCE_EXECUTION_MODE='+(containedSource?'KERNEL_CONTAINED':'INTERNAL_IPC_PROOF'));
  const endpoint=JSON.parse(run('docker',['context','inspect','--format','{{json .Endpoints.docker}}']));
@@ -105,6 +108,22 @@ test('managed database fence closes real stale credentials and sessions while re
   assert.equal(commandRefusal.code,2);assert.equal(commandRefusal.report.status,'MISSING_CATALOGUE_PRIVILEGES');
   assert.ok(commandRefusal.report.missingPredicates.includes('readPasswordState'));
   assert.equal(commandRefusal.report.passwordStateReadVerified,false);
+  const [captureRelation]=await admin.$queryRaw`SELECT 'public.synthetic_managed_writer'::regclass::oid::text AS oid`;
+  const captureConfiguration={database,databaseOid:db.oid,observer:configuration.maintenance,
+   capture:configuration.writers[0],relations:[{schema:'public',name:'synthetic_managed_writer',oid:captureRelation.oid}]};
+  for(const [target,observer,present] of [[canonical.href,configuration.maintenance,true],[limitedUrl.href,limited,false]]){
+   const registry={...captureConfiguration,observer};
+   const result=spawnSync(process.execPath,['apps/api/dist/jobs/preflight-managed-capture-window.js','--stdin'],{
+    input:JSON.stringify({format:1,databaseUrl:target,configuration:registry,
+     expectedConfigurationDigest:new ManagedStorageDatabaseInventory(undefined,registry).configurationDigest()}),
+    encoding:'utf8',timeout:30000});
+   assert.equal(result.stderr,'');assert.equal(result.status,present?0:2);
+   assert.equal(/synthetic-maintenance-only|synthetic-writer-only|postgresql:|SCRAM-SHA/i.test(result.stdout),false);
+   const report=JSON.parse(result.stdout);
+   assert.equal(report.status,present?'ACL_PREDICATES_PRESENT':'ACL_PREDICATES_MISSING');
+   assert.equal(report.catalogueLocksAcquired,false);assert.equal(report.privilegeWindowHeld,false);
+   assert.equal(report.providerCompatibilityVerified,false);assert.equal(report.executionAuthorized,false);
+  }
   // A passing advisory read must leave both original writer sessions usable.
   await writerA.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-a')`;
   await writerB.$executeRaw`INSERT INTO public.synthetic_managed_writer VALUES ('after-readonly-preflight-b')`;
