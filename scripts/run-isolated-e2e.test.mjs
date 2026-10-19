@@ -3015,12 +3015,25 @@ test("standalone compose and bootstrap SQL contain the exact non-personal isolat
       name !== "dpo-session-replay-concurrency.spec.ts" &&
       name !== "document-control-refresh-concurrency.spec.ts" &&
       name !== "retained-copy-review.spec.ts" &&
+      name !== "integrations-confluence.spec.ts" &&
       name !== "retained-copy-permission.spec.ts")
     .map((name) => readFileSync(join(ROOT, "e2e", "tests", name), "utf8"))
     .join("\n");
   // The replay regression deliberately drops real auth responses to simulate
   // network loss. Its only interception points are the three exact auth
   // requests below. Other deliberate interceptors are pinned separately.
+  // Citation fault injection drops one real committed response at the exact
+  // fenced origin. It cannot synthesize success or intercept other routes.
+  const citationFaultSpec = readFileSync(join(ROOT, "e2e", "tests", "integrations-confluence.spec.ts"), "utf8");
+  assert.match(citationFaultSpec, /test\.skip\(IS_DEPLOYED_QA,/);
+  assert.match(citationFaultSpec, /const citationPath = `\$\{browserOriginFence\.apiOrigin\}\/api\/v1\/integrations\/confluence\/references\/\$\{documentId\}`;/);
+  assert.equal((citationFaultSpec.match(/\.route\(/g) ?? []).length, 1);
+  assert.match(citationFaultSpec, /\.route\(citationPath,/);
+  assert.match(citationFaultSpec, /if \(route\.request\(\)\.method\(\) !== 'POST'\) return route\.fallback\(\)/);
+  assert.equal((citationFaultSpec.match(/route\.fetch\(\{ maxRedirects: 0 \}\)/g) ?? []).length, 1);
+  assert.equal((citationFaultSpec.match(/route\.abort\('failed'\)/g) ?? []).length, 1);
+  assert.equal((citationFaultSpec.match(/\.unroute\(citationPath\)/g) ?? []).length, 1);
+  assert.doesNotMatch(citationFaultSpec, /route\.(?:fulfill|continue)\(|routeWebSocket\(|unrouteAll\(/);
   const replayFaultSpec = readFileSync(
     join(ROOT, "e2e", "tests", "dpo-session-replay-concurrency.spec.ts"),
     "utf8",

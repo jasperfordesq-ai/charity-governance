@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { IS_DEPLOYED_QA } from '../env';
 import { test, expect, reliableFill, uniqueEmail, TEST_PASSWORD } from '../fixtures';
 import { gotoWithDevServerRetry } from '../helpers/navigation';
 import { createAuthenticatedStorageState, createVerifiedOwner, withDb } from '../helpers/db';
@@ -29,7 +30,8 @@ const CONFLUENCE_API = /\/api\/v1\/integrations\/confluence/;
 const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
 test.describe('Confluence connector', () => {
-  test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ newFencedContext }) => {
+  test.skip(IS_DEPLOYED_QA, 'Fake provider and controlled response loss require the disposable environment.');
+  test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ newFencedContext, browserOriginFence }) => {
     test.setTimeout(180_000);
     // This connection journey must start without another test's integration state.
     const owner = await createVerifiedOwner({ email: uniqueEmail('confluence-connect'), password: TEST_PASSWORD,
@@ -196,9 +198,9 @@ test.describe('Confluence connector', () => {
       expect(bounds!.width).toBeLessThanOrEqual(width);
     }
     let createAttempts = 0;
-    const citationPath = `**/api/v1/integrations/confluence/references/${documentId}`;
+    const citationPath = `${browserOriginFence.apiOrigin}/api/v1/integrations/confluence/references/${documentId}`;
     await ownerPage.route(citationPath, async route => {
-      if (route.request().method() !== 'POST') return route.continue();
+      if (route.request().method() !== 'POST') return route.fallback();
       createAttempts++;
       const committed = await route.fetch({ maxRedirects: 0 });
       expect(committed.status(), await committed.text()).toBe(200);
