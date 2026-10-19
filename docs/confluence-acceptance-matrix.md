@@ -19,6 +19,23 @@ observer. See [the scoped contract](confluence-citation-observation.md). Exact
 test/live results remain private; no real provider acceptance, durable jobless
 review report, permanent erasure or host-loss completion follows from the source.
 
+On 19 October a fresh exact archive of `6f7090a8` ran in the existing supervised
+loopback synthetic runtime, retaining its approved real sandbox OAuth connection.
+The supported Vault form cited an existing synthetic page at version 3. The new
+observer read that page with a separate existing accessible sandbox page as the
+control and returned VISIBLE. Independent SQL readback showed the complete saved
+citation and citation-audit rows unchanged and zero deletion jobs. Reconstructed
+selected-row SHA-256, with the database's UTC timestamp interpretation, matched
+the displayed target digest. No migration, seed, new grant or provider content
+write ran. Application source had no overlays; Next regenerated its declaration.
+
+This is real provider/OAuth page-read evidence for that exact source in a
+supervised development runtime. It does not establish Trash/purge, attachment or
+historical-version coverage, deployed personal-server/public-production acceptance,
+durable jobless review reporting or independent recovery. The synthetic citation
+remains available for further testing; removal is a separate local action. Exact
+identities, timestamps, digest and screenshots are in the private dated live receipt.
+
 ### Citation workflow
 
 Owners and administrators can open **Documents → Confluence citations** beside

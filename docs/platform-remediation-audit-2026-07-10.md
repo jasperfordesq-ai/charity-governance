@@ -1,3 +1,13 @@
+## 19 October: real OAuth cited-page observation
+
+The supported citation/observation flow on exact source `6f7090a8` read the
+approved real synthetic sandbox, with a separate existing page as access control.
+The target was VISIBLE. Full citation/audit SQL comparisons stayed unchanged;
+zero deletion jobs and an independently reconstructed matching digest were
+recorded privately. This closes that scoped live read check, not real disposal,
+attachment inventory, production deployment, durable jobless reports or independent
+recovery. Runtime and provider evidence boundaries remain in the acceptance matrix.
+
 ## 19 October: citation lifecycle observation without a deletion job
 
 An Owner-only web observation can inspect the lifecycle of a saved cited page

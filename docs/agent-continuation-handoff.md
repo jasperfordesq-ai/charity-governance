@@ -1,3 +1,15 @@
+## 19 October: real sandbox cited-page observation
+
+The source-pinned supervised synthetic runtime completed the new cited-page
+observer against the approved real Confluence sandbox OAuth grant. A supported
+local citation recorded version 3; the separate existing control and target read
+returned VISIBLE. Independent SQL comparison found the full citation/audits
+unchanged, zero deletion jobs and the displayed digest matched the selected row.
+No migration, new grant or provider content write ran. See the acceptance matrix
+and ignored dated live receipt. This is page-read evidence, not Trash/purge,
+attachments, hosted release or independent host-loss recovery. The citation remains
+for further tests; do not silently remove it or fabricate a deletion instruction.
+
 ## 19 October: observe cited content without deletion intent
 
 The Owner citation panel now has a page-only lifecycle observation, bound to an
