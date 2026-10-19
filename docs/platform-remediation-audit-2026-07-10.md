@@ -1,3 +1,13 @@
+## 19 October: Owner observation action in Integrations
+
+The recorded erasure-target observation API is now reachable through an explicit
+Owner form beside linked retired publications. The UI requires a separate control
+page, clears stale results and does not label missing content as permanent erasure
+or mark a job complete. The new isolated browser case preserves the original job
+and uses actual auth/API/database with a synthetic provider. Source/local evidence
+and actual sandbox/provider/host-loss gates remain separate; durable instruction/
+action records and the broader recovery objective are still open.
+
 ## 19 October: manual-remediation observation contract
 
 Current source exposes an Owner dashboard-only, tenant-scoped read of recorded

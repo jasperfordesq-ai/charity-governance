@@ -1135,6 +1135,7 @@ export async function integrationRoutes(
           recordedPageId: row.pageId,
           retiredAt: row.retiredAt ? new Date(row.retiredAt).toISOString() : null,
           erasureRequested: row.erasureRequestedAt !== null,
+          erasureDeletionId: row.erasureDeletionId,
           primaryRetained: sourcesById.has(row.documentId),
           retainedReviewEligible: row.erasureRequestedAt === null
             && sourcesById.get(row.documentId)?.deletedAt === null

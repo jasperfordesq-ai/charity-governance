@@ -9,6 +9,7 @@ import { AppSection } from '@/components/ui/app-page';
 import { ErrorState } from '@/components/ui/states';
 import { useAuth } from '@/lib/auth-context';
 import { RetainedCopyReview } from './retained-copy-review';
+import { ErasureObservation } from './erasure-observation';
 
 type RetiredCopy = {
   id: string;
@@ -19,6 +20,7 @@ type RetiredCopy = {
   recordedPageId: string | null;
   retiredAt: string | null;
   erasureRequested: boolean;
+  erasureDeletionId: string | null;
   primaryRetained: boolean;
   retainedReviewEligible: boolean;
 };
@@ -116,6 +118,7 @@ export function RetiredConfluenceCopies() {
           ? <p className="text-sm text-amber-800 dark:text-amber-300">The recorded site or page ID is missing. Review the original publication record; this screen cannot request erasure of an unidentified target.</p> : null}
       </div>
       {copy.primaryRetained ? <p className="mt-2 text-sm">The Vault record is retained or recoverable. Its retention does not authorise disposing of this external copy.</p> : null}
+      {user?.role === 'OWNER' && copy.erasureDeletionId ? <ErasureObservation key={`${user.id}:${copy.erasureDeletionId}`} deletionId={copy.erasureDeletionId} /> : null}
       {user?.role === 'OWNER' && copy.retainedReviewEligible && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId
         ? <RetainedCopyReview key={`${user.id}:${user.organisationId}`} publicationId={copy.id} actor={user} /> : null}
       {selectedId === copy.id && !copy.primaryRetained && !copy.erasureRequested && copy.recordedSiteId && copy.recordedPageId ? <div className="mt-4 space-y-3">

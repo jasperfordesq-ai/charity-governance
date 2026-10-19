@@ -2224,6 +2224,7 @@ test('the publications listing returns exactly the allow-listed shape', async ()
   assert.equal(data.publications.length, 1);
   assert.deepEqual(Object.keys(data.publications[0]).sort(), [
     'documentId',
+    'erasureDeletionId',
     'erasureRequested',
     'id',
     'pageTitle',
@@ -2243,6 +2244,7 @@ test('the publications listing returns exactly the allow-listed shape', async ()
     recordedPageId: 'page-1',
     retiredAt: '2026-09-19T09:00:00.000Z',
     erasureRequested: false,
+    erasureDeletionId: null,
     primaryRetained: false,
     retainedReviewEligible: false,
   });

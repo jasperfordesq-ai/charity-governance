@@ -41,6 +41,7 @@ export type RetiredConfluencePublication = {
   spaceId: string | null;
   retiredAt: Date | null;
   erasureRequestedAt: Date | null;
+  erasureDeletionId: string | null;
 };
 
 const PUBLICATION_SELECT = {
@@ -52,6 +53,7 @@ const PUBLICATION_SELECT = {
   spaceId: true,
   retiredAt: true,
   erasureRequestedAt: true,
+  erasureDeletionId: true,
 } as const;
 
 /**

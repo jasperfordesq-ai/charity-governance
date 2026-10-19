@@ -1,3 +1,15 @@
+## 19 October: dashboard recorded-target observation
+
+Owners now have an explicit recorded-target observation action beside a retired
+publication with a deletion job. The same tenant-scoped listing returns that job
+identity. The form clears stale results, validates response bindings/false
+authority flags and explains permission ambiguity and actionable unknown states.
+A disposable browser journey uses actual application/API/PostgreSQL and the private
+fake Atlassian service; no observation response is intercepted. It checks mobile
+bounds, both themes/accessibility and unchanged original deletion-job bytes.
+Exact results remain in the ignored dated receipt. Durable instruction/action
+records, actual authorised sandbox readback and independent recovery remain open.
+
 ## 19 October: read-only recorded erasure-target observation
 
 The new Owner web-only observation endpoint reads an existing tenant-bound
