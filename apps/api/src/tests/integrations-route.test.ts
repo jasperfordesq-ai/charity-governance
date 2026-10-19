@@ -523,6 +523,19 @@ test('Admin connector cannot read dashboard-only external copy inventories by di
   } finally { await app.close(); }
 });
 
+test('Admin connector cannot register an external source or reach its provider connection', async () => {
+  const actor: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' };
+  const { app, store } = await buildApp({ actor, rows: [connectedRow()] });
+  try {
+    const response = await app.inject({ method: 'POST', url: '/confluence/sources',
+      headers: { authorization: bearer(actor) }, payload: { pageId: 'synthetic-page', expectedSiteId: 'charity-cloud',
+        clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().code, 'WEB_SESSION_REQUIRED');
+    assert.equal(store.calls.integrationFindUnique.length, 0);
+  } finally { await app.close(); }
+});
+
 test('Admin connector cannot start browser Confluence authorization or list live setup spaces', async () => {
   const actor: Actor = { ...ORG_A_ADMIN, clientKind: 'MCP_CONNECTOR', accessLevel: 'ADMIN' };
   const { app, store } = await buildApp({ actor, rows: [connectedRow()] });

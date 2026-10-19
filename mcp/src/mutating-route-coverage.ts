@@ -177,6 +177,10 @@ export const EXCLUDED_MUTATIONS: readonly ExcludedMutation[] = [
     reason: 'Requeues an external Confluence publication and needs a person to inspect the current document and destination in the dashboard.',
   },
   {
+    route: 'POST /api/v1/integrations/confluence/sources',
+    reason: 'Registers an external source after an active Owner/Admin reviews the exact connected site and page in a web session; connector sessions cannot make that review assertion.',
+  },
+  {
     route: 'POST /api/v1/integrations/confluence/references/:documentId',
     reason: 'Creates a reference to an external Confluence page; it needs human review of the exact third-party target.',
   },

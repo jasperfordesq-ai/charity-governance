@@ -1,3 +1,12 @@
+## 19 October: source registration remains limited to reviewed web sessions
+
+Activation CI's MCP route ledger caught the new source-registration mutation
+without a tool/exclusion classification. Classify it explicitly as dashboard
+only: active Owner/Admin site/page review uses a web session. Direct API tests
+also verify an Admin MCP connector is refused before provider lookup. Keep the
+connector's mutation inventory complete and require the corrected commit's
+exact CI/E2E gates; the failed activation commit must not be deployed.
+
 ## 19 October: registration fault injection bound to the exact test origin
 
 Activation CI caught the missing third interception point in the isolation

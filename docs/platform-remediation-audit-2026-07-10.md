@@ -1,3 +1,11 @@
+## 19 October: activation MCP mutation-inventory classification
+
+The new registration route is deliberately web-session-only. Activation CI
+identified its missing explicit MCP exclusion; add the reason to the mutation
+inventory and prove direct Admin connector refusal before provider access.
+Preserve the existing role/session guards. Earlier green browser evidence does
+not supersede this failed CI gate or the corrected source's required release.
+
 ## 19 October: activation isolation-contract correction
 
 The first activation CI failed because its new source-registration response-loss
