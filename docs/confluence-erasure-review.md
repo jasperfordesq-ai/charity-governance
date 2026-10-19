@@ -1,5 +1,9 @@
 # Historical Confluence erasure review reports
 
+For a cited page without a deletion instruction, use the separate
+[cited-page review report](confluence-citation-review.md). The shared dashboard
+form keeps distinct report kinds, target identities and receipt lookup routes.
+
 An Owner can save a report beside the recorded-target observation in Integrations.
 The report preserves three distinct things:
 

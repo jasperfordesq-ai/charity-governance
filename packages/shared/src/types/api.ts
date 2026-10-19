@@ -180,7 +180,8 @@ export type SecurityAuditEventType =
   | 'INTEGRATION_REAUTHORISATION_REQUIRED'
   | 'DOCUMENT_PUBLICATION_DEAD_LETTERED'
   | 'CONFLUENCE_ERASURE_REQUESTED'
-  | 'CONFLUENCE_ERASURE_REVIEW_RECORDED';
+  | 'CONFLUENCE_ERASURE_REVIEW_RECORDED'
+  | 'CONFLUENCE_CITATION_REVIEW_RECORDED';
 
 export interface SecurityAuditEventResponse {
   /** Password markers are trusted projections of stored ALL_SESSIONS_REVOKED rows. */

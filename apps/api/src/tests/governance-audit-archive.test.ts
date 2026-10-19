@@ -644,6 +644,7 @@ test('Confluence governance feed is Admin-only, filtered, paged and omits privat
     'INTEGRATION_REAUTHORISATION_REQUIRED',
     'DOCUMENT_PUBLICATION_DEAD_LETTERED', 'CONFLUENCE_ERASURE_REQUESTED',
     'CONFLUENCE_ERASURE_REVIEW_RECORDED',
+    'CONFLUENCE_CITATION_REVIEW_RECORDED',
   ];
   const delegate = {
     findFirst: async (args: { where: { id: string; organisationId: string; type: { in: string[] } } }) => {

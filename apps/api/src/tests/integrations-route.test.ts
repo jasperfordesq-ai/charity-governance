@@ -593,6 +593,10 @@ test('erasure observations refuse Members, Admins, connectors and low-level Owne
       assert.equal(write.statusCode, 403, write.body);
       const citation = await app.inject({ method: 'GET', url: '/confluence/references/by-id/ref-1/observation?controlPageId=control-1', headers: { authorization: bearer(actor) } });
       assert.equal(citation.statusCode, 403, citation.body);
+      const citationReport = await app.inject({ method: 'POST', url: '/confluence/references/by-id/ref-1/reviews', headers: { authorization: bearer(actor) }, payload: {} });
+      assert.equal(citationReport.statusCode, 403, citationReport.body);
+      const citationReceipt = await app.inject({ method: 'GET', url: '/confluence/references/reviews/original-event', headers: { authorization: bearer(actor) } });
+      assert.equal(citationReceipt.statusCode, 403, citationReceipt.body);
       const receipt = await app.inject({ method: 'GET', url: '/confluence/erasures/reviews/original-event', headers: { authorization: bearer(actor) } });
       assert.equal(receipt.statusCode, 403, receipt.body);
     } finally { await app.close(); }

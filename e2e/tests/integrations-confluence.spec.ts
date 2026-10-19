@@ -185,6 +185,8 @@ test.describe('Confluence connector', () => {
       status: 'VISIBLE', scope: 'CITED_PAGE_ONLY', attachmentsObserved: false, jobCreated: false,
       citationUpdated: false, permanentErasureVerified: false, actionAuthorized: false });
     await expect(observationPanel.getByText('Page visible at check.', { exact: true })).toBeVisible();
+    await observationPanel.getByRole('button', { name: 'Prepare citation review report', exact: true }).click();
+    const citationReport = observationPanel.getByRole('region', { name: 'Confluence citation review report' });
     for (const width of [320, 768, 1440]) {
       await ownerPage.setViewportSize({ width, height: 1000 });
       expect(await observationPanel.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
@@ -204,6 +206,36 @@ test.describe('Confluence connector', () => {
       expect(scan.violations).toEqual([]);
       await observationPanel.screenshot({ path: test.info().outputPath(`citation-observation-${theme}.png`) });
     }
+    await reliableFill(citationReport.getByLabel('Review evidence reference', { exact: true }), 'SYNTHETIC-CITATION-REVIEW');
+    await reliableFill(citationReport.getByLabel('Review report reason', { exact: true }), 'Synthetic cited-page observation; no deletion instruction or administrator disposal is asserted.');
+    await citationReport.getByRole('checkbox', { name: /I reviewed these references/ }).check();
+    const citationReportUrl = `${browserOriginFence.apiOrigin}/api/v1/integrations/confluence/references/by-id/${reference.id}/reviews`;
+    let citationReportSaves = 0;
+    await ownerPage.route(citationReportUrl, async route => {
+      expect(route.request().method()).toBe('POST'); citationReportSaves++;
+      const committed = await route.fetch({ maxRedirects: 0 });
+      expect(committed.status(), await committed.text()).toBe(200);
+      expect((await committed.json()).data.review.instruction).toBeNull();
+      await route.abort('failed');
+    });
+    await citationReport.getByRole('button', { name: 'Save review report', exact: true }).click();
+    await expect(citationReport.getByText('Report outcome needs reconciliation.', { exact: true })).toBeVisible();
+    await expect(citationReport.getByRole('button', { name: 'Save review report', exact: true })).toBeDisabled();
+    await citationReport.getByRole('button', { name: 'Look up original report receipt', exact: true }).click();
+    await expect(citationReport.getByText(/Historical report recorded:/)).toBeVisible();
+    expect(citationReportSaves).toBe(1);
+    const citationReviewAudit = await withDb(async client => {
+      const rows = await client.query(`SELECT id,context FROM "SecurityAuditEvent" WHERE "organisationId"=$1 AND type='CONFLUENCE_CITATION_REVIEW_RECORDED'`, [owner.organisationId]);
+      expect(rows.rows).toHaveLength(1); const audit = rows.rows[0];
+      expect(audit.context.instruction).toBeNull(); expect(audit.context.citation.id).toBe(reference.id);
+      expect(audit.context.observation.scope).toBe('CITED_PAGE_ONLY'); expect(audit.context.observation.jobCreated).toBe(false);
+      expect(audit.context.actionAuthorized).toBe(false); return audit;
+    });
+    await expect(withDb(async client => { await client.query(`UPDATE "SecurityAuditEvent" SET reason='Changed report' WHERE id=$1`, [citationReviewAudit.id]); })).rejects.toThrow(/55000/);
+    await expect(withDb(async client => { await client.query(`INSERT INTO "SecurityAuditEvent" (id,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason,context)
+      SELECT $2,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason,context FROM "SecurityAuditEvent" WHERE id=$1`, [citationReviewAudit.id, `${citationReviewAudit.id}-duplicate`]); })).rejects.toThrow(/23505/);
+    await expect(withDb(async client => { await client.query(`INSERT INTO "SecurityAuditEvent" (id,"organisationId",type,"actorKind","actorUserId","actorLabel","subjectLabel",reason)
+      SELECT $2,"organisationId",'MEMBER_ROLE_CHANGED',"actorKind","actorUserId","actorLabel","subjectLabel",reason FROM "SecurityAuditEvent" WHERE id=$1`, [citationReviewAudit.id, `${citationReviewAudit.id}-no-subject`]); })).rejects.toThrow(/23514/);
     await reliableFill(controlPage, 'missing-control');
     await expect(observationPanel.getByText('Page visible at check.', { exact: true })).toHaveCount(0);
     await observationPanel.getByRole('button', { name: 'Observe cited page', exact: true }).click();
@@ -364,6 +396,13 @@ test.describe('Confluence connector', () => {
     ));
     expect(stored.rows[0]).toMatchObject({ externalPublicationApproved: true,
       externalPublicationSiteId: destination.siteId, externalPublicationSpaceId: destination.spaceId });
+    await gotoWithDevServerRetry(ownerPage, '/integrations');
+    const citationHistory = ownerPage.getByRole('region', { name: 'Historical Confluence citation review lookup' });
+    await reliableFill(citationHistory.getByLabel('Original request or audit event reference', { exact: true }), citationReviewAudit.id);
+    await citationHistory.getByRole('button', { name: 'Read historical citation review report', exact: true }).click();
+    await expect(citationHistory.getByText(`Historical report recorded: ${citationReviewAudit.id}`, { exact: true })).toBeVisible();
+    await expect(citationHistory.getByText(/No deletion instruction recorded/)).toBeVisible();
+    expect(citationReportSaves).toBe(1);
   });
 
   test('no token material reaches the browser in observed connector responses', async ({ newFencedContext }) => {

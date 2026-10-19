@@ -384,6 +384,7 @@ enum SecurityAuditEventType {
   // record that it was asked for.
   CONFLUENCE_ERASURE_REQUESTED
   CONFLUENCE_ERASURE_REVIEW_RECORDED
+  CONFLUENCE_CITATION_REVIEW_RECORDED
 }
 
 enum AuthActionApprovalAuditKind {

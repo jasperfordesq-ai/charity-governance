@@ -152,6 +152,7 @@ function eventDescription(event: AuditEvent, feed: string): string {
       DOCUMENT_PUBLICATION_DEAD_LETTERED: 'Publication needs review',
       CONFLUENCE_ERASURE_REQUESTED: 'Erasure requested',
       CONFLUENCE_ERASURE_REVIEW_RECORDED: 'Erasure review report recorded',
+      CONFLUENCE_CITATION_REVIEW_RECORDED: 'Cited-page review report recorded',
     }[String(event.type)] ?? 'Integration event';
     return `${label} · event ${String(event.id ?? 'unknown')}`;
   }

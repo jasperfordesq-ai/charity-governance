@@ -7,6 +7,18 @@ Private dated execution receipts belong in the ignored continuation handoff.
 
 ## Dated live-provider observation
 
+### Historical cited-page reporting
+
+An Owner may now save an evidence-referenced historical cited-page report,
+including the exact recorded citation, a fresh uncertain observation and a
+separately evidenced optional action claim. The instruction is explicitly null.
+Original-request/receipt lookup survives unciting, without another provider
+request. See [the report contract](confluence-citation-review.md). This source
+increment closes the need to invent a deletion job to retain a report; it does
+not establish independent custody, current-release live provider acceptance,
+actual disposal or physical host-loss recovery. Old dated observations below
+retain their original source and evidence limits.
+
 ### Cited-page lifecycle observation without deletion intent
 
 Owners can explicitly observe an existing citation's page using a separate

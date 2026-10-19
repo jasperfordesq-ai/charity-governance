@@ -5,6 +5,9 @@ import { getPage, isPageInTrash } from './confluence-pages.js';
 import type { ConfluenceErasureObservationDeps } from './confluence-erasure-observation.js';
 
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export const confluenceCitationObservationSelect = { id: true, documentId: true, cloudId: true, pageId: true,
+  pageVersion: true, citedAt: true, updatedAt: true } as const;
+export const confluenceCitationTargetDigest = (reference: unknown) => createHash('sha256').update(JSON.stringify(reference)).digest('hex');
 
 /** A citation is evidence identity, never an instruction to dispose of content.
  * Observe only its page: citations do not record an attachment inventory. */
@@ -18,15 +21,14 @@ export async function observeConfluenceCitation(
   }
   const where = { id: input.referenceId, organisationId: input.organisationId,
     document: { organisationId: input.organisationId, deletedAt: null } };
-  const select = { id: true, documentId: true, cloudId: true, pageId: true,
-    pageVersion: true, citedAt: true, updatedAt: true } as const;
+  const select = confluenceCitationObservationSelect;
   const reference = await prisma.confluenceReference.findFirst({ where, select });
   if (!reference) throw new AppError(404, 'CONFLUENCE_REFERENCE_NOT_FOUND', 'That live-document citation was not found.');
   if (!identifier.test(reference.pageId) || reference.pageId === input.controlPageId) {
     throw new AppError(409, 'CONFLUENCE_OBSERVATION_TARGET_UNSUPPORTED', 'Choose a separate accessible control page.');
   }
   const snapshot = JSON.stringify(reference);
-  const targetDigest = createHash('sha256').update(snapshot).digest('hex');
+  const targetDigest = confluenceCitationTargetDigest(reference);
   const result = (status: 'VISIBLE' | 'TRASHED' | 'NOT_OBSERVED' | 'UNKNOWN', reason: string | null,
     controlPageReadable = false) => ({ referenceId: reference.id, targetDigest,
     checkedAt: new Date().toISOString(), status, reason, controlPageId: input.controlPageId,

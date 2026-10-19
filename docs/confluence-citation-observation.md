@@ -49,9 +49,10 @@ journey uses the actual application and disposable database with a synthetic
 Atlassian service; it checks unchanged citation rows and zero deletion jobs.
 Exact dated results, including any failed attempts, belong in the private handoff.
 
-These observations are transient. The existing historical erasure-report workflow
-still requires a deletion job; historical reporting for a citation without a
-deletion instruction remains a separate gap. Source or fake-provider tests do
+These observations are transient. A separate [historical cited-page report](confluence-citation-review.md)
+now saves citation identity, an explicit absence of deletion instruction, the
+Owner's report and a fresh provider observation. The existing historical
+erasure-report workflow remains bound to deletion jobs. Source or fake-provider tests do
 not establish current live OAuth acceptance, actual disposal, independent
 decision custody or recovery after physical host loss. Administrator Trash/purge
 and any real customer rollout retain their separate authority requirements.

@@ -5,6 +5,7 @@ import { Button, Input } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/lib/auth-context';
+import { ErasureReview } from '../integrations/erasure-review';
 
 type Observation = {
   referenceId: string; targetDigest: string; checkedAt: string; controlPageId: string;
@@ -70,6 +71,7 @@ export function CitationObservation({ referenceId, pageId, disabled }: {
           : 'Unknown: review the connection, control-page access and whether this citation still exists.'}</p>
       <p>Checked {new Date(observation.checkedAt).toLocaleString('en-IE')}. Target {observation.targetDigest}.</p>
       <p>This grants no disposal authority and does not prove permanent erasure. No deletion job was created; the citation is unchanged.</p>
+      <ErasureReview key={`${referenceId}:${observation.checkedAt}`} referenceId={referenceId} targetDigest={observation.targetDigest} controlPageId={observation.controlPageId} />
     </div> : null}
   </section>;
 }

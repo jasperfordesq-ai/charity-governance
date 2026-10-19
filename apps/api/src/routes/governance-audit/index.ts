@@ -56,6 +56,7 @@ const integrationEventTypes = [
   'INTEGRATION_REAUTHORISATION_REQUIRED',
   'DOCUMENT_PUBLICATION_DEAD_LETTERED', 'CONFLUENCE_ERASURE_REQUESTED',
   'CONFLUENCE_ERASURE_REVIEW_RECORDED',
+  'CONFLUENCE_CITATION_REVIEW_RECORDED',
 ] as const;
 
 function feedConfig(app: FastifyInstance, feed: Exclude<z.infer<typeof feedSchema>, 'data-request-links'>): FeedConfig {

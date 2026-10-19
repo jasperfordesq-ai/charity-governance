@@ -1,3 +1,14 @@
+## 19 October: historical cited-page review receipts
+
+The separate Owner-only report records a citation and fresh page-only observation
+without manufacturing a deletion instruction. Stable original-request identity,
+active-owner/target rechecks and append-only event storage support unknown-save
+reconciliation and later lookup after unciting. It does not grant authority,
+change jobs/citations or verify permanent erasure. Two new forward migrations
+preserve old event guards and add the event/index; source/test/live/deployment
+and independent recovery evidence remain distinct. See
+docs/confluence-citation-review.md and the private dated execution receipt.
+
 ## 19 October: real OAuth cited-page observation
 
 The supported citation/observation flow on exact source `6f7090a8` read the

@@ -28,6 +28,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { requireAdmin, requireOwner } from '../../middleware/roles.js';
 import { observeConfluenceErasure } from '../../services/confluence-erasure-observation.js';
 import { observeConfluenceCitation } from '../../services/confluence-citation-observation.js';
+import { readConfluenceCitationReview, recordConfluenceCitationReview } from '../../services/confluence-citation-review.js';
 import { readConfluenceErasureReview, recordConfluenceErasureReview } from '../../services/confluence-erasure-review.js';
 import { requireSessionLevel, requireWebSession } from '../../middleware/session-level.js';
 import { requireActionApproval } from '../../middleware/action-approval.js';
@@ -1367,6 +1368,37 @@ export async function integrationRoutes(
       reply.header('Cache-Control', 'no-store');
       try {
         return sendSuccess(reply, { review: await readConfluenceErasureReview(app.prisma,
+          request.user.organisationId, request.user.userId, request.params.clientRequestId) });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'A valid original request or audit event identifier is required.' });
+        return handleError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Params: { referenceId: string } }>(
+    '/confluence/references/by-id/:referenceId/reviews',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        const organisationId = request.user.organisationId;
+        return sendSuccess(reply, { review: await recordConfluenceCitationReview(app.prisma, {
+          organisationId, actorUserId: request.user.userId, referenceId: request.params.referenceId, body: request.body,
+        }, { getConnection: () => erasureObservationConnection(organisationId) }) });
+      } catch (error) {
+        if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'Review every report field and evidence reference.' });
+        return handleError(reply, error);
+      }
+    },
+  );
+  app.get<{ Params: { clientRequestId: string } }>(
+    '/confluence/references/reviews/:clientRequestId',
+    { preHandler: [requireWebSession, requireSessionLevel('ADMIN'), requireOwner] },
+    async (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      try {
+        return sendSuccess(reply, { review: await readConfluenceCitationReview(app.prisma,
           request.user.organisationId, request.user.userId, request.params.clientRequestId) });
       } catch (error) {
         if (error instanceof ZodError) return reply.status(400).send({ code: 'VALIDATION_ERROR', error: 'A valid original request or audit event identifier is required.' });

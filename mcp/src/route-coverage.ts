@@ -212,6 +212,10 @@ export const EXCLUDED_ROUTES: readonly ExcludedRoute[] = [
     reason: 'Owner web-only original review receipt lookup reconciles unknown saves without another provider action.',
   },
   {
+    path: '/api/v1/integrations/confluence/references/reviews/:clientRequestId',
+    reason: 'Owner web-only historical cited-page report receipt lookup preserves reported evidence without provider access or disposal authority.',
+  },
+  {
     path: '/api/v1/integrations/confluence/copy-inventory',
     reason: 'Admin-only inventory joins recorded external page references with current Vault lifecycle and publication decisions for human audience review in Integrations.',
   },

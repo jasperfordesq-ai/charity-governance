@@ -1,3 +1,15 @@
+## 19 October: durable cited-page reports without disposal instruction
+
+Owner citation observations now support a saved historical report with citation
+identity/version, review/action evidence and fresh uncertain provider readback.
+Its instruction is explicitly null; no job, disposal permission or current-state
+verification is inferred. Original-request reconciliation and lookup by audit ID
+remain usable after unciting. Shared dashboard controls preserve the old erasure
+report format and use distinct routes/kinds. Two forward migrations add the new
+event and exact subject admission/request index. See
+docs/confluence-citation-review.md. Local audit durability is not independent
+current custody, a deployed release or host-loss proof; exact results are private.
+
 ## 19 October: real sandbox cited-page observation
 
 The source-pinned supervised synthetic runtime completed the new cited-page
