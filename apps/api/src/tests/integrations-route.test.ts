@@ -2488,12 +2488,16 @@ test('charity-managed citation inventory pages only this tenant without exposing
   assert.equal(member.statusCode, 403);
 });
 
-test('compatibility release does not expose standalone source creation', async () => {
+test('Member cannot register a source and malformed source registration refuses before provider access', async () => {
+  const { app: memberApp } = await buildApp({ actor: ORG_A_MEMBER });
+  const body = { pageId: 'synthetic-page', expectedSiteId: 'charity-cloud', clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' };
+  const member = await memberApp.inject({ method: 'POST', url: '/confluence/sources', payload: body,
+    headers: { authorization: bearer(ORG_A_MEMBER) } });
+  assert.equal(member.statusCode, 403);
   const { app } = await buildApp();
-  const response = await app.inject({ method: 'POST', url: '/confluence/sources',
-    payload: { pageId: 'synthetic-page', expectedSiteId: 'charity-cloud', clientRequestId: '3290b390-b56c-4891-bd74-890d1f2d98db' },
+  const malformed = await app.inject({ method: 'POST', url: '/confluence/sources', payload: { ...body, pageId: '../escape' },
     headers: { authorization: bearer(ORG_A_ADMIN) } });
-  assert.equal(response.statusCode, 404);
+  assert.equal(malformed.statusCode, 400);
 });
 
 test('an erasure is refused when the connection never granted the delete scopes', async () => {

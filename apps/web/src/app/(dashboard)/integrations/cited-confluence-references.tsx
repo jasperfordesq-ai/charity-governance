@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@heroui/react';
+import { isAxiosError } from 'axios';
+import { Button, Checkbox, Input } from '@heroui/react';
 import { api } from '@/lib/api';
 import { apiErrorMessage } from '@/lib/errors';
 import { AppSection } from '@/components/ui/app-page';
@@ -22,6 +23,56 @@ type Citation = {
   documentVisibility: string | null;
 };
 type Page = { references: Citation[]; nextCursor: string | null };
+
+function SourceRegistration({ onRegistered }: { onRegistered: () => void }) {
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [pageId, setPageId] = useState('');
+  const [reviewed, setReviewed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const request = useRef<{ pageId: string; expectedSiteId: string; clientRequestId: string } | null>(null);
+  const inFlight = useRef(false);
+  useEffect(() => {
+    let active = true;
+    void api.get<{ siteId: string | null }>('/integrations/confluence/reference-target')
+      .then(response => { if (active) setSiteId(response.data.siteId); })
+      .catch(() => { if (active) setError('The connected site could not be reviewed. Refresh this page to try again.'); });
+    return () => { active = false; };
+  }, []);
+  const register = async () => {
+    if (inFlight.current || !siteId || !reviewed || !pageId.trim()) return;
+    inFlight.current = true; setBusy(true); setError('');
+    const body = request.current ?? { pageId: pageId.trim(), expectedSiteId: siteId, clientRequestId: crypto.randomUUID() };
+    request.current = body; setPending(true);
+    try {
+      await api.post('/integrations/confluence/sources', body);
+      request.current = null; setPending(false); setPageId(''); setReviewed(false); onRegistered();
+    } catch (cause) {
+      const refused = isAxiosError(cause) && cause.response && cause.response.status >= 400 && cause.response.status < 500;
+      if (refused) { request.current = null; setPending(false); setReviewed(false); }
+      setError(`${apiErrorMessage(cause, 'Source registration could not be confirmed.')}${refused
+        ? ' Review the page and connection before a new registration.'
+        : ' Retry uses the same request; it will not recite a newer version.'}`);
+    } finally { inFlight.current = false; setBusy(false); }
+  };
+  return <section aria-label="Register a Confluence document" className="my-4 space-y-3 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+    <h3 className="font-semibold">Register a Confluence document</h3>
+    <p className="text-sm">Keep the authoritative document in Confluence. CharityPilot records its page and version without uploading a Vault file or copying page content. This register is restricted to Owners and Admins; it grants no Confluence access and does not approve the document.</p>
+    <p className="break-all text-sm">Connected site ID: {siteId || 'No connected site available'}</p>
+    <Input label="Confluence source page ID" value={pageId} isDisabled={!siteId || busy || pending}
+      onValueChange={value => { setPageId(value); setReviewed(false); }}
+      classNames={{ description: 'text-gray-600 dark:text-gray-300' }}
+      description="Enter the identifier of a current page you can read on the connected site." />
+    <Checkbox isSelected={reviewed} onValueChange={setReviewed} isDisabled={!siteId || busy || pending}>
+      I reviewed the connected site and selected page for this restricted register.
+    </Checkbox>
+    <Button size="sm" onPress={() => void register()} isLoading={busy} isDisabled={!siteId || !reviewed || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(pageId.trim())}>
+      {pending ? 'Retry original source registration' : 'Verify and register external document'}
+    </Button>
+    {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p> : null}
+  </section>;
+}
 
 function SourceControls({ reference, onRemoved }: { reference: Citation; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -91,6 +142,7 @@ export function CitedConfluenceReferences() {
   useEffect(() => { void load(); }, [load]);
 
   return <AppSection title="Cited Confluence evidence pages" description="These are current retained references to pages managed by the charity, not copies CharityPilot published. Each citation records the page and version seen when it was added. The page, its version and its audience may have changed since then. Review and remove a document’s citations before moving it to Deleted Items. Removing a citation leaves the Confluence page unchanged. This list shows current citations, not their full audit history.">
+    <SourceRegistration onRegistered={() => void load()} />
     <Button size="sm" variant="flat" onPress={() => void load()} isLoading={loading}>Refresh citations</Button>
     {error ? <ErrorState title="Citation review needs attention" description={error}
       action={<Button size="sm" onPress={() => void load()}>Retry</Button>} /> : null}
@@ -103,7 +155,7 @@ export function CitedConfluenceReferences() {
       {reference.documentId === null ? <><p className="text-sm">Restricted external-source register. Confluence controls access to the page content.</p>
         <SourceControls reference={reference} onRemoved={() => void load()} /></> : reference.documentName ? <p className="text-sm"><Link className="text-teal-primary underline" href="/documents">Review {reference.documentName} in the Vault</Link> · lifecycle {reference.documentLifecycle || 'unknown'} · visibility {reference.documentVisibility || 'unknown'}</p>
         : <p className="text-sm text-amber-800 dark:text-amber-300">The linked Vault document was not found. Review this citation before relying on it.</p>}
-      {reference.documentLifecycle !== 'CURRENT'
+      {reference.documentId !== null && reference.documentLifecycle !== 'CURRENT'
         ? <p className="text-sm text-amber-800 dark:text-amber-300">This citation is attached to a document that is not currently classified as CURRENT.</p> : null}
     </li>)}</ol>
     {nextCursor ? <Button className="mt-3" size="sm" variant="flat" onPress={() => void load(nextCursor)}

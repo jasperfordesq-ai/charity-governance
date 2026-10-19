@@ -14,7 +14,30 @@ control page, explicit evidence review and a stable UUID request reference.
 Reported Trash/purge actions require their own evidence reference and time;
 future action times, extra instruction/authority fields and missing evidence
 refuse. The observer's uncertain outcome is preserved, not promoted to success.
-The citation must still belong to a live document when the report is saved.
+The citation must still have a valid live anchor when the report is saved:
+either its live Vault document or an explicitly registered external source.
+
+## Selected documents without a Vault upload
+
+The activation release adds **Integrations → Cited Confluence evidence pages →
+Register a Confluence document**. An active Owner/Admin reviews the connected
+site and page ID; changing the page resets that review. The service reads an
+accessible current page and records its version without copying page content
+or creating a Document, upload intent, publication or deletion job.
+
+`POST /integrations/confluence/sources` takes `pageId`, `expectedSiteId` and a
+stable `clientRequestId`. Member access and malformed input refuse. Unknown
+responses retain the same request for manual retry; known refusals require a
+new review. An identical retry returns the original citation rather than a
+new upstream version. A retained registration audit prevents a delayed retry
+from recreating a locally removed source. External-source citations have
+`documentId: null`; this does not grant Member visibility or Confluence access.
+
+Owners use the source row's observation/report controls for the same page-only
+review workflow. Local reference removal leaves Confluence untouched and keeps
+audit and saved receipts available. File-lifecycle warnings apply only to file
+anchors. Public activation follows the verified compatible-reader deployment;
+see [the release sequence](confluence-reference-only-spec.md).
 
 ## Saved receipt and reconciliation
 

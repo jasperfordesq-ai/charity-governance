@@ -1,13 +1,14 @@
 # Confluence documents without a Vault upload
 
-Status: compatibility implementation in progress, 19 October 2026. The complete
-registration path is not deployed. Do not report this requirement as complete.
+Status: compatibility release deployed and verified, 19 October 2026.
+Registration activation has passed focused local verification and is not yet
+deployed. Do not report this requirement as complete.
 
 ## Required release sequence
 
-The currently deployed reader expects every citation's Document ID to be
-non-null. Registration must therefore follow a compatibility release, rather
-than allowing new rows and leaving an incompatible previous colour for rollback.
+The earlier reader expected every citation's Document ID to be non-null.
+Registration therefore follows the verified compatibility release, preserving
+a previous colour that can read the new source records and audit types.
 
 1. Deploy the additive audit types, nullable/exclusive citation anchor, source
    identity and recovery guards, compatible readers/report parser and restricted
@@ -18,6 +19,23 @@ than allowing new rows and leaving an incompatible previous colour for rollback.
    the registration route and form in a subsequent release. Its previous colour
    must be the compatible reader. Repeat the zero-upload browser journey on
    the final source. Never substitute the earlier prototype's browser result.
+
+The compatibility stage is now verified. The activation source adds a separate
+registration form with exact connected-site review, stable request identity on
+unknown outcomes, version checking and explicitly local reference removal.
+Owners can use the existing observation/report workflow for a source with no
+uploaded file. A known refusal unlocks the form for review; an uncertain response
+retains its original request for reconciliation. No migration, new storage
+provider, disclosure grant or Confluence mutation is added by activation.
+
+Focused local verification covers all four connector journeys with retries
+disabled, including a committed registration whose response is lost, manual
+original-request retry, page-review reset, zero file/upload/publication/deletion
+rows, observation/report, local unciting and historical receipt readback.
+Responsive bounds, light/dark screenshots and the new form's accessibility scan
+are included. The scan caught and corrected dark help-text contrast; visual
+review also removed an inapplicable file-lifecycle warning from source rows.
+These local results do not replace the new exact-source CI and deployment gates.
 
 Do not bypass a migration or rollback gate to collapse these steps. No new
 provider or customer policy decision is needed for this engineering sequence.

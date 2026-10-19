@@ -32,6 +32,103 @@ const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
 test.describe('Confluence connector', () => {
   test.skip(IS_DEPLOYED_QA, 'Fake provider and controlled response loss require the disposable environment.');
+  test('an external Confluence document registers, checks, reports and uncites without a Vault upload', async ({ newFencedContext }) => {
+    test.setTimeout(120_000);
+    const owner = await createVerifiedOwner({ email: uniqueEmail('confluence-source'), password: TEST_PASSWORD,
+      name: 'Reference-only Owner', organisationName: 'Synthetic Reference-only Charity' });
+    const context = await newFencedContext({ storageState: await createAuthenticatedStorageState({ ...owner, role: 'OWNER' }) });
+    const page = await context.newPage();
+    await gotoWithDevServerRetry(page, '/integrations');
+    const authorised = page.waitForResponse(response => /\/confluence\/authorize$/.test(response.url()) && response.request().method() === 'GET');
+    await page.getByRole('button', { name: 'Connect Confluence', exact: true }).click();
+    const authorization = await authorised;
+    expect(authorization.status()).toBe(200);
+    const continueButton = page.getByRole('button', { name: /continue to Atlassian/i });
+    await expect(continueButton).toBeVisible();
+    const authorizationUrl = await continueButton.getAttribute('href');
+    const state = new URL(authorizationUrl!).searchParams.get('state');
+    expect(state).toBeTruthy();
+    const callback = page.waitForResponse(response => /\/confluence\/callback$/.test(response.url()) && response.request().method() === 'POST');
+    await gotoWithDevServerRetry(page, `/integrations/confluence/callback?code=fake-authorization-code&state=${encodeURIComponent(state!)}`);
+    expect((await callback).status()).toBe(200);
+    await gotoWithDevServerRetry(page, '/integrations');
+    const registration = page.getByRole('region', { name: 'Register a Confluence document', exact: true });
+    await expect(registration.getByLabel('Confluence source page ID', { exact: true })).toBeEnabled();
+    await reliableFill(registration.getByLabel('Confluence source page ID', { exact: true }), 'synthetic-retained-copy');
+    await registration.getByRole('checkbox', { name: /I reviewed the connected site/ }).check();
+    await reliableFill(registration.getByLabel('Confluence source page ID', { exact: true }), 'synthetic-observation-control');
+    await expect(registration.getByRole('checkbox', { name: /I reviewed the connected site/ })).not.toBeChecked();
+    await expect(registration.getByRole('button', { name: 'Verify and register external document', exact: true })).toBeDisabled();
+    await reliableFill(registration.getByLabel('Confluence source page ID', { exact: true }), 'synthetic-retained-copy');
+    await registration.getByRole('checkbox', { name: /I reviewed the connected site/ }).check();
+    const sourcePath = /\/api\/v1\/integrations\/confluence\/sources$/;
+    let originalSourceId: string | null = null, sourceWrites = 0;
+    page.on('request', request => { if (sourcePath.test(request.url()) && request.method() === 'POST') sourceWrites++; });
+    await page.route(sourcePath, async route => {
+      const committed = await route.fetch({ maxRedirects: 0 });
+      expect(committed.status(), await committed.text()).toBe(200);
+      originalSourceId = (await committed.json()).data.reference.id;
+      await route.abort('failed');
+    });
+    await registration.getByRole('button', { name: 'Verify and register external document', exact: true }).click();
+    await expect(registration.getByRole('alert')).toContainText('Retry uses the same request');
+    expect(sourceWrites).toBe(1);
+    await page.unroute(sourcePath);
+    const registered = page.waitForResponse(response => /\/confluence\/sources$/.test(response.url()) && response.request().method() === 'POST');
+    await registration.getByRole('button', { name: 'Retry original source registration', exact: true }).click();
+    const response = await registered;
+    expect(response.status(), await response.text()).toBe(200);
+    const source = (await response.json()).data.reference;
+    expect(source.id).toBe(originalSourceId); expect(sourceWrites).toBe(2);
+    expect(source.documentId).toBeNull(); expect(source.pageVersion).toBe(1);
+    const row = page.getByRole('listitem').filter({ hasText: `Citation ${source.id}` });
+    await expect(row.getByText(/External document — no Vault upload/)).toBeVisible();
+    await expect(row.getByText(/attached to a document that is not currently classified/)).toHaveCount(0);
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      expect(await row.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(value => { localStorage.setItem('charitypilot-theme', value); document.documentElement.classList.toggle('dark', value === 'dark'); }, theme);
+      await row.screenshot({ path: test.info().outputPath(`reference-only-${theme}.png`), animations: 'disabled' });
+    }
+    expect((await new AxeBuilder({ page }).include('section[aria-label="Register a Confluence document"]').analyze()).violations).toEqual([]);
+    await row.getByRole('button', { name: 'Check external source version', exact: true }).click();
+    await expect(row.getByRole('status')).toHaveText('Current at check: version 1.');
+    const observation = row.getByRole('region', { name: 'Cited page lifecycle observation' });
+    await reliableFill(observation.getByLabel('Separate accessible control page ID', { exact: true }), 'synthetic-observation-control');
+    await observation.getByRole('button', { name: 'Observe cited page', exact: true }).click();
+    await expect(observation.getByText('Page visible at check.', { exact: true })).toBeVisible();
+    await observation.getByRole('button', { name: 'Prepare citation review report', exact: true }).click();
+    const report = observation.getByRole('region', { name: 'Confluence citation review report' });
+    await reliableFill(report.getByLabel('Review evidence reference', { exact: true }), 'SYNTHETIC-SOURCE-REVIEW');
+    await reliableFill(report.getByLabel('Review report reason', { exact: true }), 'Synthetic external source with no uploaded local document and no disposal instruction.');
+    await report.getByRole('checkbox', { name: /I reviewed these references/ }).check();
+    await report.getByRole('button', { name: 'Save review report', exact: true }).click();
+    await expect(report.getByText(/Historical report recorded:/)).toBeVisible();
+    const saved = await withDb(async client => (await client.query(`SELECT id,context FROM "SecurityAuditEvent"
+      WHERE "organisationId"=$1 AND type='CONFLUENCE_CITATION_REVIEW_RECORDED'`, [owner.organisationId])).rows[0]);
+    expect(saved.context.citation.documentId).toBeNull(); expect(saved.context.instruction).toBeNull();
+    await row.getByRole('button', { name: 'Remove local source reference', exact: true }).click();
+    await row.getByRole('button', { name: 'Confirm local reference removal', exact: true }).click();
+    await expect(row).toHaveCount(0);
+    const counts = await withDb(async client => {
+      const result: Record<string, number> = {};
+      for (const table of ['Document', 'DocumentUploadIntent', 'DocumentPublication', 'DocumentStorageDeletion', 'ConfluenceReference']) {
+        result[table] = Number((await client.query(`SELECT count(*) FROM "${table}" WHERE "organisationId"=$1`, [owner.organisationId])).rows[0].count);
+      }
+      const audit = await client.query(`SELECT type FROM "SecurityAuditEvent" WHERE "organisationId"=$1 AND type IN
+        ('CONFLUENCE_SOURCE_REGISTERED','CONFLUENCE_SOURCE_REMOVED') ORDER BY "occurredAt"`, [owner.organisationId]);
+      expect(audit.rows.map(item => item.type)).toEqual(['CONFLUENCE_SOURCE_REGISTERED', 'CONFLUENCE_SOURCE_REMOVED']);
+      return result;
+    });
+    expect(Object.values(counts)).toEqual([0, 0, 0, 0, 0]);
+    const lookup = page.getByRole('region', { name: 'Historical Confluence citation review lookup' });
+    await reliableFill(lookup.getByLabel('Original request or audit event reference', { exact: true }), saved.id);
+    await lookup.getByRole('button', { name: 'Read historical citation review report', exact: true }).click();
+    await expect(lookup.getByText(`Historical report recorded: ${saved.id}`, { exact: true })).toBeVisible();
+    await context.close();
+  });
   test('disclosure, connect, choose a space, and review the exact destination before approval', async ({ newFencedContext, browserOriginFence }) => {
     test.setTimeout(180_000);
     // This connection journey must start without another test's integration state.

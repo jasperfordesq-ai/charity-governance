@@ -64,6 +64,7 @@ import {
 } from '../../services/integration-declared-environment.service.js';
 import {
   citeConfluencePage,
+  registerConfluenceSource,
   checkConfluenceReference,
   listConfluenceReferenceInventory,
   listConfluenceReferences,
@@ -1284,6 +1285,21 @@ export async function integrationRoutes(
         siteUrl: connected ? siteFacts(integration.config).siteUrl : null,
       });
     } catch (error) { return handleError(reply, error); }
+  });
+
+  app.post('/confluence/sources', { preHandler: [requireAdmin, requireWebSession] }, async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    try {
+      const body = z.object({ pageId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/),
+        expectedSiteId: z.string().min(1).max(160), clientRequestId: z.string().uuid() }).strict().parse(request.body);
+      const organisationId = request.user.organisationId;
+      const reference = await registerConfluenceSource(app.prisma, { ...body, organisationId,
+        actorUserId: request.user.userId }, { getConnection: () => erasureObservationConnection(organisationId) });
+      return sendSuccess(reply, { reference });
+    } catch (error) {
+      if (error instanceof ZodError) return reply.status(400).send({ error: 'Validation failed', code: 'VALIDATION_ERROR' });
+      return handleError(reply, error);
+    }
   });
 
   app.post<{ Params: { documentId: string } }>(

@@ -1,3 +1,12 @@
+## 19 October: compatible reader verified; registration activation in progress
+
+Compatibility deployment and fresh isolated recovery proof are recorded.
+Activation now adds the administrative source form and route without another
+migration or provider write. Verify its final lost-response/retry and complete
+zero-upload connector journey before the next exact-source release. Preserve
+tenant/Member refusal and existing receipt, disposal and recovery boundaries.
+This item remains open; independent host-loss recovery is a separate open gate.
+
 ## 19 October: reference-only compatibility work, activation still open
 
 Source now has an explicit non-file citation anchor, immutable source identity,

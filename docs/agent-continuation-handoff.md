@@ -1,3 +1,16 @@
+## 19 October: external-source registration activation under verification
+
+The compatible reader has passed its exact release gates, supported deployment
+and postactivation recovery verification. Registration can now be introduced in
+a subsequent release with that compatible reader retained for rollback.
+
+The activation restores the restricted registration form and route, including
+explicit site review and original-request retry. The synthetic journey covers
+response loss, no-upload registration, version checks, observation/report,
+local-only unciting and historical receipt readback, with responsive/theme and
+accessibility checks. Keep this item open until its final execution and release
+evidence is recorded; the earlier prototype does not establish activation.
+
 ## 19 October: Confluence reference-only compatibility implementation
 
 The compatibility increment adds an explicit external-source anchor without
