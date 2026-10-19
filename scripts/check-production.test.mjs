@@ -930,6 +930,13 @@ test('fails when production database URL uses a reserved documentation hostname'
   }
 });
 
+test('preflight refuses unsupported document drivers instead of accepting valid Supabase credentials', () => {
+  for (const driver of ['s3', 'spaces', 'supabse', 'Supabase']) {
+    const issues = validateProductionEnvContent(completeProductionEnv({ DOCUMENT_STORAGE_DRIVER: driver }));
+    assert.ok(issues.includes('DOCUMENT_STORAGE_DRIVER must name a supported deployment default'));
+  }
+});
+
 test('fails when production document storage is configured to use the local driver', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'charitypilot-preflight-storage-driver-'));
   const envPath = join(tempDir, 'production.env');

@@ -47,6 +47,14 @@ comparison, with OS/database/incident work still assigned to an operator.
 
 ## Hard feasibility gates before activation
 
+Production startup and cleanup now refuse an explicit unsupported
+`DOCUMENT_STORAGE_DRIVER`, and deployment preflight applies the same refusal.
+Use the exact supported identifier: misspellings, case changes and unimplemented
+names such as `s3` or `spaces` must not silently select Supabase. Omitted or empty
+values retain the existing deployment default. Existing local storage remains
+limited to its supported profiles. This guard neither adds an alternative store
+nor migrates existing bytes; record-specific read/delete provenance is unchanged.
+
 1. **Database authority.** Prove supported maintenance ownership and catalogue
    visibility, exact role/OID inventory, writer closure, old-session draining and
    credential invalidation. DigitalOcean documents

@@ -1,3 +1,12 @@
+## 19 October: prevent accidental fallback during supplier configuration
+
+Explicit unimplemented/misspelled document-driver names now fail production
+preflight, API startup and cleanup startup, even with valid Supabase credentials.
+Existing supported defaults/profiles and stored provenance remain intact. This
+closes a configuration ambiguity discovered during hosting review, not the
+remaining alternate-storage, provider activation or recovery acceptance gates.
+Exact tests and release limits are retained in the ignored continuation receipt.
+
 ## 19 October: documented candidate incompatibility and prepared sandbox action
 
 The first candidate's documented catalogue restriction contradicts the current

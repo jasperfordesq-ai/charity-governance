@@ -427,11 +427,22 @@ test('validateProductionEnv requires a local storage path when local storage is 
   );
 });
 
+test('production API and cleanup refuse an explicit unsupported driver even with valid Supabase configuration', () => {
+  const expected = 'DOCUMENT_STORAGE_DRIVER must name a supported deployment default';
+  for (const driver of ['s3', 'spaces', 'supabse', 'Supabase', 'local ', ' ']) {
+    setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: driver });
+    for (const validate of [validateProductionEnv, validateDocumentStorageCleanupEnv]) {
+      assert.throws(validate, (error: unknown) => error instanceof AppError
+        && Array.isArray(error.details) && error.details.includes(expected),
+      `${validate.name} must not silently select Supabase for ${JSON.stringify(driver)}`);
+    }
+  }
+});
+
 test('validateProductionEnv refuses to boot when the deployment default storage provider is unusable', () => {
-  // Every real DOCUMENT_STORAGE_DRIVER value resolves to a usable default in
-  // Phase 0 (the shipped registry is ga-only, and an unrecognised value still
-  // falls back to Supabase), so the boot gate must stay silent for all of them.
-  for (const driver of [undefined, 'supabase', 'nonsense', '']) {
+  // Omitted/empty values retain the established default; explicit names must
+  // be supported before production can start.
+  for (const driver of [undefined, 'supabase', '']) {
     const issues: string[] = [];
     setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: driver });
     requireUsableDocumentStorageDefault(issues);
@@ -441,8 +452,7 @@ test('validateProductionEnv refuses to boot when the deployment default storage 
   setCompleteProductionEnv({ DOCUMENT_STORAGE_DRIVER: 'local', LOCAL_FILE_STORAGE_DIR: '/data/documents' });
   assert.doesNotThrow(() => validateProductionEnv());
 
-  // The failure this gate exists for: a default the registry refuses. It is
-  // unreachable with the shipped ga-only registry, so the resolver is injected.
+  // A future registered alpha provider must still be refused as a default.
   const issues: string[] = [];
   requireUsableDocumentStorageDefault(issues, () => {
     throw new AppError(

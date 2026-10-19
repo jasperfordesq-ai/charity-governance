@@ -1,3 +1,13 @@
+## 19 October: unsupported production storage names refuse startup
+
+Production API/cleanup validation and deployment preflight now reject explicit
+unsupported document drivers rather than silently choosing the legacy Supabase
+fallback. Omitted/empty default, valid local profiles and existing record
+provenance remain supported. Regressions reproduce refusal even with otherwise
+valid Supabase credentials. This does not implement an S3 adapter or establish
+provider compatibility. Read [the selection guidance](hosting-selection.md) and
+the private source/test receipt before continuing supplier work.
+
 ## 19 October: first candidate hard gate and scoped residency request
 
 Official provider documentation confirms that the current protected-catalogue

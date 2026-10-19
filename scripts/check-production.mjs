@@ -267,6 +267,12 @@ function requireTrustedProxyAddresses(env, issues) {
 }
 
 function requireProductionDocumentStorageDriver(env, issues) {
+  // Mirror the runtime registry's currently supported names. An unknown
+  // configured provider must not silently route production bytes to Supabase.
+  const configured = env.DOCUMENT_STORAGE_DRIVER;
+  if (configured !== undefined && configured !== '' && !['local', 'supabase'].includes(configured)) {
+    issues.push('DOCUMENT_STORAGE_DRIVER must name a supported deployment default');
+  }
   if (envValue(env, 'DOCUMENT_STORAGE_DRIVER').toLowerCase() === 'local') {
     issues.push('DOCUMENT_STORAGE_DRIVER must not be local for production; use Supabase document storage');
   }

@@ -5,6 +5,7 @@ import { parsePort } from './port.js';
 import { isConfiguredSecret } from './secrets.js';
 import { billingMode, emailDeliveryMode, isMultiTenant } from './deployment-profile.js';
 import { envDefaultProviderId } from '../services/document-storage-resolution.js';
+import { documentStorageProviders } from '../services/document-storage-provider.js';
 import { decodeIntegrationKey } from '../services/integration-crypto.js';
 import { MAX_SESSION_TRACE_RETENTION_DAYS, sessionTraceRetentionDays } from '../services/session-security-trace.js';
 import { managedApiRuntimePolicy } from '../services/managed-api-runtime.js';
@@ -707,12 +708,17 @@ function requireTrustedProxyAddresses(issues: string[], managedServer?: unknown)
 // shipped registry contains ga providers only in Phase 0, so
 // envDefaultProviderId() cannot yet throw in practice. It will the moment an
 // alpha provider ships, which is precisely when this gate has to already exist.
-// Unrecognised values are NOT an issue here — they fall back to Supabase
-// exactly as they always have, and must keep doing so.
+// Production must also reject an explicitly unsupported name rather than use
+// the resolver's legacy Supabase fallback. Unset/empty keeps the existing default.
 export function requireUsableDocumentStorageDefault(
   issues: string[],
   resolveDefault: () => string = envDefaultProviderId,
 ): void {
+  const configured = process.env.DOCUMENT_STORAGE_DRIVER;
+  if (configured !== undefined && configured !== '' && !documentStorageProviders.isKnown(configured)) {
+    issues.push('DOCUMENT_STORAGE_DRIVER must name a supported deployment default');
+    return;
+  }
   try {
     resolveDefault();
   } catch (error) {
@@ -831,6 +837,7 @@ export function validateDocumentStorageCleanupEnv(): void {
   if (process.env.NODE_ENV !== 'production') return;
 
   const issues: string[] = [];
+  requireUsableDocumentStorageDefault(issues);
 
   requireDatabaseUrl('DATABASE_URL', issues);
   // Mirrors validateProductionEnv's storage branch exactly (same condition,

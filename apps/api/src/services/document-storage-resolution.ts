@@ -29,6 +29,8 @@ export type OrganisationStorageResolver = (
  * deployment that has been running happily. Only a value that names a KNOWN
  * provider is passed to the registry, which is what lets the alpha gate refuse
  * an alpha provider named here.
+ * Production API/cleanup startup and deployment preflight reject explicitly
+ * unsupported names before this legacy resolver can select their fallback.
  */
 export function envDefaultProviderId(
   registry: DocumentStorageProviderRegistry = documentStorageProviders,
