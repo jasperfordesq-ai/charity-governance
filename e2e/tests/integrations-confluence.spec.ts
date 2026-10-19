@@ -32,7 +32,7 @@ const SAMPLE_FILE = path.resolve(__dirname, '../fixtures/sample-document.txt');
 
 test.describe('Confluence connector', () => {
   test.skip(IS_DEPLOYED_QA, 'Fake provider and controlled response loss require the disposable environment.');
-  test('an external Confluence document registers, checks, reports and uncites without a Vault upload', async ({ newFencedContext }) => {
+  test('an external Confluence document registers, checks, reports and uncites without a Vault upload', async ({ newFencedContext, browserOriginFence }) => {
     test.setTimeout(120_000);
     const owner = await createVerifiedOwner({ email: uniqueEmail('confluence-source'), password: TEST_PASSWORD,
       name: 'Reference-only Owner', organisationName: 'Synthetic Reference-only Charity' });
@@ -61,10 +61,11 @@ test.describe('Confluence connector', () => {
     await expect(registration.getByRole('button', { name: 'Verify and register external document', exact: true })).toBeDisabled();
     await reliableFill(registration.getByLabel('Confluence source page ID', { exact: true }), 'synthetic-retained-copy');
     await registration.getByRole('checkbox', { name: /I reviewed the connected site/ }).check();
-    const sourcePath = /\/api\/v1\/integrations\/confluence\/sources$/;
+    const sourcePath = `${browserOriginFence.apiOrigin}/api/v1/integrations/confluence/sources`;
     let originalSourceId: string | null = null, sourceWrites = 0;
-    page.on('request', request => { if (sourcePath.test(request.url()) && request.method() === 'POST') sourceWrites++; });
+    page.on('request', request => { if (request.url() === sourcePath && request.method() === 'POST') sourceWrites++; });
     await page.route(sourcePath, async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
       const committed = await route.fetch({ maxRedirects: 0 });
       expect(committed.status(), await committed.text()).toBe(200);
       originalSourceId = (await committed.json()).data.reference.id;

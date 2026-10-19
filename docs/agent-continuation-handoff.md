@@ -1,3 +1,12 @@
+## 19 October: registration fault injection bound to the exact test origin
+
+Activation CI caught the missing third interception point in the isolation
+contract. The source-registration response-loss test now uses the exact fenced
+API URL and POST-only pass-through/abort, with redirects disabled. The contract
+enumerates exactly the three citation/source/report fault points and rejects
+synthetic fulfilment or broader interception. Runtime product code is unchanged
+by this test correction. Require new exact-source release gates after the fix.
+
 ## 19 October: external-source registration activation under verification
 
 The compatible reader has passed its exact release gates, supported deployment

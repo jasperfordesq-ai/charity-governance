@@ -1,3 +1,12 @@
+## 19 October: activation isolation-contract correction
+
+The first activation CI failed because its new source-registration response-loss
+interceptor was absent from the orchestration contract. Pin it to the exact
+fenced API origin and POST, and enumerate three permitted real-response fault
+points. Do not loosen the ban on synthetic responses, broad interception or
+redirects. The failed activation source is not a deployable release; require
+the corrected commit's exact CI and browser gates.
+
 ## 19 October: compatible reader verified; registration activation in progress
 
 Compatibility deployment and fresh isolated recovery proof are recorded.
