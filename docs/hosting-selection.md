@@ -20,6 +20,17 @@ Customer policy and actual supplier commitments remain separate decisions.
 
 ## Candidate order
 
+**Next bounded capability review:** Crunchy Bridge documents a separate
+[maintenance superuser and non-superuser application role](https://docs.crunchybridge.com/api/postgres-role).
+This makes it a candidate for the existing recovery protocol without weakening
+catalogue visibility or giving the application administrative credentials. It
+does not prove the required catalogue locks, complete writer inventory, provider
+control-plane quiescence or host-loss recovery. Its
+[regional pricing](https://docs.crunchybridge.com/concepts/plans-pricing) still
+needs a comparable quote; published sample prices are not an EU quote. Keep
+network access restricted and verify TLS, regional coverage, independent custody
+and file-storage compatibility before proposing activation. No supplier is selected.
+
 **Capability verdict, later on 19 October:** DigitalOcean's
 [documented administrator restriction](https://docs.digitalocean.com/support/how-do-i-fix-the-pg_dumpall-permission-denied-for-table-pg_authid-error/)
 confirms that `doadmin` cannot access `pg_authid`. The current recovery code reads
