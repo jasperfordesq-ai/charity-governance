@@ -8,9 +8,9 @@ Earlier supplier proposals are not current implementation decisions.
 The separate personal-server recovery artifact writer now publishes complete
 files without replacing a competing destination and does not delete an unowned
 destination on decryption failure. Archive format and supported operator entry
-points are unchanged. Local recovery tests: 84/84 pass. Broader personal-server
-checks: 168/169 pass, with a Linux installer argument-validation test failing
-(expected exit 2, observed 1); that failure has not been established as pre-existing.
+points are unchanged. Local recovery tests: 84/84 pass. All 169 personal-server checks pass when
+run with the installed Git Bash. The earlier 168/169 result selected a Windows
+WSL launcher without /bin/bash; the installer itself never ran in that failure.
 This is source/local evidence, not deployment or physical-host-loss proof.
 
 ## 20 October: source-instruction activation verified
