@@ -1,4 +1,21 @@
-## 20 October: source-instruction activation verification pending
+## 20 October: source-instruction activation verification complete
+
+This entry supersedes the pending-activation checkpoint below, without closing
+the full remediation ledger. Activation `3f3e7a98389b53a1a4936e4c639c90c3d72a3978`
+passed exact-source canonical CI and all 258 first-attempt browser tests, guarded
+private deployment/postflight and a separate fresh backup/isolated restore.
+The private release has 204 migrations and a compatible rollback colour.
+
+Actual supervised sandbox verification covers issuing and withdrawing a labelled
+synthetic instruction, recording a no-action follow-up with a fresh provider
+observation, and reading the saved receipt by its original request identity.
+Existing records and prior audit evidence were preserved. Actual authorised
+provider purge, current-grant disconnect/revocation and independent current
+history/key-custody/full replacement/reopening remain open. Same-workstation
+backup and isolated restore do not establish physical-host-loss recovery.
+The ignored current handoff contains the exact release and sandbox receipts.
+
+### Historical pre-release checkpoint
 
 The compatible audit readers/guards are released. Current source implements
 Owner-only instruction, withdrawal and linked follow-up forms/routes and bounded

@@ -1,4 +1,21 @@
-## 20 October: source-instruction activation under verification
+## 20 October: source-instruction activation verified
+
+This current-state entry supersedes the pending-activation entries below.
+Activation source `3f3e7a98389b53a1a4936e4c639c90c3d72a3978` passed
+canonical CI on its first attempt and all 258 browser tests on their first
+attempt. The guarded private release, runtime postflight and separate fresh
+backup/isolated restore passed. The serving profile has 204 migrations, with
+the compatible previous colour retained for rollback.
+
+The same-source supervised synthetic application also completed the supported
+instruction, withdrawal, no-action follow-up and original-request receipt lookup
+against the approved sandbox. This proves the record workflow and its bindings;
+it does not prove an actual purge, all-copy erasure, current-grant revocation,
+independent key custody or recovery after physical host loss. Those gates remain
+open. Do not rebuild the completed activation or rerun consumed release helpers.
+Exact operational receipts and correspondence remain in the ignored handoff.
+
+### Historical pre-release checkpoint
 
 The compatible foundation is released. Pending source adds the Owner instruction,
 withdrawal and linked follow-up routes/forms, bounded history and original receipt
