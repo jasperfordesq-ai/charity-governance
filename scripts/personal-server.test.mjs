@@ -12,7 +12,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import {
   archiveUpdateReceipt,
@@ -2443,6 +2443,68 @@ test('authenticated recovery artifact encryption round-trips and rejects tamperi
     assert.equal(existsSync(rejectedOutput), false);
     assert.equal(existsSync(`${rejectedOutput}.partial`), false);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const scenario of ['existing destination', 'tampered archive', 'same input and output', 'existing partial']) {
+  test(`recovery decryption preserves existing files: ${scenario}`, () => {
+    const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-output-'));
+    const key = Buffer.alloc(32, 0x37);
+    try {
+      const plaintextPath = join(root, 'source.dump');
+      const encryptedPath = join(root, 'source.enc');
+      const outputPath = scenario === 'same input and output' ? encryptedPath : join(root, 'existing.dump');
+      writeFileSync(plaintextPath, 'synthetic source bytes');
+      encryptPersonalServerArtifact({ inputPath: plaintextPath, outputPath: encryptedPath, key,
+        aadContext: 'personal-server-output-test:database' });
+      if (scenario === 'tampered archive') {
+        const bytes = readFileSync(encryptedPath);
+        bytes[bytes.length - 1] ^= 0xff;
+        writeFileSync(encryptedPath, bytes);
+      }
+      if (outputPath !== encryptedPath && scenario !== 'existing partial') writeFileSync(outputPath, 'existing file must survive');
+      if (scenario === 'existing partial') writeFileSync(`${outputPath}.partial`, 'another interrupted operation');
+      const originalSource = readFileSync(encryptedPath);
+      const originalOutput = existsSync(outputPath) ? readFileSync(outputPath) : null;
+      assert.throws(() => decryptPersonalServerArtifact({ inputPath: encryptedPath, outputPath, key,
+        aadContext: 'personal-server-output-test:database' }));
+      if (originalOutput) assert.deepEqual(readFileSync(outputPath), originalOutput);
+      else assert.equal(existsSync(outputPath), false);
+      assert.deepEqual(readFileSync(encryptedPath), originalSource);
+      if (scenario === 'existing partial') {
+        assert.equal(readFileSync(`${outputPath}.partial`, 'utf8'), 'another interrupted operation');
+      } else {
+        assert.equal(existsSync(`${outputPath}.partial`), false);
+      }
+    } finally {
+      key.fill(0);
+      assert.equal(dirname(root), resolve(tmpdir()));
+      assert.ok(basename(root).startsWith('charitypilot-recovery-output-'));
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('recovery encryption refuses a destination created after its initial check', () => {
+  const root = mkdtempSync(join(tmpdir(), 'charitypilot-recovery-output-'));
+  const key = Buffer.alloc(32, 0x48);
+  try {
+    const source = join(root, 'source.dump');
+    const output = join(root, 'late.enc');
+    writeFileSync(source, 'synthetic source bytes');
+    assert.throws(() => encryptPersonalServerArtifact({ inputPath: source, outputPath: output, key,
+      aadContext: 'personal-server-output-test:database', randomBytesImpl: (size) => {
+        writeFileSync(output, 'file created by another operation', { flag: 'wx' });
+        return Buffer.alloc(size, 0x59);
+      } }));
+    assert.equal(readFileSync(output, 'utf8'), 'file created by another operation');
+    assert.equal(readFileSync(source, 'utf8'), 'synthetic source bytes');
+    assert.equal(existsSync(`${output}.partial`), false);
+  } finally {
+    key.fill(0);
+    assert.equal(dirname(root), resolve(tmpdir()));
+    assert.ok(basename(root).startsWith('charitypilot-recovery-output-'));
     rmSync(root, { recursive: true, force: true });
   }
 });

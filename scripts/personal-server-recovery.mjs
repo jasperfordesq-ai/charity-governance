@@ -3,6 +3,7 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -10,7 +11,6 @@ import {
   readFileSync,
   readdirSync,
   readSync,
-  renameSync,
   rmSync,
   statSync,
   writeSync,
@@ -106,7 +106,12 @@ function protectedOutput(path, callback) {
     throw error;
   }
   closeSync(fd);
-  renameSync(partial, path);
+  try {
+    // Publish complete bytes atomically without replacing a competing destination.
+    linkSync(partial, path);
+  } finally {
+    rmSync(partial, { force: true });
+  }
 }
 
 export function loadPersonalServerEncryptionKey(keyFile) {
@@ -225,7 +230,6 @@ export function decryptPersonalServerArtifact({ inputPath, outputPath, key, aadC
       writeAll(outputFd, decipher.final());
     });
   } catch (error) {
-    rmSync(outputPath, { force: true });
     throw new Error(`Encrypted recovery artifact authentication failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     closeSync(sourceFd);

@@ -1,3 +1,18 @@
+## 20 October: storage scope corrected; local recovery output protection
+
+No additional storage supplier is selected. Continue the existing Confluence
+and local-VM architecture; supplier onboarding is not a prerequisite for other
+remediation. Data-residency and independent host-loss recovery remain unresolved.
+Earlier supplier proposals are not current implementation decisions.
+
+The separate personal-server recovery artifact writer now publishes complete
+files without replacing a competing destination and does not delete an unowned
+destination on decryption failure. Archive format and supported operator entry
+points are unchanged. Local recovery tests: 84/84 pass. Broader personal-server
+checks: 168/169 pass, with a Linux installer argument-validation test failing
+(expected exit 2, observed 1); that failure has not been established as pre-existing.
+This is source/local evidence, not deployment or physical-host-loss proof.
+
 ## 20 October: source-instruction activation verified
 
 This current-state entry supersedes the pending-activation entries below.
